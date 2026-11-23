@@ -469,6 +469,9 @@
   .strip.wide {
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   }
+  .strip.small {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  }
   .natural {
     display: flex;
     flex-wrap: wrap;
@@ -508,40 +511,6 @@
   .card pre {
     max-width: 100%;
   }
-  .ladder {
-    display: grid;
-    gap: 6px;
-    max-width: 760px;
-    margin: 16px 0;
-  }
-  .rung {
-    display: grid;
-    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
-    gap: 2px 14px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 10px 14px;
-  }
-  .rung b {
-    grid-row: span 2;
-    align-self: center;
-  }
-  .rung span {
-    color: var(--muted);
-    font-size: 0.88rem;
-  }
-  .rung code {
-    justify-self: start;
-  }
-  @media (max-width: 600px) {
-    .rung {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .rung b {
-      grid-row: auto;
-    }
-  }
   ol li {
     margin: 4px 0;
   }
@@ -556,113 +525,439 @@
   h2.first {
     margin-top: 28px;
   }
+  .flow3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    max-width: 900px;
+    margin: 16px 0;
+  }
+  .flow3 .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 0;
+  }
+  .flow3 .step b {
+    display: block;
+    font-family: var(--display);
+    font-size: 1.05rem;
+  }
+  .flow3 .step span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.88rem;
+    margin-top: 4px;
+  }
+  .flow3 .step em {
+    display: block;
+    font-style: normal;
+    font-size: 0.85rem;
+    margin-top: 8px;
+  }
+  @media (max-width: 700px) {
+    .flow3 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .ev {
+    display: inline-block;
+    font: 500 0.72rem/1.2 var(--body);
+    padding: 3px 6px;
+    border-radius: 3px;
+  }
+  .ev.exact {
+    background: var(--add);
+    color: var(--ink);
+  }
+  .ev.close {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  .ev.paper {
+    background: var(--code-bg);
+    color: var(--muted);
+  }
+  .ev.no {
+    background: var(--del);
+    color: var(--ink);
+  }
 </style>
 <main>
   <h1>Layouts in user space</h1>
   <p class="lede">
-    What it would take to write treemap, packing, beeswarm, tidy tree and
-    layered graph layouts as GoFish code, the way <code>stack</code> and
-    <code>spread</code> lower into <code>align</code> and
-    <code>distribute</code>. <span class="tag today">today</span> marks a real
-    render on today's public API, with the decisions computed in plain JS in the
-    story. <span class="tag sketch">sketch</span> marks proposed syntax that
-    does not run yet.
+    A design for writing layout algorithms as GoFish code, on the smallest set
+    of layout primitives that covers them. Every d3 layout is checked against
+    it. <span class="tag today">today</span> marks a real render on today's
+    public API. <span class="tag sketch">sketch</span> marks proposed syntax
+    that does not run yet.
   </p>
 
   <div class="tabs" role="tablist">
     <button
       role="tab"
-      id="tab-examples"
-      aria-controls="examples"
+      id="tab-design"
+      aria-controls="design"
       aria-selected="true"
     >
-      The API and examples
+      The design
+    </button>
+    <button role="tab" id="tab-d3" aria-controls="d3" aria-selected="false">
+      Every d3 layout
+    </button>
+    <button role="tab" id="tab-open" aria-controls="open" aria-selected="false">
+      What to build, what is open
     </button>
     <button
       role="tab"
-      id="tab-review"
-      aria-controls="review"
+      id="tab-background"
+      aria-controls="background"
       aria-selected="false"
     >
-      The review
-    </button>
-    <button
-      role="tab"
-      id="tab-approaches"
-      aria-controls="approaches"
-      aria-selected="false"
-    >
-      Approaches
-    </button>
-    <button
-      role="tab"
-      id="tab-precedent"
-      aria-controls="precedent"
-      aria-selected="false"
-    >
-      Precedent and issues
+      Background
     </button>
   </div>
 
-  <!-- ============================ EXAMPLES ============================ -->
+  <!-- ============================== DESIGN ============================== -->
   <section
     class="panel"
-    id="examples"
+    id="design"
     role="tabpanel"
-    aria-labelledby="tab-examples"
+    aria-labelledby="tab-design"
+    data-title="The design"
   >
     <div class="rules">
       <ul>
         <li>
-          A dozen layout algorithms were written in user space and rendered.
-          Squarify and binary land on the built-in treemap's cells exactly. The
-          beeswarm lands on <code>Overlap.separate</code> dot for dot. The tidy
-          tree equals <code>d3.tree</code> node for node.
+          A layout algorithm has two parts. Its <b>decisions</b> are discrete:
+          an order, a grouping into rows, which side a dot goes on. Its
+          <b>relations</b> say how positions and sizes depend on each other once
+          the decisions are made. A <b>solver</b> turns relations into
+          positions.
         </li>
         <li>
-          Each one splits into a <b>plan</b> (the discrete decisions, as plain
-          data) and a <b>drawing</b> (the plan written out in operators GoFish
-          already has). No algorithm needed a new operator to draw its result.
+          The relations today's solver handles come down to five primitives: a
+          linear equation between positions, a minimum gap, one shared scale per
+          scope, a coordinate map, and a choice. <code>stack</code>,
+          <code>spread</code>, <code>tile</code>, a tidy tree and a sankey are
+          compositions of those.
         </li>
         <li>
-          Proposed: two functions that return GoFish.
-          <code>layout(({ w, h }) =&gt; node)</code> reads the space a node was
-          offered, and <code>measure(child)</code> reads a child's geometry.
-          They are the two steps of the layout protocol that user code cannot
-          reach today. SwiftUI and Jetpack Compose expose the same steps, and
-          GoFish's engine already works this way inside.
+          Every d3 layout was written this way and compared with d3's own
+          numbers. Pie, stack, partition, treemap, tree, cluster, chord arcs and
+          a sankey without relaxation match exactly. Circle packing, force and
+          sankey relaxation need relations today's solver does not have.
         </li>
         <li>
-          The rectangular tilings become presets of one sequential tiling.
-          <code>Spacing.contour</code> gives tidy trees, layered or not. A
-          sequential <code>choose</code> is the later, data form of the greedy
-          rule.
+          Those are jobs for other solvers: one for geometry (touching,
+          intersecting) and one that optimizes (pulls, repulsion). A scope picks
+          its solver the way it picks a coordinate space, and solvers meet only
+          at scope boundaries.
         </li>
         <li>
-          Relations can replace positions for some layouts. One "at least this
-          far apart" constraint reproduces the tidy tree and the graph layering
-          exactly. It does not reproduce the beeswarm. The review tab has both
-          experiments.
+          User code writes decisions three ways: a function that calls
+          <code>measure</code> on its children, a <code>choose</code> among
+          alternatives, or a <code>layout</code> that reads the room it was
+          given.
         </li>
         <li>
-          The hard part is not any algorithm. It is letting a layout that
-          measures shapes still take part in fitting a chart to its room. The
-          review tab says why.
-        </li>
-        <li>
-          This is the review deferred in the sankey round, of circle packing,
-          treemap, dodging and layered layouts together. Nothing is implemented
-          except the prototype stories.
+          Nothing is implemented except prototype stories. Two of the five
+          primitives are partly missing: the minimum gap, and an average of
+          positions.
         </li>
       </ul>
     </div>
 
-    <h2 class="first">The API: <code>layout</code> and <code>measure</code></h2>
+    <div class="flow3">
+      <div class="step">
+        <b>Decisions</b>
+        <span>Discrete. Made by plan code, or by <code>choose</code>.</span>
+        <em
+          >which items share a row, the order in a column, which two circles a
+          new one rests on</em
+        >
+      </div>
+      <div class="step">
+        <b>Relations</b>
+        <span>Facts between shapes. Data, not code.</span>
+        <em>these are 10 apart, this is at least clear of that, these touch</em>
+      </div>
+      <div class="step">
+        <b>A solver per scope</b>
+        <span>Turns one scope's relations into positions.</span>
+        <em>today: one symbolic solver. Later: geometry, optimization</em>
+      </div>
+    </div>
+    <p>
+      This is the split issue #485 asks for: a small relational core, and
+      user-space algorithms that hand it their discrete commitments instead of
+      final positions. A commitment survives a resize or a data edit. A position
+      does not.
+    </p>
+
+    <h2>The primitives</h2>
     <div class="gallery">
       <div class="card">
+        <h3>What today's symbolic solver needs</h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Primitive</th>
+                <th>In math</th>
+                <th>In GoFish</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>A linear equation between positions</td>
+                <td>a = b; b &minus; a = g; p = the average of a, b, c</td>
+                <td>
+                  <code>Constraint.align</code>,
+                  <code>Constraint.distribute</code>,
+                  <code>Constraint.position</code>, <code>Constraint.nest</code>
+                </td>
+                <td>
+                  Today, except the average. A dendrogram puts a parent at the
+                  mean of its children, and nothing public says that.
+                </td>
+              </tr>
+              <tr>
+                <td>A minimum gap, with a rule for the slack</td>
+                <td>b &minus; a &ge; g, then start, end, center or even</td>
+                <td>
+                  <code>Spacing.atLeast(g)</code>,
+                  <code>Spacing.contour(g)</code> on <code>distribute</code> and
+                  <code>spread</code> <span class="tag sketch">sketch</span>
+                </td>
+                <td>Missing. Prototyped as a 56-line solver.</td>
+              </tr>
+              <tr>
+                <td>One scale per scope</td>
+                <td>
+                  size = value &times; scale; a container is the max of its
+                  contents
+                </td>
+                <td>
+                  <code>rect({ h: "value" })</code>, shared across a scope
+                </td>
+                <td>Today. It solved d3-sankey's scale on its own.</td>
+              </tr>
+              <tr>
+                <td>A coordinate map</td>
+                <td>positions &rarr; f(positions), applied after the solve</td>
+                <td><code>Coord.polar()</code>, <code>Coord.clock()</code></td>
+                <td>Today, except that an angle axis does not wrap.</td>
+              </tr>
+              <tr>
+                <td>A choice</td>
+                <td>the minimum over alternatives</td>
+                <td>
+                  <code>choose([a, b])</code>
+                  <span class="tag sketch">sketch</span>
+                </td>
+                <td>
+                  The choice proposal. Needs <code>min</code> in the size
+                  algebra (#630).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          The first three are one piece of mathematics: equations and lower
+          bounds on differences of positions, a max, and one unknown scale. That
+          is why one pass solves them. Every operator below lowers into these.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Operator</th>
+                <th>Lowers into</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>stack</code>, <code>spread</code></td>
+                <td>equal positions across, an exact gap along. Today.</td>
+              </tr>
+              <tr>
+                <td><code>tile</code> (treemap)</td>
+                <td>
+                  a decision (which items share a row), then nested stacks whose
+                  sizes are shares of the parent.
+                </td>
+              </tr>
+              <tr>
+                <td>pie, sunburst, chord arcs</td>
+                <td>
+                  stacks and spreads along the angle, inside a coordinate map.
+                  Today.
+                </td>
+              </tr>
+              <tr>
+                <td>a tidy tree, a dendrogram</td>
+                <td>
+                  minimum gaps between subtrees, an average for the parent.
+                </td>
+              </tr>
+              <tr>
+                <td>a sankey, a layered graph</td>
+                <td>
+                  minimum gaps for the columns, spreads on one shared scale for
+                  the nodes, stacks for the links, and a decision for the order.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
         <h3>
-          Two functions and a length <span class="tag sketch">sketch</span>
+          Relations for other solvers <span class="tag sketch">sketch</span>
         </h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Solver</th>
+                <th>Its relations</th>
+                <th>What needs it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Symbolic (today)</td>
+                <td>
+                  equations and minimum gaps between positions, per axis, with
+                  one scale
+                </td>
+                <td>charts, trees, treemaps, sankeys without relaxation</td>
+              </tr>
+              <tr>
+                <td>Geometry</td>
+                <td>
+                  touches, intersects, lies on, at a distance, at an angle
+                </td>
+                <td>
+                  circle packing (each circle touches two others), Voronoi cells
+                  (a cell is its region cut by lines), ribbons through a center
+                </td>
+              </tr>
+              <tr>
+                <td>Optimizing</td>
+                <td>
+                  pull toward a position, keep a distance, push apart, do not
+                  overlap
+                </td>
+                <td>
+                  force layouts, sankey relaxation, label avoidance, the
+                  beeswarm's above-or-below
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-javascript">// Relations are one vocabulary. The scope&#x27;s solver turns them into positions.
+layer(nodes).relate((n) =&gt; [
+  Constraint.align({ y: &quot;start&quot; }, [n.a, n.b, n.c]), // today
+  Constraint.distribute({ dir: &quot;x&quot;, spacing: 10 }, [n.a, n.b]), // today: exactly 10
+  Constraint.distribute({ dir: &quot;x&quot;, spacing: Spacing.atLeast(10) }, [n.b, n.c]), // proposed: 10 or more
+]);
+
+// Later, another solver for another kind of relation. The solver is chosen
+// where a coordinate space is chosen today: at the layer.
+layer({ solver: Solver.geometry }, circles).relate((c) =&gt; [
+  Constraint.touch([c.a, c.b]),
+  Constraint.touch([c.c, c.a]),
+  Constraint.touch([c.c, c.b]),
+]);</code></pre>
+        <p class="note">
+          The names <code>Solver.geometry</code> and
+          <code>Constraint.touch</code> only show the shape of the idea. The
+          point is that a relation is data in one vocabulary, a solver declares
+          which relations it handles, and a relation handed to a solver that
+          does not handle it is an error at the layer that declared it.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Solvers meet at scope boundaries</h3>
+        <p class="note">
+          A scope has one solver. Solvers never share unknowns. What crosses a
+          boundary is small and the same for every solver:
+        </p>
+        <ul class="tight">
+          <li><b>Down:</b> the room offered, as a box or a convex shape.</li>
+          <li>
+            <b>Up:</b> how much room the scope needs, and its geometry (box,
+            enclosing circle, outline).
+          </li>
+          <li>
+            <b>Nothing else.</b> No scale is shared across the boundary, and no
+            length leaves the scope it was computed in.
+          </li>
+        </ul>
+        <p class="note">
+          This is the same boundary a <code>layout</code> function needs
+          (below), and it is what issue #806 calls cooperating layout theories.
+          A geometry scope inside a chart is a child with a size. A chart inside
+          a geometry scope is a shape to be placed. The symbolic solver asks one
+          more thing of a scope that wants to take part in fitting a chart to
+          its room: its size must be a function of the scale that never shrinks
+          when the scale grows. Circle packing gives one when all its radii come
+          from data, because the whole packing grows with the scale. That is
+          what d3 does.
+        </p>
+      </div>
+    </div>
+
+    <h2>Writing the decisions</h2>
+    <div class="gallery">
+      <div class="card">
+        <h3>Three ways, by when the structure is known</h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Structure</th>
+                <th>What user code writes</th>
+                <th>What it can do</th>
+                <th>Example</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Fixed. Values flow through it.</td>
+                <td>
+                  a function that calls <code>measure</code> and returns
+                  relations
+                </td>
+                <td>Joins the one solve, takes part in fitting.</td>
+                <td>a tidy tree, a sankey</td>
+              </tr>
+              <tr>
+                <td>A choice among alternatives that all exist up front</td>
+                <td><code>choose([a, b])</code></td>
+                <td>
+                  Every alternative is measured, one is picked, nothing is
+                  created late.
+                </td>
+                <td>wrapped text, a row that becomes a column</td>
+              </tr>
+              <tr>
+                <td>Depends on a value known only late</td>
+                <td><code>layout(children, body)</code></td>
+                <td>A nested second run inside its box. The escape hatch.</td>
+                <td>squarify, which compares aspect ratios</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <pre><code class="language-typescript">// A length before the scale is chosen: a function of the scale that the
 // engine can solve for. Inside the engine this is `Pwl.Value`, a
 // piecewise-linear function of pixels per data unit.
@@ -694,576 +989,39 @@ declare function layout(
     children: Node[]
   ) =&gt; Node
 ): Node;</code></pre>
-        <p class="note">
-          The engine is symbolic, and the types have to show it. Before the
-          scale is chosen, every node tells its parent how much room it needs as
-          a function of the scale (in the code, an <code>Extent</code> whose
-          sides are <code>Pwl.Value</code>). The engine composes those, solves
-          for the scale once per scope, and only then hands pixels down. Its own
-          placement code is written once over an abstract arithmetic
-          (<code>Arith</code>: add, subtract, scale by a number, max) and runs
-          first in formulas and then in numbers. A user layout meets the same
-          two moments.
-        </p>
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Kind of layout</th>
-                <th>Example</th>
-                <th>What it reads</th>
-                <th>Its own size</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Divides the room it is given</td>
-                <td>squarify, any tiling</td>
-                <td><code>layout</code>: the space offered, in pixels</td>
-                <td>
-                  None. It takes the room it is given, as
-                  <code>treemap</code> does today and as SwiftUI's
-                  <code>GeometryReader</code> does.
-                </td>
-              </tr>
-              <tr>
-                <td>Builds up from its children with add, subtract and max</td>
-                <td>a tidy tree by contours, anything stack-like</td>
-                <td><code>measure</code>: the children's lengths</td>
-                <td>
-                  Falls out of what it returns, as a length, so it takes part in
-                  fitting.
-                </td>
-              </tr>
-              <tr>
-                <td>Builds up from its children with other arithmetic</td>
-                <td>circle packing, the greedy rule</td>
-                <td><code>measure</code>, then <code>.px</code></td>
-                <td>
-                  Pixels only, unless it scales evenly. A packing of circles
-                  whose radii all grow with the scale grows with it too, so it
-                  can run once at scale 1 and report a length. Pixel parts (a
-                  gap, a pixel radius) break that, and #967 has the plan for
-                  them.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
         <ul class="tight">
           <li>
-            <code>measure</code> answers in lengths. Arithmetic that stays
-            inside <code>Length</code> (add, subtract, scale by a number, max)
-            keeps the result solvable, which is the same rule the engine's own
-            code follows.
+            <code>measure</code> answers in lengths. A length is a size before
+            the scale is chosen. Arithmetic that stays inside
+            <code>Length</code> (add, subtract, scale by a number, max) keeps
+            the result solvable, which is the rule the engine's own code
+            follows. <code>.px</code> leaves that world and is an error if the
+            length depends on the scale.
           </li>
           <li>
-            <code>.px</code> leaves the symbolic world. It works only for a
-            length with no scale in it. A comparison, a product of two lengths,
-            a square root or a division needs <code>.px</code>.
-          </li>
-          <li>
-            <code>layout</code> gives pixels, because space comes down after the
+            <code>layout</code> gives pixels, because room comes down after the
             scale is solved. Its body runs then, so a <code>layout</code> node
-            cannot ask for room of its own.
+            asks for no room of its own, and what it returns is laid out in a
+            second run inside its box.
           </li>
           <li>
-            Neither places anything. The function returns operators
-            (<code>stack</code>, <code>layer</code>, <code>position</code>), and
-            those do the placing. <code>position</code> takes lengths as well as
-            numbers.
+            The children are an argument and the body only arranges them. Marks
+            carry the data, names and colors, so they have to exist before the
+            body runs. A mark created inside the body is an error.
           </li>
           <li>
-            A function that calls <code>measure</code> needs its children's
-            types resolved first, so it runs inside the engine and not when the
-            spec is built. How it is registered (a lazy operator, #1334) is not
-            designed here.
-          </li>
-          <li>
-            Decisions are the catch. Kennedy's mean uses only add, subtract, max
-            and halving, so it stays symbolic. Walker's spread and the
-            by-position <code>fit</code> compare positions, so they need pixels
-            wherever a position depends on the scale.
+            None of the three places anything. They return operators and
+            relations, and the solver does the placing.
           </li>
         </ul>
         <div class="callout">
           <b>Fork: the names.</b> <code>layout</code> and
           <code>measure</code> are Typst's spellings for exactly these two
-          things, and they work anywhere a node does. The alternative is a
-          second argument to <code>createMark</code>,
-          <code>createMark((props, { box, measure }) =&gt; node)</code>, which
-          adds no top-level names but ties both to defining a mark. This page
-          uses <code>layout</code> and <code>measure</code>.
+          things. The alternative is a second argument to
+          <code>createMark</code>, which adds no top-level names but ties both
+          to defining a mark. This page uses <code>layout</code> and
+          <code>measure</code>.
         </div>
-      </div>
-
-      <div class="card">
-        <h3>How the stages work</h3>
-        <p class="note">
-          The stacks a <code>layout</code> body returns do take part in layout,
-          but in a second run of their own. The engine works in stages (resolve
-          what each axis means, collect size claims, solve the scale, lay out),
-          and the body can only run in the last one, because that is when the
-          space is known. So the nodes it returns arrive after the earlier
-          stages have finished for everything around them.
-        </p>
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>What exists</th>
-                <th>What happens</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>The spec is built</td>
-                <td>
-                  the <code>layout</code> node and the children it was given
-                </td>
-                <td>
-                  Names, color scales, legends and axis meaning see the
-                  children, as for any node.
-                </td>
-              </tr>
-              <tr>
-                <td>Size claims</td>
-                <td>the same</td>
-                <td>
-                  The <code>layout</code> node asks for no room. Its children's
-                  own claims are known.
-                </td>
-              </tr>
-              <tr>
-                <td>Scale solved, layout</td>
-                <td>the space offered, in pixels</td>
-                <td>The body runs and returns stacks over the children.</td>
-              </tr>
-              <tr>
-                <td>A second run, inside the box</td>
-                <td>the returned arrangement</td>
-                <td>
-                  The engine collects claims, solves and lays out the
-                  arrangement as its own scope, in the space offered.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <ul class="tight">
-          <li>
-            <b>The marks exist up front.</b> Data, names and colors live on the
-            children, so legends, <code>selectAll</code> and animation keys see
-            them at the usual time. Only the grouping is late.
-            <code>stack</code>, <code>layer</code> and
-            <code>position</code> carry no data, so creating them late loses
-            nothing. That is why the children are an argument.
-          </li>
-          <li>
-            <b>A mark created inside the body is too late</b> for legends,
-            shared scales and names. That should be a loud error and not a
-            silently missing legend entry.
-          </li>
-          <li>
-            <b>Nothing shares a scale across the boundary.</b> The inside is
-            solved against the box after the outside is settled. Children can
-            share a scale with each other. They cannot share one with a sibling
-            of the <code>layout</code> node, and no axis runs through it.
-          </li>
-          <li>
-            <b><code>treemap</code> already works this way.</b> Its children
-            exist up front, and each is laid out in a room of its own (its tile)
-            after the tiling is decided. <code>layout</code> makes the deciding
-            step user code.
-          </li>
-          <li>
-            <b>A function that calls <code>measure</code> runs earlier</b>,
-            while size claims are collected, so what it returns joins the same
-            solve as everything around it. That is why it can take part in
-            fitting and a <code>layout</code> body cannot.
-          </li>
-        </ul>
-      </div>
-
-      <div class="card">
-        <h3>Staging: what other systems do</h3>
-        <p class="note">
-          A related-work search found close precedents for both functions. The
-          split that organizes them comes from build systems (Mokhov, Mitchell
-          and Peyton Jones, "Build Systems à la Carte", 2018): whether the
-          structure of a computation is known before it runs. Applying it to
-          layout is our reading, not something a paper states.
-        </p>
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Structure</th>
-                <th>In GoFish</th>
-                <th>What it can do</th>
-                <th>Precedent</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Fixed, values flow through it</td>
-                <td>a function that calls <code>measure</code></td>
-                <td>Joins the one solve, takes part in fitting.</td>
-                <td>
-                  Scala's <code>Rep[T]</code>, where the type says when a value
-                  is known. SwiftUI's <code>Layout</code>, which sizes and
-                  places the subviews it is handed and cannot create views.
-                </td>
-              </tr>
-              <tr>
-                <td>A choice among alternatives that all exist up front</td>
-                <td><code>choose([a, b])</code></td>
-                <td>
-                  Every alternative is measured in lengths, one is picked,
-                  nothing is created late.
-                </td>
-                <td>
-                  SwiftUI's <code>ViewThatFits</code>. Selective functors
-                  (Mokhov and others, 2019).
-                </td>
-              </tr>
-              <tr>
-                <td>Depends on a value known only late</td>
-                <td><code>layout(children, body)</code></td>
-                <td>A nested second run inside its box.</td>
-                <td>
-                  Compose's <code>SubcomposeLayout</code>, Flutter's
-                  <code>LayoutBuilder</code>. Higher-order attribute grammars
-                  (Vogt, Swierstra and Kuiper, 1989).
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="note">
-          So <code>layout</code> is the escape hatch, and the first two rows
-          should cover what they can. A layout that only switches between
-          arrangements by the room it has is the middle row. Tilings stay in the
-          third: squarify compares aspect ratios, which is outside what a length
-          can do.
-        </p>
-        <p class="label prop">
-          The middle row <span class="tag sketch">sketch</span>
-        </p>
-        <pre><code class="language-javascript">// A row when it fits, a column otherwise. Both arrangements exist up front,
-// so nothing is created late and both are measured in lengths.
-choose([spread({ dir: &quot;x&quot; }, cards), spread({ dir: &quot;y&quot; }, cards)]);</code></pre>
-        <ul class="tight">
-          <li>
-            <b>Containment.</b> A <code>layout</code> node's size is set from
-            outside and cannot depend on what its body builds.
-            <a href="https://www.w3.org/TR/css-contain-3/"
-              >CSS container queries</a
-            >
-            require exactly this, and it is what made them possible.
-          </li>
-          <li>
-            <b>No size question through a builder.</b>
-            <a href="https://developer.android.com/develop/ui/compose/phases"
-              >Compose</a
-            >
-            rejects intrinsic measurement of a <code>SubcomposeLayout</code>,
-            and
-            <a
-              href="https://api.flutter.dev/flutter/widgets/LayoutBuilder-class.html"
-              >Flutter</a
-            >
-            rejects it for <code>LayoutBuilder</code>, because answering would
-            mean running the builder speculatively. This is why a
-            <code>layout</code> node asks for no room.
-          </li>
-          <li>
-            <b>The body arranges, it does not create.</b> SwiftUI's
-            <code>Layout</code> and
-            <a href="https://drafts.css-houdini.org/css-layout-api/"
-              >CSS Houdini's</a
-            >
-            <code>layout(children, ...)</code> hand the children in. This is why
-            the children are an argument.
-          </li>
-          <li>
-            <b>The body is pure</b>, so it can be run again.
-            <a href="https://docs.julialang.org/en/v1/manual/metaprogramming/"
-              >Julia's generated functions</a
-            >
-            have the same rule.
-          </li>
-          <li>
-            <b>A length must not leave its scope.</b> A length computed inside a
-            nested run refers to that run's scale, so it must not flow into the
-            solve outside. Multi-stage languages call this scope extrusion. It
-            is new to our list.
-          </li>
-          <li>
-            <b>Never loop back.</b>
-            <a href="https://typst.app/docs/reference/context/">Typst</a> lays
-            out again up to five times and warns "layout did not converge within
-            5 attempts". LaTeX asks for a rerun. GoFish solves once, and nothing
-            here should change that.
-          </li>
-        </ul>
-        <p class="note">
-          Names worth borrowing:
-          <a href="https://ggplot2.tidyverse.org/reference/aes_eval.html"
-            >ggplot2</a
-          >
-          names its stages in user code (<code>after_stat</code>,
-          <code>after_scale</code>, <code>stage()</code>), which is the
-          precedent for naming ours (resolve, measure, solve, place). Shading
-          languages call "when a value is known" its rate, which reads better
-          than "too late" in an error.
-        </p>
-        <p class="note">
-          Not verified: several details in the search came from memory. One
-          claim needs checking before it is cited: that a
-          <code>Length</code> is exactly the "partially static data" of Yallop,
-          von Glehn and Kammar (ICFP 2018). The paper is real. Applying it to
-          piecewise-linear values is a reading.
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>Scheduling: what the attribute-grammar layout work says</h3>
-        <p class="note">
-          <a
-            href="https://datavis.cs.columbia.edu/files/papers/superconductor.pdf"
-            >Superconductor</a
-          >
-          (Meyerovich, Torok, Atkinson and Bodik, 2013) and the papers around it
-          treat layout as passes over a tree, where each pass runs top-down or
-          bottom-up and computes a fixed set of values per node. The user writes
-          what each value depends on, and a tool finds and checks the order of
-          passes, which they call the schedule.
-        </p>
-        <ul class="tight">
-          <li>
-            <b>A fixed number of ordered passes is well supported.</b>
-            Meyerovich's
-            <a
-              href="https://www2.eecs.berkeley.edu/Pubs/TechRpts/2013/EECS-2013-242.pdf"
-              >thesis</a
-            >
-            finds that "sequences of 3-5 traversals often suffice for data
-            visualizations and 9 for CSS". Superconductor's own treemap is five
-            alternating passes over 94,000 nodes.
-          </li>
-          <li>
-            <b>Measure, solve, place has an exact precedent.</b> The thesis
-            stages memory allocation the same way: a bottom-up pass of requests,
-            one global allocation, then a top-down pass of responses. Our solve
-            step is the global step in the middle. It has no form in their
-            schedule language.
-          </li>
-          <li>
-            <b>Never iterating is their rule too.</b> They reject cyclic
-            dependencies outright. Where CSS would need a fixed point, they copy
-            what browsers do and pick a value.
-          </li>
-        </ul>
-        <p class="label">Our stages in their schedule notation</p>
-        <pre><code class="language-plaintext">parPost Node { meaning } ;                 resolve what each axis means
-parPost Node { size(scale) } ;             measure: user `measure` code runs here
-[ solve the scale, once per scope ] ;      not a traversal
-parPre  Node { x, y, w, h }                place
-  { layout -&gt; body ;                       user `layout` body runs here
-              parPost { size(scale&#x27;) } ;   and the same schedule runs again
-              [ solve scale&#x27; ] ;           on the tree it returned
-              parPre  { x, y, w, h } }</code></pre>
-        <p class="note">
-          <code>parPost</code> is a bottom-up pass, <code>parPre</code> a
-          top-down one, and <code>;</code> runs one after the other (<a
-            href="https://lmeyerov.github.io/projects/pbrowser/pubfiles/ppopp13.pdf"
-            >Meyerovich and others, 2013</a
-          >).
-        </p>
-        <p class="label">What we should not overclaim, or have not solved</p>
-        <ul class="tight">
-          <li>
-            <b>A pass that creates nodes is what everyone avoids.</b>
-            <a href="https://arxiv.org/abs/2411.10659">Spineless Traversal</a>
-            assumes "the tree structure itself does not change during layout".
-            The traversal-fusion systems require a tree whose shape is
-            read-only. Meyerovich moved CSS's generated boxes into a separate
-            pass before layout. Higher-order attribute grammars do allow it, but
-            the thesis associates them with scheduling at run time. So the
-            nested run is not settled by citing them. What keeps ours simple is
-            narrower: the returned tree uses the same node kinds and the same
-            fixed schedule, so the schedule stays static and is only recursive.
-          </li>
-          <li>
-            <b
-              >Text that wraps belongs to <code>choose</code>, not to
-              <code>layout</code>.</b
-            >
-            Every way of breaking the text exists up front, so nothing is
-            created late. What it needs depends on where the width comes from. A
-            literal width (<code>w: 260</code>) needs nothing new. A width that
-            comes from the room offered needs the height to be measured after
-            the width is placed. CSS does this by always computing widths before
-            heights, and GoFish's two axes are solved separately, so running the
-            x passes to the end before the y measure pass is the same move. A
-            choice that interacts with the scale on its own axis (how many
-            columns fit) is a minimum over the alternatives' lengths, which is
-            <code>min</code> in the size algebra (#630). Only a trade between
-            the two axes needs a set of alternatives carried upward, which is
-            the frontier in the choice proposal. Label avoidance is not this: it
-            is the greedy rule.
-          </li>
-          <li>
-            <b>Fixed passes grew in practice.</b>
-            <a
-              href="https://github.com/servo/servo/wiki/Servo-Layout-Engines-Report"
-              >Servo's</a
-            >
-            first layout engine began with four traversals, grew to seven plus
-            passes "added to address bugs", and its 2020 rewrite dropped the
-            fixed-pass design.
-          </li>
-          <li>
-            <b>Fusing the nested run into the outer one does not apply.</b>
-            Fusion works on a tree that exists up front.
-          </li>
-          <li>
-            <b>Incremental layout is not free.</b> The incremental engines rely
-            on a stable tree and a fixed order of fields. A
-            <code>layout</code> body regenerates its tree, so it would need
-            keyed reuse, and a solve is global, so any size change dirties its
-            whole scope.
-          </li>
-        </ul>
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Our rule</th>
-                <th>Their check</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Marks exist before the body runs</td>
-                <td>The tree does not change during layout.</td>
-              </tr>
-              <tr>
-                <td>No scale shared across a <code>layout</code> boundary</td>
-                <td>
-                  Only interface attributes of a nested region are scheduled.
-                </td>
-              </tr>
-              <tr>
-                <td>A <code>layout</code> node reports no size</td>
-                <td>A parent that reads it has an unsatisfied dependency.</td>
-              </tr>
-              <tr>
-                <td>A length does not leave its nested run</td>
-                <td>A type check.</td>
-              </tr>
-              <tr>
-                <td>Never loop back</td>
-                <td>Cyclic dependencies are rejected.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="note">
-          Their checkers analyze declared reads and writes. JavaScript closures
-          cannot be analyzed that way, so GoFish has to enforce the same rules
-          through the shape of the API: in the measure pass, pixel values do not
-          exist to be read. Their error is the model for ours: name the first
-          pass that fails and the value it could not get.
-        </p>
-        <p class="label">What declared structure buys</p>
-        <p class="note">
-          These papers are mostly about speed, and every speedup comes from
-          knowing something about the layout before running it. The split in
-          this proposal (a plan of decisions, and a drawing in operators) is
-          that kind of knowledge.
-        </p>
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>What is known</th>
-                <th>What it allows</th>
-                <th>Precedent</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>A node's structure is fixed (it only measures)</td>
-                <td>
-                  Its passes can be fused, and its children can be processed in
-                  parallel or as arrays.
-                </td>
-                <td>
-                  Superconductor fuses rendering into the layout passes and
-                  sizes buffers with a prefix sum. Six to seven times faster on
-                  eight cores.
-                </td>
-              </tr>
-              <tr>
-                <td>The tree's shape did not change, only data</td>
-                <td>
-                  Re-evaluate the stored formulas. Do not re-plan and do not
-                  re-measure.
-                </td>
-                <td>
-                  Spineless Traversal recomputes only fields that changed, in
-                  the original order: 1.8 times faster on average. d3's
-                  resquarify keeps the row plan and redoes the arithmetic.
-                </td>
-              </tr>
-              <tr>
-                <td>Only the box changed (a resize)</td>
-                <td>
-                  Size requests are functions of the scale and do not mention
-                  the box, so only the solve and the place pass run again.
-                </td>
-                <td>Follows from the symbolic engine. Not measured.</td>
-              </tr>
-              <tr>
-                <td>A node is a <code>layout</code> box</td>
-                <td>
-                  Its size is fixed from outside, so a change inside cannot
-                  spread out, and separate boxes are independent.
-                </td>
-                <td>Flutter's relayout boundary. CSS containment.</td>
-              </tr>
-              <tr>
-                <td>A kernel scales evenly</td>
-                <td>Run it once at scale 1 and multiply.</td>
-                <td>d3's circle packing.</td>
-              </tr>
-              <tr>
-                <td>A cost adds up along a sequence</td>
-                <td>
-                  <code>choose</code> can prune alternatives instead of trying
-                  every combination.
-                </td>
-                <td>Knuth and Plass. Bernardy's pretty printer.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="note">
-          None of this is needed for the design to work, and none of it is
-          measured on GoFish. It says which declarations are worth keeping:
-          whether a node only measures, chooses, or builds late; what each pass
-          reads; and stable keys for children.
-        </p>
-        <p class="note">
-          Naming: in this literature a "visit" is one entry into one node, a
-          "pass" is one sweep over the tree, and the "schedule" is the passes
-          and their order. So our stages are passes. Not obtained, so not
-          verified here: Kastens (1980), Vogt, Swierstra and Kuiper (1989),
-          TreeFuser, Medea and the Cassius papers.
-        </p>
       </div>
 
       <div class="card">
@@ -1274,16 +1032,24 @@ parPre  Node { x, y, w, h }                place
         <div class="strip">
           <figure>
             <img
-              src="img/tiling-stacks-squarify.png"
-              alt="Squarified treemap drawn as nested stacks in user space"
+              src="img/tiling-builtin-squarify0.png"
+              alt="Built-in squarified treemap"
             />
             <figcaption>
-              Rendered today with the size typed by hand. The plan and drawing
-              functions are in the squarify card below.
+              <b>treemap({ tile: Tile.squarify })</b>, built-in
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/tiling-stacks-squarify.png"
+              alt="The same treemap as nested stacks in user space"
+            />
+            <figcaption>
+              Nested stacks in user space today, with the size typed by hand.
+              All 20 cells agree to 3e-14 px.
             </figcaption>
           </figure>
         </div>
-        <p class="label prop">Proposed</p>
         <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, and return
 // stacks of the cells it was given.
 const squarified = (cells, weights) =&gt;
@@ -1295,56 +1061,13 @@ squarified(
   countries.map(cell),
   countries.map((d) =&gt; d.pop)
 ).render(container, { w: 360, h: 300 });</code></pre>
-        <p class="label">Today</p>
-        <p class="none">
-          The size is typed twice, once for the plan and once for the render:
-          <code>drawSquarify(squarify(countries, [360, 300]))</code> inside
-          <code>layer({ w: 360, h: 300 }, ...)</code>.
-        </p>
       </div>
 
       <div class="card">
         <h3>
-          <code>measure</code>: circle packing
+          <code>measure</code>: a tree's contour fit, in lengths
           <span class="tag sketch">sketch</span>
         </h3>
-        <div class="strip">
-          <figure>
-            <img
-              src="img/greedy-builtin-pack.png"
-              alt="Built-in circle packing"
-            />
-            <figcaption><b>pack()</b>, built-in</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/greedy-greedy-pack-centroid.png"
-              alt="Greedy circle packing in user space"
-            />
-            <figcaption>
-              User space today, with radii given as literal pixels
-            </figcaption>
-          </figure>
-        </div>
-        <p class="label prop">Proposed</p>
-        <pre><code class="language-javascript">// Circle packing in user space. The packing needs real radii, so it asks
-// each length for its pixels. That is an error if a radius depends on the
-// scale, which is the error the built-in `pack` raises today.
-const packed = (children) =&gt; {
-  const circles = children.map((c) =&gt; measure(c).enclosingCircle);
-  const at = frontChain(circles.map((c) =&gt; c.r.px)); // plain JS
-  return layer(
-    children.map((c, i) =&gt; position({ x: at[i].x, y: at[i].y }, [c]))
-  );
-};</code></pre>
-        <p class="label">Today</p>
-        <p class="none">
-          The prototype can only pack circles whose radii are literal pixels,
-          because user code cannot ask a child how big it is.
-        </p>
-        <p class="label prop">
-          Where the result stays symbolic: a tree's contour fit
-        </p>
         <pre><code class="language-javascript">// Kennedy&#x27;s fit over lengths. It only subtracts, adds a number and takes a
 // max, so its result is still a length and the tree takes part in fitting.
 const fit = (p, q) =&gt;
@@ -1352,6 +1075,31 @@ const fit = (p, q) =&gt;
     0,
     ...p.slice(0, q.length).map(([, right], d) =&gt; right.sub(q[d][0]).add(GAP))
   );</code></pre>
+        <p class="note">
+          It only subtracts, adds a number and takes a max, so the result is
+          still a length. With the minimum gap as a primitive, user code would
+          not write this at all: <code>spread</code> with
+          <code>Spacing.contour</code> is this fit.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>
+          <code>choose</code>: alternatives that exist up front
+          <span class="tag sketch">sketch</span>
+        </h3>
+        <pre><code class="language-javascript">// A row when it fits, a column otherwise. Both arrangements exist up front,
+// so nothing is created late and both are measured in lengths.
+choose([spread({ dir: &quot;x&quot; }, cards), spread({ dir: &quot;y&quot; }, cards)]);</code></pre>
+        <p class="note">
+          Wrapped text is this case. Every way of breaking the text exists up
+          front. With a literal width nothing new is needed. With a width that
+          comes from the room offered, the height has to be measured after the
+          width is placed, which means finishing the x passes before the y
+          measure pass. Only a trade between the two axes needs a set of
+          alternatives carried upward, which is the frontier in the choice
+          proposal.
+        </p>
       </div>
 
       <div class="card">
@@ -1364,221 +1112,374 @@ const fit = (p, q) =&gt;
         <p class="note">
           <code>layout</code> takes a function, so it goes through the callback
           runner, as <code>derive</code> does. A function that calls
-          <code>measure</code> runs inside the engine, so in Python it is a
-          callback too. A plan that needs neither is a pure spec and needs no
-          callback.
+          <code>measure</code> runs inside the engine, so it is a callback too.
+          Relations and <code>choose</code> are data and need no callback.
         </p>
       </div>
     </div>
+  </section>
 
-    <h2>The examples behind it</h2>
+  <!-- ================================ D3 ================================ -->
+  <section
+    class="panel"
+    id="d3"
+    role="tabpanel"
+    aria-labelledby="tab-d3"
+    data-title="Every d3 layout"
+    hidden
+  >
+    <p>
+      Each layout was written through GoFish's public API, the way GoFish
+      already writes it where it has a way, and compared with d3's numbers for
+      the same input. <span class="ev exact">exact</span> means the difference
+      is rounding. <span class="ev close">partly</span> means some of it
+      matches. <span class="ev no">not matched</span> means the prototype shows
+      it does not fit. <span class="ev paper">on paper</span> means it was not
+      run.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>d3 layout</th>
+            <th>Decisions</th>
+            <th>Relations</th>
+            <th>Solver</th>
+            <th>Against d3</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>pie</td>
+            <td>a sort</td>
+            <td>a stack along the angle, sizes on one scale, a polar map</td>
+            <td>symbolic, today</td>
+            <td>
+              <span class="ev exact">exact</span> angles identical.
+              <code>padAngle</code> matches once the sweep is shortened by one
+              gap by hand, because the angle axis does not wrap.
+            </td>
+          </tr>
+          <tr>
+            <td>stack: none, expand, silhouette</td>
+            <td>the series order</td>
+            <td>
+              a stack per x; normalized sizes; stacks aligned on their middle
+            </td>
+            <td>symbolic, today</td>
+            <td>
+              <span class="ev exact">exact</span> 0 px at every x, both orders
+            </td>
+          </tr>
+          <tr>
+            <td>stack: wiggle</td>
+            <td>the series order</td>
+            <td>a stack per x on a baseline that d3 gives by a formula</td>
+            <td>symbolic, today, with a workaround</td>
+            <td>
+              <span class="ev exact">exact</span> 1e-4 px. The baseline goes in
+              as an invisible first band, because a stack has no public baseline
+              per group.
+            </td>
+          </tr>
+          <tr>
+            <td>treemap: squarify, binary, slice, dice</td>
+            <td>which items share a row</td>
+            <td>nested stacks whose sizes are shares of the parent</td>
+            <td>symbolic, today</td>
+            <td>
+              <span class="ev exact">exact</span> 3e-14 px at spacing 0. d3's
+              padding is a different relation from spacing.
+            </td>
+          </tr>
+          <tr>
+            <td>partition: icicle, sunburst</td>
+            <td>none</td>
+            <td>
+              each node stacked above the stack of its children; the same in a
+              polar map
+            </td>
+            <td>symbolic, today</td>
+            <td>
+              <span class="ev exact">exact</span> 1e-4 px; angles identical. The
+              sunburst's root disc is not drawn (a bug).
+            </td>
+          </tr>
+          <tr>
+            <td>tree (tidy)</td>
+            <td>none</td>
+            <td>
+              minimum gaps between subtree contours, slack shared evenly; the
+              parent at the average of its first and last child
+            </td>
+            <td>symbolic, with the minimum gap</td>
+            <td>
+              <span class="ev exact">exact</span> node for node, on the test
+              tree and 398 random trees. The left-packed and centered variants
+              were run through the one solver. d3's even spread was matched by
+              direct code, not yet through the solver.
+            </td>
+          </tr>
+          <tr>
+            <td>cluster (dendrogram)</td>
+            <td>none</td>
+            <td>
+              leaves in a spread; levels by minimum gaps packed to the end; the
+              parent at the average of its children
+            </td>
+            <td>symbolic, with the minimum gap and the average</td>
+            <td>
+              <span class="ev exact">exact</span> all 24 nodes. The average is
+              computed by hand.
+            </td>
+          </tr>
+          <tr>
+            <td>sankey, no relaxation</td>
+            <td>node order, link order</td>
+            <td>
+              columns by minimum gaps; each column a spread on one shared scale,
+              slack shared evenly; links as stacks against each node's sides;
+              ribbons
+            </td>
+            <td>symbolic, with the minimum gap</td>
+            <td>
+              <span class="ev exact">exact</span> 0 px for nodes and links, for
+              all four of d3's alignments. GoFish solved d3's scale itself.
+            </td>
+          </tr>
+          <tr>
+            <td>sankey, relaxed</td>
+            <td>node order</td>
+            <td>
+              each node pulled toward the weighted mean of its neighbors, kept
+              in order and apart
+            </td>
+            <td>optimizing</td>
+            <td>
+              <span class="ev no">not matched</span> up to 68 px off. A pull is
+              not a constraint.
+            </td>
+          </tr>
+          <tr>
+            <td>pack</td>
+            <td>which two circles each new circle rests on</td>
+            <td>touches; the smallest enclosing circle</td>
+            <td>geometry</td>
+            <td>
+              <span class="ev close">partly</span> a different greedy rule packs
+              within 4% of d3's radius. d3's own choices replayed as "touches"
+              were not run.
+            </td>
+          </tr>
+          <tr>
+            <td>chord</td>
+            <td>sorts</td>
+            <td>
+              a spread of groups along the angle, each a stack of sub-arcs;
+              ribbons through the center
+            </td>
+            <td>symbolic for the arcs, geometry for the ribbons</td>
+            <td>
+              <span class="ev close">partly</span> arcs match to 1e-5 rad.
+              Ribbons through the center cannot be drawn.
+            </td>
+          </tr>
+          <tr>
+            <td>force</td>
+            <td>none</td>
+            <td>
+              pulls toward positions, target distances, repulsion, no overlap
+            </td>
+            <td>optimizing</td>
+            <td>
+              <span class="ev paper">drawn only</span> d3 computed the positions
+              and GoFish drew them.
+            </td>
+          </tr>
+          <tr>
+            <td>Voronoi, Delaunay</td>
+            <td>site positions</td>
+            <td>
+              a cell is its region cut by one line per other site; Delaunay is
+              which sites are neighbors
+            </td>
+            <td>geometry (a built-in today)</td>
+            <td>
+              <span class="ev exact">exact</span> cells match d3-delaunay to
+              1e-4 px
+            </td>
+          </tr>
+          <tr>
+            <td>histogram, hexbin, contour, bundle, geo</td>
+            <td colspan="4">
+              Not layouts in this sense. They are data transforms, curves and
+              coordinate maps, and GoFish has them as <code>bin</code>,
+              <code>Curve</code> and <code>Coord.geo</code>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      So the layouts that are equations and gaps come out exactly, with no new
+      operator. The ones that do not are the ones whose core relation is
+      touching or pulling. None needed anything outside the three solver
+      families.
+    </p>
+
     <div class="gallery">
-      <!-- squarify -->
+      <!-- polar -->
       <div class="card">
-        <h3>Squarify, as nested stacks <span class="tag today">today</span></h3>
-        <div class="strip">
+        <h3>
+          Pie, sunburst, icicle, chord: stacks and a coordinate map
+          <span class="tag today">today</span>
+        </h3>
+        <div class="strip small">
           <figure>
-            <img
-              src="img/tiling-builtin-squarify0.png"
-              alt="Built-in squarified treemap of the 20 most populous countries"
-            />
+            <img src="img/d3-pie.png" alt="Pie chart" />
             <figcaption>
-              <b>treemap({ tile: Tile.squarify })</b>, built-in
+              Pie. The existing Pie story also matches <b>d3.pie</b> to 1e-5
+              rad.
             </figcaption>
           </figure>
           <figure>
-            <img
-              src="img/tiling-stacks-squarify.png"
-              alt="The same treemap drawn as nested stacks in user space"
-            />
+            <img src="img/d3-icicle.png" alt="Icicle" />
             <figcaption>
-              <b>drawSquarify(squarify(...))</b>, user space. All 20 cells agree
-              to 3e-14 px.
+              Icicle. Within 1e-4 px of <b>d3.partition</b>, as is the existing
+              Icicle story.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/d3-sunburst.png" alt="Sunburst" />
+            <figcaption>Sunburst: the same stacks in a polar map.</figcaption>
+          </figure>
+          <figure>
+            <img src="img/d3-chord.png" alt="Chord arcs" />
+            <figcaption>
+              Chord arcs. Within 1e-5 rad of <b>d3.chord</b>.
             </figcaption>
           </figure>
         </div>
-        <p class="label">The drawing: two stacks per row</p>
-        <pre><code class="language-typescript">const shares = (ws: number[]) =&gt; ws.map((w) =&gt; v(w / sum(ws)));
-const along = (dir: Dir, weights: number[]) =&gt; ({
-  dir,
-  reverse: dir === &quot;y&quot;, // a stack along y runs upward; the built-in runs down
-  size: shares(weights),
-});
-const cell = (d: Country) =&gt; rect({ fill: v(d.continent) });
+        <pre><code class="language-typescript">// A pie, as GoFish already writes it: a stack along the angle.
+chart(browsers, { coord: Coord.clock() })
+  .flow(stack({ by: &quot;name&quot;, dir: &quot;x&quot; }))
+  .mark(rect({ w: &quot;value&quot;, fill: &quot;name&quot; }));
 
-function drawSquarify({ dir, row, rest }: Plan): any {
-  const cells = stack(
-    along(
-      across(dir),
-      row.map((d) =&gt; d.pop)
-    ),
-    row.map(cell)
-  );
-  if (!rest) return cells;
-  return stack(along(dir, [total(row), total(flatten(rest))]), [
-    cells,
-    drawSquarify(rest),
+// With d3&#x27;s padAngle: a spread, and a sweep one gap short of the circle.
+chart(browsers, { coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) })
+  .flow(spread({ by: &quot;name&quot;, dir: &quot;x&quot;, spacing: PAD }))
+  .mark(rect({ w: &quot;value&quot;, fill: &quot;name&quot; }));</code></pre>
+        <pre><code class="language-typescript">// An icicle: each node above the stack of its children, widths from data.
+const node = (t: Tree): any =&gt; {
+  const self = rect({ w: v(total(t)), h: ROW, fill: v(t.name) });
+  if (!t.children) return self;
+  return stack({ dir: &quot;y&quot;, alignment: &quot;middle&quot; }, [
+    self,
+    stack({ dir: &quot;x&quot;, alignment: &quot;start&quot; }, t.children.map(node)),
   ]);
-}
+};
+layer({ w: 360, h: 320 }, [node(budget)]);
 
-layer({ w: 360, h: 300 }, [
-  drawSquarify(squarify(countries, [360, 300])!),
-]).render(container, { axes: false });</code></pre>
+// A sunburst: the same node in a polar coordinate space.
+layer({ coord: Coord.clock() }, [node(budget)]);</code></pre>
         <details class="code">
-          <summary>The plan: the squarify row rule, 24 lines</summary>
+          <summary>Chord arcs</summary>
           <div class="inner">
-            <pre><code class="language-typescript">type Plan = { dir: Dir; row: Country[]; rest?: Plan };
-const PHI = (1 + Math.sqrt(5)) / 2;
-
-function squarify(
-  items: Country[],
-  [w, h]: [number, number],
-  ratio = PHI
-): Plan | undefined {
-  if (items.length === 0) return undefined;
-  const alpha = Math.max(w / h, h / w) / (total(items) * ratio);
-  const worst = (row: Country[]) =&gt; {
-    const beta = total(row) ** 2 * alpha;
-    const ws = row.map((d) =&gt; d.pop);
-    return Math.max(Math.max(...ws) / beta, beta / Math.min(...ws));
-  };
-  let k = 1;
-  while (
-    k &lt; items.length &amp;&amp;
-    worst(items.slice(0, k + 1)) &lt;= worst(items.slice(0, k))
-  )
-    k++;
-  const dir = w &lt; h ? &quot;y&quot; : &quot;x&quot;;
-  const share = total(items.slice(0, k)) / total(items);
-  const rest: [number, number] =
-    dir === &quot;x&quot; ? [w * (1 - share), h] : [w, h * (1 - share)];
-  return { dir, row: items.slice(0, k), rest: squarify(items.slice(k), rest) };
-}</code></pre>
+            <pre><code class="language-typescript">// Chord arcs: a spread of groups along the angle, each a stack of sub-arcs.
+layer({ coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) }, [
+  spread(
+    { dir: &quot;x&quot;, spacing: PAD, y: 120 },
+    matrix.map((row, i) =&gt;
+      stack(
+        { dir: &quot;x&quot;, w: v(sum(row)) },
+        row.map((m) =&gt; rect({ w: v(m), h: 18, fill: v(names[i]) }))
+      )
+    )
+  ),
+]);</code></pre>
           </div>
         </details>
         <p class="note">
-          Missing: <code>[360, 300]</code> is typed twice. The plan needs the
-          box, and user code cannot read the box it will be given.
-        </p>
-        <p class="note">
-          <code>layout</code>, at the top of this tab, is the fix.
+          These are written the way GoFish already writes a pie. They have no
+          plan at all. What is missing: an angle axis that wraps, so a spread
+          around a circle has a gap after the last slice too, and a ribbon that
+          crosses the center.
         </p>
       </div>
 
-      <!-- binary + strip -->
+      <!-- stack -->
       <div class="card">
-        <h3>
-          Binary and strip, from the same machinery
-          <span class="tag today">today</span>
-        </h3>
-        <div class="strip">
+        <h3>Stack and its offsets <span class="tag today">today</span></h3>
+        <div class="strip small">
           <figure>
-            <img
-              src="img/tiling-builtin-binary0.png"
-              alt="Built-in binary treemap"
-            />
-            <figcaption><b>Tile.binary</b>, built-in</figcaption>
+            <img src="img/d3-stack-none.png" alt="Stacked areas" />
+            <figcaption><b>stackOffsetNone</b></figcaption>
           </figure>
           <figure>
-            <img
-              src="img/tiling-stacks-binary.png"
-              alt="Binary treemap as nested stacks"
-            />
-            <figcaption><b>drawBinary</b>, user space. Exact match.</figcaption>
+            <img src="img/d3-stack-expand.png" alt="Normalized stack" />
+            <figcaption><b>Expand</b></figcaption>
           </figure>
           <figure>
-            <img
-              src="img/tiling-stacks-strip.png"
-              alt="Strip treemap as a stack of stacks"
-            />
-            <figcaption>
-              <b>drawStrip</b>, user space. GoFish has no strip tiling today.
-            </figcaption>
+            <img src="img/d3-stack-silhouette.png" alt="Centered stack" />
+            <figcaption><b>Silhouette</b></figcaption>
+          </figure>
+          <figure>
+            <img src="img/d3-stack-wiggle-inside-out.png" alt="Streamgraph" />
+            <figcaption><b>Wiggle</b>, inside-out order</figcaption>
           </figure>
         </div>
-        <p class="label">Binary: a tree of two-way splits (plan 27 lines)</p>
-        <pre><code class="language-typescript">const drawBinary = (s: Split): any =&gt;
-  &quot;pop&quot; in s
-    ? cell(s)
-    : stack(along(s.dir, s.weights), s.parts.map(drawBinary));</code></pre>
-        <p class="label">Strip: a list of rows (plan 24 lines)</p>
-        <pre><code class="language-typescript">const drawStrip = (rows: Country[][]) =&gt;
-  stack(
-    along(&quot;y&quot;, rows.map(total)),
-    rows.map((row) =&gt;
-      stack(
-        along(
-          &quot;x&quot;,
-          row.map((d) =&gt; d.pop)
-        ),
-        row.map(cell)
-      )
-    )
-  );</code></pre>
+        <pre><code class="language-javascript">// stackOffsetNone: a stack per x.
+chart(rows, { w: 420, h: 300 })
+  .flow(
+    spread({ by: &quot;x&quot;, dir: &quot;x&quot;, spacing: 14, alignment: &quot;start&quot; }),
+    stack({ by: &quot;series&quot;, dir: &quot;y&quot; })
+  )
+  .mark(rect({ w: 4, h: &quot;amount&quot;, fill: &quot;series&quot; }));
+
+// stackOffsetExpand: each stack fills the height.
+stack({ by: &quot;series&quot;, dir: &quot;y&quot;, size: field(&quot;amount&quot;).normalize() });
+
+// stackOffsetSilhouette: the stacks centered on one line.
+spread({ by: &quot;x&quot;, dir: &quot;x&quot;, spacing: 14, alignment: &quot;middle&quot; });</code></pre>
         <p class="note">
-          A strip treemap is line wrapping where a row's height follows from its
-          total weight. Squarify is the same rule with the row direction chosen
-          again for each row.
+          All match d3 at every x. Wiggle's baseline and the inside-out order
+          are plans (17 and 15 lines of d3's formulas). d3's diverging offset
+          was not tested. It needs two stacks per x that meet at zero.
         </p>
       </div>
 
-      <!-- sequential -->
+      <!-- treemap -->
       <div class="card">
-        <h3>One tiling, many settings <span class="tag today">today</span></h3>
-        <div class="strip">
+        <h3>
+          Treemap: one tiling, many settings
+          <span class="tag today">today</span>
+        </h3>
+        <div class="strip small">
           <figure>
-            <img
-              src="img/tiling-seq-squarify.png"
-              alt="Squarified treemap from the generic algorithm"
-            />
-            <figcaption>
-              <b>squarify</b>: worst-aspect score, row on the side that makes
-              the room squarer. 0 px from the built-in.
-            </figcaption>
+            <img src="img/tiling-seq-squarify.png" alt="Squarified treemap" />
+            <figcaption><b>squarify</b>. 0 px from the built-in.</figcaption>
           </figure>
           <figure>
             <img src="img/tiling-seq-strip.png" alt="Strip treemap" />
-            <figcaption>
-              <b>strip</b>: aspect score, always a row at the top
-            </figcaption>
-          </figure>
-          <figure>
-            <img src="img/tiling-seq-zigzag.png" alt="Zigzag treemap" />
-            <figcaption>
-              <b>zigzag</b>: the same, direction alternating per row
-            </figcaption>
+            <figcaption><b>strip</b></figcaption>
           </figure>
           <figure>
             <img src="img/tiling-seq-spiral.png" alt="Spiral treemap" />
-            <figcaption>
-              <b>spiral</b>: the same, each row on the next side clockwise
-            </figcaption>
+            <figcaption><b>spiral</b></figcaption>
           </figure>
           <figure>
             <img src="img/tiling-seq-pivot.png" alt="Pivot treemap" />
-            <figcaption>
-              <b>pivot</b>: close a row at half the size left, then subdivide it
-              again
-            </figcaption>
-          </figure>
-          <figure>
-            <img src="img/tiling-seq-grid.png" alt="Grid of equal cells" />
-            <figcaption>
-              <b>grid</b>: every size 1, rows of about the square root of the
-              count
-            </figcaption>
+            <figcaption><b>pivot</b></figcaption>
           </figure>
         </div>
         <p class="note">
           Baudel and Broeksema (2012) show the rectangular treemaps are one
-          algorithm with five small functions plugged in: the order of the
-          items, the size of each, a score that says when to close a row,
-          whether to subdivide a closed row again, and a phrase that says which
-          side of the remaining room the next row goes on. We wrote that
-          algorithm once (40 lines) and one drawing function (24 lines) that
-          turns any of its plans into nested <code>stack</code>s.
+          algorithm with five small functions plugged in: the order, the size, a
+          score that says when to close a row, whether to subdivide a closed row
+          again, and a phrase that says which side the next row goes on. That is
+          the decision. The relations are nested two-child stacks. It works one
+          level at a time, which is what <code>tile</code> is.
         </p>
-        <p class="label">Each picture is one call</p>
         <pre><code class="language-typescript">const seq = (options) =&gt;
   render(drawSequential(sequential(countries, [W, H], options)));
 
@@ -1591,7 +1492,7 @@ seq({ size: pop, score: Score.bestMinAspectRatio, phrase: Phrase.spiral });
 // grid
 seq({ size: () =&gt; 1, score: Score.grid, phrase: Phrase.strip });</code></pre>
         <details class="code">
-          <summary>The algorithm: 40 lines</summary>
+          <summary>The decision: 40 lines</summary>
           <div class="inner">
             <pre><code class="language-typescript">function sequential&lt;T&gt;(
   items: T[],
@@ -1636,7 +1537,7 @@ seq({ size: () =&gt; 1, score: Score.grid, phrase: Phrase.strip });</code></pre>
           </div>
         </details>
         <details class="code">
-          <summary>The drawing: any plan as nested stacks, 24 lines</summary>
+          <summary>The relations: any plan as nested stacks, 24 lines</summary>
           <div class="inner">
             <pre><code class="language-typescript">function drawSequential&lt;T extends Country&gt;(plan: SeqPlan&lt;T&gt;): any {
   const [chunk, ...rest] = plan;
@@ -1683,1108 +1584,85 @@ const spiral = Tiling.sequential({
 chart(countries)
   .flow(tile({ size: &quot;pop&quot;, tiling: spiral }))
   .mark(rect({ fill: &quot;continent&quot; }));</code></pre>
-        <p class="note">
-          The names are the paper's and are placeholders.
-          <code>Score</code> is a <code>Cost</code> with the sign flipped and
-          should fold into the choice proposal's <code>Cost</code> family.
-        </p>
         <div class="callout">
-          <b>This fits <code>tile</code> as one level.</b> The paper's algorithm
-          takes a flat list of sizes and one rectangle. It never looks at the
-          levels above or below. For a hierarchy the paper runs it once per
-          node, inside the rectangle that node got, which is one
-          <code>tile</code> step per level in <code>.flow()</code>. Its
-          "recurse" setting is not the hierarchy: it subdivides a row of the
-          same level's items again, which is how pivot works.
-        </div>
-        <div class="callout">
-          <b>Fork: make the built-in tilings presets of this.</b> They match
-          exactly at spacing 0, so <code>squarify</code>, <code>slice</code> and
-          <code>dice</code> could be settings of it and drop d3-hierarchy, and
-          strip, spiral and pivot come for free. The one difference is spacing:
-          d3 tiles the whole box and then shrinks each cell, and a stack with
+          <b>Fork: what spacing means in a tiling.</b> d3 tiles the whole box
+          and then shrinks each cell, on one side for a partition. A stack with
           gaps gives each child its share of the room that is left. Cell areas
-          differ by up to 11% between the two at spacing 2. This page leans to
-          the presets, with the stack meaning of <code>spacing</code>.
-        </div>
-      </div>
-
-      <!-- beeswarm -->
-      <div class="card">
-        <h3>
-          Beeswarm, by the greedy rule <span class="tag today">today</span>
-        </h3>
-        <div class="strip wide">
-          <figure>
-            <img
-              src="img/greedy-builtin-swarm.png"
-              alt="Built-in beeswarm of penguin body mass"
-            />
-            <figcaption>
-              <b>overlap: Overlap.separate()</b>, built-in
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/greedy-greedy-swarm.png"
-              alt="The same beeswarm placed by a greedy helper in user space"
-            />
-            <figcaption>
-              <b>greedyPlace</b>, user space. Same extent. 0 of 342 dots differ
-              once ties are broken the built-in's way; 56 differ in plain
-              placement order.
-            </figcaption>
-          </figure>
-        </div>
-        <p class="label">
-          The whole rule: lowest-cost candidate that does not collide
-        </p>
-        <pre><code class="language-typescript">type Pos = { x: number; y: number };
-type Placed = Pos &amp; { r: number };
-
-function greedyPlace&lt;T extends { r: number }&gt;(
-  items: T[],
-  rule: {
-    candidates: (item: T, placed: Placed[]) =&gt; Pos[];
-    cost: (pos: Pos, item: T, placed: Placed[]) =&gt; number;
-    collides: (pos: Pos, item: T, placed: Placed[]) =&gt; boolean;
-  }
-): Placed[] {
-  const placed: Placed[] = [];
-  for (const item of items) {
-    let best = { x: NaN, y: NaN };
-    let bestCost = Infinity;
-    for (const pos of rule.candidates(item, placed)) {
-      const c = rule.cost(pos, item, placed);
-      if (c &lt; bestCost &amp;&amp; !rule.collides(pos, item, placed)) {
-        best = pos;
-        bestCost = c;
-      }
-    }
-    placed.push({ ...best, r: item.r });
-  }
-  return placed;
-}</code></pre>
-        <p class="label">
-          A beeswarm: touch an earlier dot at my own x, stay near the axis
-        </p>
-        <pre><code class="language-typescript">// The x scale GoFish will pick, rebuilt by hand from the rendered axis.
-const xPx = (mass) =&gt; ((mass - 2500) / (6500 - 2500)) * 420;
-
-const swarm = greedyPlace(
-  weighed.map((p) =&gt; ({ x: xPx(p[&quot;Body Mass (g)&quot;]), r: 3 })),
-  {
-    candidates: (item, placed) =&gt; [
-      { x: item.x, y: 0 },
-      ...placed.flatMap((p) =&gt; {
-        const dr = item.r + p.r + 1;
-        const dx = item.x - p.x;
-        if (Math.abs(dx) &gt;= dr) return [];
-        const dy = Math.sqrt(dr * dr - dx * dx);
-        return [
-          { x: item.x, y: p.y - dy },
-          { x: item.x, y: p.y + dy },
-        ];
-      }),
-    ],
-    cost: (pos) =&gt; Math.abs(pos.y),
-    collides: (pos, item, placed) =&gt; overlapsAny(pos, item.r, placed, 1),
-  }
-);</code></pre>
-        <p class="note">
-          Missing: the first line. The rule runs in pixels and user code cannot
-          see the scale GoFish picks, so the story rebuilt it by hand from a
-          rendered axis. A mark also cannot sit at a data value on x and a pixel
-          offset on y without a workaround.
-        </p>
-      </div>
-
-      <!-- pack -->
-      <div class="card">
-        <h3>
-          Circle packing, by the same rule <span class="tag today">today</span>
-        </h3>
-        <div class="strip">
-          <figure>
-            <img
-              src="img/greedy-builtin-pack.png"
-              alt="Built-in circle packing of 30 circles"
-            />
-            <figcaption><b>pack()</b>, built-in. Radius 149.3 px.</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/greedy-greedy-pack-centroid.png"
-              alt="Greedy circle packing of the same circles"
-            />
-            <figcaption>
-              <b>greedyPlace</b>, cost from the centroid. Radius 143.6 px.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/greedy-greedy-pack-squares.png"
-              alt="The same helper packing squares"
-            />
-            <figcaption>
-              <b>greedyPlace</b> with squares. Only the candidates and the
-              collision test change.
-            </figcaption>
-          </figure>
-        </div>
-        <pre><code class="language-typescript">const packed = greedyPlace(
-  seafood.map((d) =&gt; ({ r: 4.5 * Math.sqrt(d.count) })),
-  {
-    candidates: (item, placed) =&gt;
-      placed.length === 0
-        ? [{ x: 0, y: 0 }]
-        : placed.length === 1
-          ? [{ x: placed[0].r + item.r, y: 0 }]
-          : placed.flatMap((a, i) =&gt;
-              placed.slice(i + 1).flatMap((b) =&gt; tangentToBoth(a, b, item.r))
-            ),
-    cost: (pos) =&gt; Math.hypot(pos.x, pos.y),
-    collides: (pos, item, placed) =&gt; overlapsAny(pos, item.r, placed),
-  }
-);</code></pre>
-        <p class="note">
-          Across two item orders and two costs, the greedy packing is within 4%
-          of the built-in's enclosing radius, tighter in two of four cases. It
-          is not d3's algorithm: the front chain tries one position per circle,
-          and this compares every touching position, at about n⁴ steps for n
-          circles. So <code>pack</code> stays a kernel, and the greedy rule is a
-          second packing a user can write.
-        </p>
-        <p class="label prop">
-          The same decisions as data <span class="tag sketch">sketch</span>
-        </p>
-        <pre><code class="language-javascript">// Beeswarm: each dot takes the y nearest the axis that touches no earlier dot.
-scatter({
-  x: &quot;Body Mass (g)&quot;,
-  y: choose(Placement.touching({ padding: 1 }), { cost: Cost.distance() }),
-});
-
-// Circle packing: each circle takes the free spot nearest the center.
-scatter({
-  at: choose(Placement.touching(), { cost: Cost.distance({ from: &quot;center&quot; }) }),
-});
-
-// Strip treemap: close a row when one more item would make its cells less square.
-stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() } });</code></pre>
-        <div class="callout">
-          <b>Fork: greedy placement as a helper or as <code>choose</code>.</b>
-          The helper is 31 lines of JS with three callbacks. It works today for
-          any shape, and it is opaque. The <code>choose</code> form reuses the
-          <code>Placement</code> candidates and the greedy chooser that label
-          placement already has, crosses to Python as data, and runs during
-          layout so it sees real pixels. It needs the choice proposal signed off
-          first. This page leans to building <code>choose</code> and treating
-          the helper as what it lowers into.
+          differ by up to 11% in a treemap at spacing 2, and edges by up to 28
+          px in an icicle. The built-in tilings can become presets with no pixel
+          change only at spacing 0. This page leans to the stack meaning, since
+          it is the one the primitives give.
         </div>
       </div>
 
       <!-- tree -->
       <div class="card">
-        <h3>Tidy tree, by contours <span class="tag today">today</span></h3>
+        <h3>
+          Tree and dendrogram: minimum gaps and an average
+          <span class="tag today">today</span>
+        </h3>
         <div class="natural">
           <figure>
             <img
               src="img/trees-tree-boxes.png"
-              alt="Tree with sibling subtrees separated by bounding boxes"
+              alt="Tree spaced by bounding boxes"
             />
             <figcaption>
-              Siblings separated by bounding boxes: 446 px. GoTree does this.
+              Exact gaps between bounding boxes, which is all today's primitives
+              give: 446 px.
             </figcaption>
           </figure>
           <figure>
             <img
               src="img/trees-tree-contours.png"
-              alt="The same tree with sibling subtrees separated by contours"
+              alt="Tree spaced by contours"
             />
             <figcaption>
-              Separated by contours: 314 px, exactly <b>d3.tree</b>'s width.
+              Minimum gaps between contours: 314 px, <b>d3.tree</b>'s width.
             </figcaption>
           </figure>
         </div>
-        <p class="label">By boxes: 15 lines over public operators</p>
-        <pre><code class="language-typescript">const boxTree = (t: Tree, path = &quot;n&quot;): any =&gt; {
-  const node = nodeMark(path); // circle(...).name(path)
-  if (!t.children?.length) return node;
-  const kids = spread(
-    { dir: &quot;x&quot;, spacing: GAP, alignment: &quot;start&quot; },
-    t.children.map((c, i) =&gt; boxTree(c, `${path}.${i}`))
-  ).name(`${path}/kids`);
-  return layer([node, kids]).relate((c) =&gt; [
-    Constraint.distribute({ dir: &quot;y&quot;, spacing: LEVEL }, [
-      c[path],
-      c[`${path}/kids`],
-    ]),
-    Constraint.align({ x: &quot;middle&quot; }, [c[path], c[`${path}/kids`]]),
-  ]);
-};</code></pre>
+        <div class="strip small">
+          <figure>
+            <img
+              src="img/trees-tree-symmetry-left.png"
+              alt="Slack at the start"
+            />
+            <figcaption>Slack at the <b>start</b></figcaption>
+          </figure>
+          <figure>
+            <img src="img/trees-tree-symmetry-mean.png" alt="Slack centered" />
+            <figcaption><b>center</b></figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/trees-tree-symmetry-spread.png"
+              alt="Slack shared evenly"
+            />
+            <figcaption><b>even</b>. Equals <b>d3.tree</b>.</figcaption>
+          </figure>
+          <figure>
+            <img src="img/d3-cluster.png" alt="Dendrogram" />
+            <figcaption>Dendrogram. Equals <b>d3.cluster</b>.</figcaption>
+          </figure>
+        </div>
         <p class="note">
-          By contours, today: a separate 34-line fold in JS (Kennedy's
-          <code>fit</code> and <code>merge</code>) that mirrors the layout
-          recursion, and one <code>Constraint.distribute</code> per pair of
-          siblings to hand the offsets over. It is the only prototype where the
-          plan had to redo geometry the engine should own.
+          Each subtree is at least its contour gap from every earlier sibling.
+          Where the slack goes is the only choice, and d3's is "shared evenly".
+          Nodes of different heights need no new idea: the contour is measured
+          over vertical position, and a layered tree is the case where every
+          node in a row has the same height.
         </p>
         <p class="label prop">
-          Proposed: one changed line <span class="tag sketch">sketch</span>
+          Proposed <span class="tag sketch">sketch</span>
         </p>
         <pre><code class="language-javascript">const kids = spread(
   { dir: &quot;x&quot;, spacing: Spacing.contour(GAP), alignment: &quot;start&quot; },
   t.children.map((c, i) =&gt; tidyTree(c, `${path}.${i}`))
 ).name(`${path}/kids`);</code></pre>
-        <p class="note">
-          <code>Spacing.contour</code> is already planned (stack profiles, draft
-          PR #1375). This is the evidence that it is the whole difference
-          between a GoTree tree and a tidy tree, apart from centering the parent
-          between its first and last child.
-        </p>
-      </div>
-
-      <!-- nonlayered -->
-      <div class="card">
-        <h3>
-          Non-layered trees, and the symmetry rule
-          <span class="tag today">today</span>
-        </h3>
-        <div class="natural">
-          <figure>
-            <img
-              src="img/trees-tree-layered-heights.png"
-              alt="Layered tree with nodes of different heights"
-            />
-            <figcaption>
-              Layered: every row as tall as its tallest node. 349 by 337 px.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/trees-tree-non-layered-boxes.png"
-              alt="Non-layered tree spaced by bounding boxes"
-            />
-            <figcaption>
-              Each child group right below its own parent, spaced by boxes. 470
-              by 204 px.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/trees-tree-non-layered.png"
-              alt="Non-layered tree spaced by contours"
-            />
-            <figcaption>
-              The same spaced by contours over vertical position (van der Ploeg
-              2014). 434 by 204 px.
-            </figcaption>
-          </figure>
-        </div>
-        <p class="note">
-          A node's height is its file's length. The box version fell out of the
-          existing recursive function with no change except node sizes. For
-          contours, the outline becomes a list of pieces with a top, bottom,
-          left and right, instead of one pair per depth, and
-          <code>fit</code> changes in the one way the paper says.
-        </p>
-        <pre><code class="language-typescript">// Per depth (Kennedy): one [left, right] pair per level.
-const fitEdges = (p: Extent, q: Extent): number =&gt;
-  Math.max(0, ...p.slice(0, q.length).map(([, r], d) =&gt; r - q[d][0] + GAP));
-
-// By vertical position (van der Ploeg): pieces { top, bottom, left, right }.
-const fitPieces = (p: Pieces, q: Pieces): number =&gt; {
-  let x = 0;
-  for (let i = 0, j = 0; i &lt; p.length &amp;&amp; j &lt; q.length; ) {
-    x = Math.max(x, p[i].right - q[j].left + GAP);
-    const [pb, qb] = [p[i].bottom, q[j].bottom];
-    if (pb &lt;= qb) i++; // advance whichever piece ends higher, or both
-    if (qb &lt;= pb) j++;
-  }
-  return x;
-};</code></pre>
-        <p class="note">
-          <code>merge</code> keeps its meaning but needs the same two-list walk
-          (12 lines instead of 4). So "one change" is true of the algorithm and
-          not quite of the code. A layered tree is the case where every node in
-          a row has the same height.
-        </p>
-        <div class="natural">
-          <figure>
-            <img
-              src="img/trees-tree-symmetry-left.png"
-              alt="Tree packed from the left"
-            />
-            <figcaption>
-              Packed from the left: the three middle leaves pile up, and the
-              mirrored tree is not the mirror image.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/trees-tree-symmetry-mean.png"
-              alt="Tree with Kennedy's mean"
-            />
-            <figcaption>
-              Kennedy's mean of a left and a right packing: symmetric, leaves
-              clustered.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/trees-tree-symmetry-spread.png"
-              alt="Tree with Walker's spread"
-            />
-            <figcaption>
-              Walker's spread: leaves evenly between their neighbors. Equals
-              <b>d3.tree</b> node for node.
-            </figcaption>
-          </figure>
-        </div>
-        <p class="note">
-          The symmetry rule is a separate choice, and the pictures differ.
-          <code>Spacing.contour</code> uses Walker's spread, because it is what
-          d3 draws and it reads better. It matched d3 with 0 px difference on
-          this tree and on 398 random trees. Kennedy's mean is the alternative.
-        </p>
-      </div>
-
-      <!-- graph -->
-      <div class="card">
-        <h3>Layered graph, by phases <span class="tag today">today</span></h3>
-        <div class="strip wide">
-          <figure>
-            <img
-              src="img/trees-graph-input-order.png"
-              alt="Course prerequisite graph in input order"
-            />
-            <figcaption>Input order: 39 crossings</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/trees-graph-barycenter.png"
-              alt="The same graph after barycenter ordering"
-            />
-            <figcaption>Four barycenter sweeps: 6 crossings</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/trees-graph-straightened.png"
-              alt="The same graph with nodes pulled toward their predecessors"
-            />
-            <figcaption>
-              Each node pulled toward the mean of its predecessors
-            </figcaption>
-          </figure>
-        </div>
-        <p class="label">
-          The drawing: a spread of spreads, links between named nodes
-        </p>
-        <pre><code class="language-typescript">const layeredGraph = (rows: string[][]) =&gt;
-  layer([
-    spread(
-      { dir: &quot;x&quot;, spacing: 42, alignment: &quot;middle&quot; },
-      rows.map((row) =&gt;
-        spread(
-          { dir: &quot;y&quot;, spacing: 30, alignment: &quot;middle&quot; },
-          row.map(graphNode)
-        )
-      )
-    ),
-  ]).relate(() =&gt; graphLinks(graph.links));</code></pre>
-        <p class="note">
-          The plan is three functions: <code>layers</code> (longest path, 12
-          lines), <code>splitLongEdges</code> (19) and <code>order</code>
-          (35 with its crossing count). This is the sankey proposal's approach
-          A. The straightened version is where today's API runs out: the story
-          copies spread's geometry to compute explicit y values, because there
-          is no "as close to the mean of these as the order allows" placement.
-        </p>
-      </div>
-
-      <!-- voronoi -->
-      <div class="card">
-        <h3>Voronoi, by relaxation <span class="tag today">today</span></h3>
-        <div class="strip">
-          <figure>
-            <img
-              src="img/tiling-voronoi-relax0.png"
-              alt="Voronoi cells of random sites"
-            />
-            <figcaption>Random sites</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/tiling-voronoi-relax2.png"
-              alt="Voronoi cells after 2 relaxation steps"
-            />
-            <figcaption>
-              Each site moved to its cell's center, 2 times
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/tiling-voronoi-relax30.png"
-              alt="Voronoi cells after 30 relaxation steps"
-            />
-            <figcaption>30 times</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/tiling-voronoi-neighbors.png"
-              alt="Delaunay links drawn over the relaxed cells"
-            />
-            <figcaption>The Delaunay links of the last frame</figcaption>
-          </figure>
-        </div>
-        <pre><code class="language-typescript">function relax(sites: Site[], steps: number): Site[] {
-  for (let s = 0; s &lt; steps; s++) {
-    const voronoi = Delaunay.from(sites.map((d) =&gt; [d.x, d.y])).voronoi([
-      0,
-      0,
-      W,
-      H,
-    ]);
-    sites = sites.map((d, i) =&gt; {
-      const [x, y] = centroid(voronoi.cellPolygon(i) as any);
-      return { ...d, x, y };
-    });
-  }
-  return sites;
-}
-
-const cells = (sites: Site[]) =&gt;
-  chart(framed(sites)) // two extra corner rows, see the list of walls
-    .flow(
-      partition({
-        by: struct({ x: &quot;x&quot;, y: &quot;y&quot; }).bin(Bin.voronoi({ seeds: sites })),
-      })
-    )
-    .mark(region({ fill: &quot;continent&quot;, stroke: &quot;white&quot;, strokeWidth: 1.5 }));
-
-const links = chart(edges)
-  .flow(resolve([&quot;source&quot;, &quot;target&quot;], { from: selectAll(&quot;sites&quot;) }))
-  .mark(line({ from: &quot;source&quot;, to: &quot;target&quot;, stroke: &quot;#222&quot; }));</code></pre>
-        <p class="note">
-          The cells are drawn by the real <code>partition</code> with
-          <code>Bin.voronoi({ seeds })</code>. The loop is user code over
-          d3-delaunay. These are equal-weight cells. The answer to "is there a
-          Voronoi or Delaunay primitive" is on the next tab.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ============================ REVIEW ============================ -->
-  <section
-    class="panel"
-    id="review"
-    role="tabpanel"
-    aria-labelledby="tab-review"
-    hidden
-  >
-    <h2>Every algorithm, side by side</h2>
-    <div class="tablewrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Algorithm</th>
-            <th>Plan (decisions)</th>
-            <th>Drawing (operators)</th>
-            <th>Kernel it needs</th>
-            <th>Prototype result</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>slice, dice</td>
-            <td>none</td>
-            <td>one <code>stack</code></td>
-            <td>none</td>
-            <td>already true on main</td>
-          </tr>
-          <tr>
-            <td>squarify</td>
-            <td>rows by the aspect rule, 24 lines</td>
-            <td>nested <code>stack</code>s, 15 lines</td>
-            <td>none</td>
-            <td>equals the built-in to 3e-14 px</td>
-          </tr>
-          <tr>
-            <td>binary</td>
-            <td>splits at the weight median, 27 lines</td>
-            <td>nested <code>stack</code>s, 4 lines</td>
-            <td>none</td>
-            <td>equals the built-in to 3e-14 px</td>
-          </tr>
-          <tr>
-            <td>strip</td>
-            <td>rows by the aspect rule, 24 lines</td>
-            <td>a <code>stack</code> of <code>stack</code>s, 13 lines</td>
-            <td>none</td>
-            <td>renders; no built-in to compare</td>
-          </tr>
-          <tr>
-            <td>Voronoi</td>
-            <td>site positions by relaxation, 30 lines</td>
-            <td><code>partition</code> by <code>Bin.voronoi</code></td>
-            <td>the diagram</td>
-            <td>equal-weight cells only</td>
-          </tr>
-          <tr>
-            <td>beeswarm</td>
-            <td>y per dot by the greedy rule, 22 lines</td>
-            <td><code>scatter</code> plus an offset</td>
-            <td>none</td>
-            <td>equals <code>Overlap.separate</code>, 0 of 342 differ</td>
-          </tr>
-          <tr>
-            <td>circle packing</td>
-            <td>positions by the greedy rule, 32 lines</td>
-            <td>circles at pixel positions</td>
-            <td>none (d3's front chain is a different rule)</td>
-            <td>within 4% of <code>pack</code>'s radius</td>
-          </tr>
-          <tr>
-            <td>label placement</td>
-            <td>spot per label by the greedy rule</td>
-            <td>the label mark</td>
-            <td>outline geometry</td>
-            <td>not prototyped; #1205 already works this way</td>
-          </tr>
-          <tr>
-            <td>tidy tree</td>
-            <td>none, once spacing can follow contours</td>
-            <td>nested <code>spread</code>s in <code>layer</code>s</td>
-            <td>contour fit</td>
-            <td>
-              equals <code>d3.tree</code>'s width (314 px, against 446 by boxes)
-            </td>
-          </tr>
-          <tr>
-            <td>layered graph</td>
-            <td>layer, split long edges, order: 66 lines</td>
-            <td>a <code>spread</code> of <code>spread</code>s, links</td>
-            <td>none (ordering is a heuristic search)</td>
-            <td>crossings 39 to 6</td>
-          </tr>
-          <tr>
-            <td>sankey</td>
-            <td>the layered graph's plan</td>
-            <td>the same, with sized nodes</td>
-            <td>none</td>
-            <td>see the sankey proposal</td>
-          </tr>
-          <tr>
-            <td>enclose</td>
-            <td>none</td>
-            <td>a derived mark over its members</td>
-            <td>outline geometry</td>
-            <td>not prototyped</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <ul>
-      <li>
-        <b>The drawing column is always existing operators.</b> No algorithm
-        needed a new operator to draw its result.
-      </li>
-      <li>
-        <b>The plan column has four kinds of decision.</b> Dividing a box among
-        items (squarify, binary, strip). Placing items one at a time against the
-        ones already placed (beeswarm, packing, labels, line wrapping). Ordering
-        (layered graph, sankey). Repeating until it settles (Voronoi, sankey
-        relaxation).
-      </li>
-      <li>
-        <b>The kernel column is short</b>: the Voronoi or power diagram, the
-        contour fit, outline geometry. Each is a function from shapes to shapes
-        with no decisions in it.
-      </li>
-      <li>
-        <b>The second kind of decision is a choice with a cost.</b>
-        "Lowest-cost position that does not collide" is <code>choose</code>
-        over candidates, made once per item, where each item sees the ones
-        before it. Squarify's row rule has the same shape: add to the row or
-        close it, by aspect ratio. This is where the choice operator (#486)
-        meets the layout algorithms.
-      </li>
-    </ul>
-
-    <h2>Is there a Voronoi or Delaunay primitive?</h2>
-    <div class="strip" style="max-width: 720px">
-      <figure>
-        <img
-          src="img/tiling-voronoi-relax30.png"
-          alt="Relaxed Voronoi cells drawn by partition"
-        />
-        <figcaption>
-          <b>partition</b> by <b>Bin.voronoi({ seeds })</b>, sites relaxed in
-          user code
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/tiling-builtin-voronoi.png"
-          alt="Built-in Voronoi treemap with areas by population"
-        />
-        <figcaption>
-          <b>Tile.voronoi</b>: the same loop plus a weight per site, so areas
-          follow population
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/tiling-voronoi-neighbors.png"
-          alt="Delaunay links over the cells"
-        />
-        <figcaption>
-          Delaunay: 49 links, but only 43 pairs of cells share an edge inside
-          the box
-        </figcaption>
-      </figure>
-    </div>
-    <p>
-      <b>Voronoi: yes, and GoFish already has it, twice.</b>
-      <code>Bin.voronoi({ seeds })</code> in <code>partition</code> gives the
-      cells of given sites. <code>Tile.voronoi</code> gives cells with chosen
-      areas. The prototype shows the first one decomposes one level: a relaxed
-      Voronoi layout is plain Voronoi cells, repeated, with the sites moved
-      between rounds. <code>Tile.voronoi</code> is the same loop with one more
-      step per round (grow the weight of a cell that is too small). It could be
-      written in user space if <code>Bin.voronoi</code> took two more things:
-      the region to clip to, which today is always the data's bounding box, and
-      a weight per site.
-    </p>
-    <p>
-      <b>Below that, it is cuts.</b> A Voronoi cell is the region cut by one
-      half-plane per other site, and a two-site diagram is one straight cut, the
-      same atom as a binary treemap split. GoFish's own
-      <code>Tile.voronoi</code> computes its cells exactly this way. So the
-      diagram decomposes into cuts of a polygon, and what user code lacks is the
-      polygon helpers and a way to draw given polygons as cells.
-    </p>
-    <p>
-      <b>Delaunay: not a layout primitive, a relation on data.</b> It answers
-      "which items are neighbors", so it is a <code>derive</code> step that
-      returns pairs. Drawing the pairs needed nothing new: named points,
-      <code>resolve</code>, and <code>line({ from, to })</code> worked on the
-      first try. Inside layouts its use is the neighbor list that makes
-      collision checks cheap. After clipping to a box it is not exactly "whose
-      cells touch": the six extra links run around the outside.
-    </p>
-    <p>
-      <b>Where the geometry lives.</b> The prototypes imported
-      <code>d3-delaunay</code> in the plan and used GoFish only to draw. That is
-      the right split: GoFish is not a data transform library, and a Python user
-      has <code>scipy.spatial</code> for the same job. So the additions are the
-      two <code>Bin.voronoi</code> options, not a geometry namespace.
-    </p>
-
-    <h2>What the kernels would take in user space</h2>
-    <div class="tablewrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Kernel</th>
-            <th>Today</th>
-            <th>What user code would need</th>
-            <th>How it would be written</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Crossing reduction</td>
-            <td>Not built in. I called it a kernel and that was wrong.</td>
-            <td>
-              Nothing. The prototype's <code>order</code> is 35 lines of plan.
-            </td>
-            <td>A plan function, today.</td>
-          </tr>
-          <tr>
-            <td>Power diagram (<code>Tile.voronoi</code>)</td>
-            <td>
-              340 lines in <code>voronoiTiling.ts</code>. Each cell is the
-              region cut by one half-plane per other site, then a Newton step
-              fits the weights to the areas.
-            </td>
-            <td>
-              Polygon helpers (cut by a half-plane, area, centroid), public or
-              from a library. The shape a parent hands down, readable by user
-              code. A <code>partition</code> member that takes given polygons.
-            </td>
-            <td>
-              The relaxation loop as a plan, drawn by <code>partition</code>.
-            </td>
-          </tr>
-          <tr>
-            <td>Front chain and enclosing circle (<code>pack</code>)</td>
-            <td>
-              d3's <code>packSiblings</code> (120 lines) and
-              <code>packEnclose</code> (123 lines).
-            </td>
-            <td>
-              The children's measured sizes, readable before they are placed.
-              Placement at pixel positions in a layer that keeps its box. To fit
-              its room (#967), sizes as a function of the scale, not as pixels.
-            </td>
-            <td>
-              A fold that carries the chain from one circle to the next. It does
-              not fit <code>choose</code>, because a collision rewrites the
-              chain.
-            </td>
-          </tr>
-          <tr>
-            <td>Contour fit (<code>Spacing.contour</code>)</td>
-            <td>Not built.</td>
-            <td>
-              A child's outline per depth, readable by its parent. One spacing
-              per gap.
-            </td>
-            <td>
-              Kennedy's fold, 34 lines. The prototype already does it,
-              awkwardly.
-            </td>
-          </tr>
-          <tr>
-            <td>Outline geometry (<code>enclose</code>, label spots)</td>
-            <td><code>enclose.tsx</code> and its folder.</td>
-            <td>
-              The placed geometry of the members, readable after layout. A path
-              mark in pixels.
-            </td>
-            <td>A function from placed shapes to a path.</td>
-          </tr>
-          <tr>
-            <td>Scale solve and placement</td>
-            <td>The layout engine.</td>
-            <td>Stays. It is what everything else lowers into.</td>
-            <td>Not user code.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p>
-      The needs repeat. User code has to read three things: the box or shape it
-      was given (from above), the measured sizes and outlines of its children
-      (from below), and the placed geometry of other nodes (afterward). It also
-      has to place children at pixel positions and still report a box. Those
-      four together are the layout protocol that SwiftUI and Compose expose, and
-      they are what #692 and #1279 ask to make public. Code written at that
-      level does not lower into operators. It is library code at the floor,
-      which is also how Mojo's standard library uses its intrinsics.
-    </p>
-    <p>
-      The hard part is fitting. A kernel that works in pixels cannot take part
-      in fitting a chart to its room unless its result scales evenly when its
-      inputs do. Circle packing does. Pixel padding breaks it. That contract is
-      the real design work, not the algorithms.
-    </p>
-
-    <h2>The layout protocol</h2>
-    <p>
-      The needs in the kernels table repeat, and they are the steps of the
-      layout protocol that UI toolkits expose. GoFish's engine already works
-      this way inside; the layout-synthesis essay says "SwiftUI's protocol is
-      propose-down / respond-up". The node protocol is private, which is the
-      whole gap.
-    </p>
-    <div class="tablewrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Step</th>
-            <th>SwiftUI Layout</th>
-            <th>Compose Layout</th>
-            <th>Typst</th>
-            <th>GoFish engine today (private)</th>
-            <th>Proposed for users</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Read the space offered</td>
-            <td>
-              <code>proposal</code> in <code>sizeThatFits</code>,
-              <code>bounds</code> in <code>placeSubviews</code>
-            </td>
-            <td><code>constraints</code></td>
-            <td><code>layout(size =&gt; ...)</code></td>
-            <td><code>layout(size, scales, children, node, shape)</code></td>
-            <td><code>layout(({ w, h, shape }) =&gt; node)</code></td>
-          </tr>
-          <tr>
-            <td>Measure a child before placing it</td>
-            <td><code>subview.sizeThatFits(proposal)</code></td>
-            <td>
-              <code>measurable.measure(constraints)</code>, once per child
-            </td>
-            <td><code>measure(content)</code></td>
-            <td>
-              <code>child.layout(size, scales)</code> returns its
-              <code>dims</code> and <code>geometry()</code>
-            </td>
-            <td><code>measure(child)</code></td>
-          </tr>
-          <tr>
-            <td>Place children</td>
-            <td><code>subview.place(at:anchor:proposal:)</code></td>
-            <td><code>placeable.place(x, y)</code></td>
-            <td>return content</td>
-            <td><code>placeable.place(axis, value, anchor)</code></td>
-            <td>
-              return operators: <code>position</code>, <code>layer</code>,
-              <code>stack</code>
-            </td>
-          </tr>
-          <tr>
-            <td>Report its own size</td>
-            <td>return a <code>CGSize</code></td>
-            <td><code>layout(width, height) { }</code></td>
-            <td>the size of what it returns</td>
-            <td><code>intrinsicDims</code></td>
-            <td>the box of what it returns</td>
-          </tr>
-          <tr>
-            <td>Read where other nodes ended up</td>
-            <td>not in the protocol</td>
-            <td>not in the protocol</td>
-            <td>not checked</td>
-            <td><code>ref</code>, <code>.relate</code></td>
-            <td>already public: <code>ref</code>, <code>selectAll</code></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p>
-      <b>GoFish passes shapes, not only boxes.</b> A SwiftUI child answers a
-      measurement with a width and height. A GoFish child answers with
-      <code>geometry()</code>, which today has its box, its enclosing circle and
-      its outline. <code>pack</code> and the beeswarm read the circle.
-      <code>enclose</code> and label placement read the outline. A contour would
-      be a fourth answer. Going down, a parent can offer a convex polygon along
-      with the box, which is how a Voronoi cell hands its region to the tiling
-      inside it. So <code>measure(child)</code> returns that geometry.
-    </p>
-    <p>
-      The circle packing sketch on the first tab is this:
-      <code>measure(child).enclosingCircle</code>, then a <code>layer</code> of
-      positioned children.
-    </p>
-    <p>
-      <b>GoFish has scales, and that is the hard part.</b> A node describes
-      itself to its parent twice. Before the scale is chosen it says how much
-      room it needs as a function of the scale (an <code>Extent</code> in
-      <code>Pwl.Value</code>), which is what lets a chart fit its room. That
-      answer is one extent per axis today, so it is a box. After layout it has
-      its full geometry in pixels: <code>geometry()</code>, with the circle and
-      the outline. So of the <code>Geometry</code> that <code>measure</code> is
-      sketched to return, only the box exists in lengths today. The circle and
-      the outline exist only in pixels, which is why <code>pack</code> reads
-      them after layout and does not fit its room (#967). Carrying a circle, an
-      outline or a contour in lengths is the engine work this proposal depends
-      on. The layout-synthesis essay names the rule any such answer has to keep:
-      "responses must be monotone in the proposal". The silhouette note in
-      <code>notes/design/</code> is the start of that design. It is the real
-      work here, more than any one algorithm.
-    </p>
-
-    <h2>Keeping relations instead of positions</h2>
-    <p>
-      The plans on the first tab hand GoFish positions. Two experiments tested
-      whether a layout can hand over relations instead, the way
-      <code>spread</code> lowers into <code>align</code> and
-      <code>distribute</code>.
-    </p>
-    <div class="gallery">
-      <div class="card">
-        <h3>
-          A minimum gap: "at least this far apart, in this order"
-          <span class="tag today">today</span>
-        </h3>
-        <div class="strip">
-          <figure>
-            <img
-              src="img/sep-tree-start.png"
-              alt="Tree packed to the start by minimum gaps"
-            />
-            <figcaption>
-              Tree, slack at the <b>start</b>. Identical to the left-packed
-              tree.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/sep-tree-center.png"
-              alt="Tree centered by minimum gaps"
-            />
-            <figcaption>
-              Tree, <b>center</b>: the mean of start and end. Identical to
-              Kennedy's mean.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/sep-graph-layers.png"
-              alt="Graph layered by minimum gaps, start"
-            />
-            <figcaption>
-              Graph layers, <b>start</b>. Identical ranks to the longest-path
-              function.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/sep-graph-layers-end.png"
-              alt="Graph layered by minimum gaps, end"
-            />
-            <figcaption>
-              Graph layers, <b>end</b>: the sinks line up.
-            </figcaption>
-          </figure>
-        </div>
-        <p class="note">
-          <code>distribute</code> says "exactly this gap". Its inequality
-          sibling says "at least this gap", and each item takes the nearest
-          position that satisfies all its constraints. A set of them with no
-          cycles is solved in one pass. One 56-line solver, and four layouts
-          re-expressed as plans that emit minimum gaps:
-        </p>
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Layout</th>
-                <th>Result</th>
-                <th>Plan</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Tidy tree</td>
-                <td>
-                  Exact: 0 px from the contour tree, on the test trees and on
-                  600 random trees
-                </td>
-                <td>29 lines, replacing the 34-line fold</td>
-              </tr>
-              <tr>
-                <td>Graph layering</td>
-                <td>
-                  Exact: identical ranks on the course graph and on 200 random
-                  graphs
-                </td>
-                <td>6 lines, replacing 12</td>
-              </tr>
-              <tr>
-                <td>Graph straightening</td>
-                <td>
-                  Same numbers, but it is a soft target and not a constraint
-                </td>
-                <td>25 lines, replacing 24</td>
-              </tr>
-              <tr>
-                <td>One-sided beeswarm</td>
-                <td>Fails: 229 of 342 dots differ</td>
-                <td>does not work</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <pre><code class="language-typescript">// Layering: every link&#x27;s target is at least 1 layer after its source.
-export const sepLayers = (nodes: string[], links: Link[], policy: Policy) =&gt;
-  solveSeparations(
-    nodes,
-    links.map((l) =&gt; ({ after: l.source, before: l.target, gap: 1 })),
-    { policy }
-  );
-
-// Tidy tree, inside the recursion: child j clears every earlier child i,
-// by their two contours alone.
-const seps = kids.flatMap((b, j) =&gt;
-  kids.slice(0, j).map((a, i) =&gt; ({
-    after: ids[i],
-    before: ids[j],
-    gap: fitPair(a.contour, b.contour),
-  }))
-);
-const x = solveSeparations(ids, seps, { policy });</code></pre>
-        <ul class="tight">
-          <li>
-            <b>The tree match is exact.</b> Fitting against the merged outline
-            of all earlier siblings is the same computation as the longest-path
-            step.
-          </li>
-          <li>
-            <b>Where the slack goes is a policy.</b> Start, end and center are
-            all one pass. For layering, center gives half layers and is not
-            legible.
-          </li>
-          <li>
-            <b>The beeswarm is not a set of minimum gaps.</b> A minimum gap says
-            "this dot is above that one". The built-in puts a later dot below an
-            earlier one in 154 pairs, by dropping it into a hole. That is an
-            either-or per pair, and deciding it is the greedy rule itself. Given
-            the built-in's choices, the solver matches all 342 dots, so it can
-            check and tighten a swarm but cannot place one.
-          </li>
-          <li>
-            <b>Straightening is a soft target.</b> The numbers match only
-            because "at least the wanted position" and "at most" were solved as
-            two systems and averaged. As one system they contradict each other
-            for 17 of 19 nodes.
-          </li>
-          <li>
-            <b>Centering a parent over its children is an exact relation</b>,
-            done in the plan as an equality.
-          </li>
-          <li>
-            <b>The pairwise form is quadratic</b> in the number of siblings.
-            Kennedy's fold is linear, so the engine would want the fold as its
-            implementation of the same constraint.
-          </li>
-        </ul>
-        <p class="label prop">
-          Proposed spelling <span class="tag sketch">sketch</span>
-        </p>
-        <pre><code class="language-javascript">// A minimum gap is a spacing, so it goes where a gap goes today.
-Constraint.distribute({ dir: &quot;x&quot;, spacing: Spacing.atLeast(10) }, [a, b]);
-
-// Contour spacing lowers to one of these per pair of siblings, with the
-// gap read from their two contours. `justify` says where the slack goes.
-spread({ dir: &quot;x&quot;, spacing: Spacing.contour(10), justify: &quot;center&quot; }, subtrees);
-
-// Layering: every link&#x27;s target is at least one column after its source.
-layer(nodes).relate((n) =&gt;
-  links.map((l) =&gt;
-    Constraint.distribute({ dir: &quot;x&quot;, spacing: Spacing.atLeast(112) }, [
-      n[l.source],
-      n[l.target],
-    ])
-  )
-);</code></pre>
-        <p class="note">
-          A minimum gap is a spacing, so it extends <code>distribute</code> and
-          <code>spread</code> through the <code>Spacing</code> family instead of
-          adding a constraint. <code>justify</code> is CSS's name for where
-          slack goes, and is a placeholder.
-        </p>
-        <div class="callout">
-          <b>One constraint in the API, two kinds in the engine.</b> An exact
-          gap and a minimum gap are the same idea with different slack, and Auto
-          Layout spells them as one constraint with a relation. Inside the
-          engine they should stay two kinds of fact. Exact gaps glue items into
-          rigid groups that resolve in any order, and two that disagree are an
-          error. Minimum gaps need a dependency order, never conflict (the
-          larger wins), and are the only ones that leave slack. Resolving the
-          rigid groups first and then separating them keeps it to one pass. "At
-          most" gaps would bring back cycles and systems with no solution, so
-          they are left out.
-        </div>
         <details class="code">
           <summary>
-            The solver, as the semantics of the constraint: 56 lines
+            The minimum-gap solver, as the semantics of the constraint: 56 lines
           </summary>
           <div class="inner">
             <pre><code class="language-typescript">/** pos[before] - pos[after] &gt;= gap. A lower bound `x &gt;= p` is a separation
@@ -2855,408 +1733,506 @@ export function solveSeparations(
 }</code></pre>
           </div>
         </details>
+        <details class="code">
+          <summary>
+            A dendrogram today: levels from the solver, the average by hand
+          </summary>
+          <div class="inner">
+            <pre><code class="language-typescript">// The plan: a level per node, and an x per node in units of one leaf.
+const levels = solveSeparations(
+  nodes.map((n) =&gt; n.path),
+  links.map((l) =&gt; ({ after: l.parent, before: l.child, gap: 1 })),
+  { policy: &quot;end&quot; }
+);
+const x = new Map&lt;string, number&gt;();
+let k = 0;
+const walk = (t: Tree, path: string): number =&gt; {
+  const v = t.children
+    ? mean(t.children.map((c, i) =&gt; walk(c, `${path}.${i}`)))
+    : k++;
+  x.set(path, v);
+  return v;
+};
+walk(root, &quot;n&quot;);
+
+// The drawing: leaves in a spread, every other node at its computed place.
+const dot = (n: Node) =&gt; circle({ r: 5 }).name(n.path);
+layer([
+  spread({ dir: &quot;x&quot;, spacing: Spacing.pitch(DX) }, leaves.map(dot)).name(
+    &quot;leaves&quot;
+  ),
+  ...inner.map(dot),
+]).relate((c) =&gt; [
+  Constraint.position(
+    { x: ((leaves.length - 1) / 2) * DX, y: levels.get(leaves[0].path)! * DY },
+    [c.leaves]
+  ),
+  ...inner.map((n) =&gt;
+    Constraint.position(
+      { x: x.get(n.path)! * DX, y: levels.get(n.path)! * DY },
+      [c[n.path]]
+    )
+  ),
+  ...links.map((l) =&gt; line({}, [ref(l.parent), ref(l.child)])),
+]);</code></pre>
+          </div>
+        </details>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/trees-tree-layered-heights.png"
+              alt="Layered tree with nodes of different heights"
+            />
+            <figcaption>Layered: 349 by 337 px.</figcaption>
+          </figure>
+          <figure>
+            <img src="img/trees-tree-non-layered.png" alt="Non-layered tree" />
+            <figcaption>
+              Non-layered, contours over vertical position (van der Ploeg 2014):
+              434 by 204 px.
+            </figcaption>
+          </figure>
+        </div>
       </div>
 
+      <!-- sankey -->
       <div class="card">
         <h3>
-          Circle packing as contour spacing in polar coordinates
+          Sankey: gaps, one scale, and a decision
           <span class="tag today">today</span>
         </h3>
         <div class="strip">
           <figure>
             <img
-              src="img/skyline-builtin-pack.png"
+              src="img/d3-sankey-stacked.png"
+              alt="Sankey diagram without relaxation"
+            />
+            <figcaption>
+              No relaxation. Nodes and links 0 px from <b>d3-sankey</b>.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/d3-sankey-relaxed.png"
+              alt="Sankey with an approximate relaxation"
+            />
+            <figcaption>
+              An attempt at d3's relaxation with two passes. Up to 68 px off.
+            </figcaption>
+          </figure>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Step in d3-sankey</th>
+                <th>What it is</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>A node's column</td>
+                <td>
+                  A minimum gap per link. Left is slack at the start, right is
+                  slack at the end, justify adds one lower bound per sink. d3's
+                  center is a two-step rule, so it is a decision.
+                </td>
+              </tr>
+              <tr>
+                <td>A node's height</td>
+                <td>
+                  Value on one scale shared by every column. GoFish solves it:
+                  each column is a spread with gaps, and the tightest column
+                  sets the scale.
+                </td>
+              </tr>
+              <tr>
+                <td>A node's vertical place</td>
+                <td>
+                  A minimum gap between neighbors, with the slack shared evenly.
+                  The order is a decision.
+                </td>
+              </tr>
+              <tr>
+                <td>A link's width and place</td>
+                <td>
+                  Its value on the same scale, stacked against its node's side.
+                </td>
+              </tr>
+              <tr>
+                <td>Relaxation</td>
+                <td>
+                  A pull toward the weighted mean of neighbors, repeated six
+                  times with damping. Not a constraint.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <pre><code class="language-javascript">// Columns: every link&#x27;s target is at least one column after its source.
+const columnsOf = (nodes, links, align) =&gt; {
+  const seps = links.map((l) =&gt; ({
+    after: l.source,
+    before: l.target,
+    gap: 1,
+  }));
+  const left = solveSeparations(nodes, seps); // d3&#x27;s sankeyLeft
+  if (align === &quot;left&quot;) return left;
+  if (align === &quot;right&quot;)
+    return solveSeparations(nodes, seps, { policy: &quot;end&quot; }); // sankeyRight
+  // sankeyJustify: the same, with every sink also held at the last column.
+  const last = Math.max(...left.values());
+  const sinks = nodes.filter((n) =&gt; !links.some((l) =&gt; l.source === n));
+  return solveSeparations(
+    [&quot;zero&quot;, ...nodes],
+    [...seps, ...sinks.map((n) =&gt; ({ after: &quot;zero&quot;, before: n, gap: last }))]
+  );
+};</code></pre>
+        <pre><code class="language-javascript">// Node heights: GoFish solves d3&#x27;s one scale (ky) itself. Each column is a
+// spread with gaps, and all columns share one scale.
+chart(rows, { w: 420, h: 300 })
+  .flow(
+    spread({ by: &quot;column&quot;, dir: &quot;x&quot;, spacing: 124, alignment: &quot;start&quot; }),
+    spread({ by: &quot;name&quot;, dir: &quot;y&quot;, spacing: 10, alignment: &quot;start&quot; })
+  )
+  .mark(rect({ w: 12, h: &quot;value&quot; }));</code></pre>
+        <details class="code">
+          <summary>A node with its links, and a ribbon</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">// A node and its links: the links are ports stacked end to end against the
+// node&#x27;s two sides, on the same shared scale, and a ribbon joins each pair.
+const sankeyNode = (n, value, outs, ins, links) =&gt; {
+  const port = (l, side) =&gt;
+    blank({ w: 0, h: v(l.value) }).name(`${side}:${links.indexOf(l)}`);
+  const ports = (ls, side) =&gt;
+    spread(
+      { dir: &quot;y&quot;, spacing: 0, alignment: &quot;start&quot; },
+      ls.map((l) =&gt; port(l, side))
+    );
+  return layer([
+    rect({ w: NODE_W, h: v(value), fill: &quot;#2f3e46&quot; }).name(n),
+    ports(outs, &quot;o&quot;).name(`${n}/out`),
+    ports(ins, &quot;i&quot;).name(`${n}/in`),
+  ]).relate((c) =&gt; [
+    Constraint.align({ x: &quot;end&quot;, y: &quot;start&quot; }, [c[n], c[`${n}/out`]]),
+    Constraint.align({ x: &quot;start&quot;, y: &quot;start&quot; }, [c[n], c[`${n}/in`]]),
+  ]);
+};
+
+ribbon({ dir: &quot;x&quot;, curve: Curve.bezier() }, [ref(`o:${i}`), ref(`i:${i}`)]);</code></pre>
+          </div>
+        </details>
+        <p class="note">
+          A layered graph is the same without sizes. Its layers come from the
+          same minimum gaps, and ordering by barycenter sweeps took the test
+          graph from 39 crossings to 6.
+        </p>
+        <div class="strip">
+          <figure>
+            <img
+              src="img/trees-graph-input-order.png"
+              alt="Layered graph in input order"
+            />
+            <figcaption>Input order: 39 crossings</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/trees-graph-barycenter.png"
+              alt="Layered graph after ordering"
+            />
+            <figcaption>After four ordering sweeps: 6</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <!-- pack -->
+      <div class="card">
+        <h3>
+          Circle packing: a decision and "touches"
+          <span class="tag today">today</span>
+        </h3>
+        <div class="strip small">
+          <figure>
+            <img
+              src="img/greedy-builtin-pack.png"
               alt="Built-in circle packing"
             />
-            <figcaption><b>pack()</b>, built-in. Radius 149.3 px.</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/skyline-skyline-pack.png"
-              alt="Circle packing by sliding in along the angle of the lowest notch"
-            />
             <figcaption>
-              Slide in along the angle where the circle rests deepest. Radius
-              153.2 px.
+              <b>pack()</b>, d3's front chain. Radius 149.
             </figcaption>
           </figure>
           <figure>
             <img
-              src="img/skyline-skyline-pack-golden.png"
-              alt="Circle packing by sliding in along golden angles"
+              src="img/greedy-greedy-pack-centroid.png"
+              alt="Greedy packing"
             />
-            <figcaption>
-              Slide in along golden angles, no search. Radius 161.3 px.
-            </figcaption>
+            <figcaption>A greedy rule in user space. Radius 144.</figcaption>
           </figure>
-        </div>
-        <div class="strip wide">
           <figure>
-            <img
-              src="img/skyline-skyline-unrolled.png"
-              alt="The same pack plotted as angle against distance from the origin"
-            />
-            <figcaption>
-              The same pack unrolled: angle against distance. The top edge is
-              the outline each new circle lands on.
-            </figcaption>
+            <img src="img/skyline-skyline-pack.png" alt="Sliding-in packing" />
+            <figcaption>Slide in along an angle. Radius 153.</figcaption>
           </figure>
           <figure>
             <img
-              src="img/skyline-skyline-pack-polar.png"
-              alt="The pack drawn through Coord.polar, with overlapping circles"
+              src="img/greedy-greedy-pack-squares.png"
+              alt="Greedy packing of squares"
             />
-            <figcaption>
-              Drawn through <b>Coord.polar()</b> today: wrong. The distance is
-              fitted as a data scale, so circles overlap.
-            </figcaption>
+            <figcaption>The greedy rule with squares.</figcaption>
           </figure>
         </div>
         <p class="note">
-          The idea: a circle slides in along a ray from the origin until it
-          first touches something, which is contour spacing along the radius.
-          The only decision is the angle. A beeswarm is the same rule with
-          vertical rays and the ray given by the data. One 43-line function does
-          both.
+          d3 decides which two circles each new circle rests on. Given that, the
+          positions follow from "touches", one circle at a time. Today's solver
+          works on each axis separately, and touching ties x and y together
+          through a square root, so this is the first layout that needs a
+          geometry solver.
         </p>
-        <pre><code class="language-typescript">// A beeswarm: the ray is given by the data.
-const swarm = skyline(
-  weighed.map((p) =&gt; ({ x: xPx(p[&quot;Body Mass (g)&quot;]!), r: DOT })),
-  cartesian,
-  { lane: (d) =&gt; d.x, floor: DOT, pad: 1 }
-);
-
-// A circle packing: rays from an origin, and the ray is chosen.
-const notchPack = skyline(circles, polar);
-const goldenPack = skyline(circles, polar, {
-  lane: (_, i) =&gt; (i * 137.50776 * Math.PI) / 180,
-});
-
-// The two coordinate systems: vertical rays over x, and rays from an origin.
-const cartesian: Rays = { at: (x, y) =&gt; ({ x, y }), laneOf: (p) =&gt; p.x };
-const polar: Rays = {
-  at: (t, d) =&gt; ({ x: d * Math.cos(t), y: d * Math.sin(t) }),
-  laneOf: (p) =&gt; Math.atan2(p.y, p.x),
-};</code></pre>
+        <pre><code class="language-javascript">// Circle packing as a plan and relations. The plan is d3&#x27;s front chain: it
+// only says which two circles each new circle rests against. A geometry
+// solver finds the centers from &quot;touches&quot;.
+const packed = (children) =&gt;
+  layer({ solver: Solver.geometry }, children).relate((c) =&gt;
+    restingPairs(children).flatMap(({ circle, on: [a, b] }) =&gt; [
+      Constraint.touch([c[circle], c[a]]),
+      Constraint.touch([c[circle], c[b]]),
+    ])
+  );</code></pre>
         <ul class="tight">
           <li>
-            <b>It packs about as tightly as d3.</b> The deepest-rest angle gives
-            0.97 to 1.00 times d3's enclosing radius on average over 200 random
-            sets. The golden angle is 7 to 23% larger.
+            Keeping the list of pairs, instead of positions, means changed data
+            moves the picture smoothly. A reused list can fail when new radii
+            make a circle bump into a third one, so it needs an overlap check.
           </li>
           <li>
-            <b>d3's packing is not this rule.</b> 91 to 93% of d3's circles in
-            input order sit exactly where sliding in would put them, and 99 to
-            100% largest first. The rest are tucked under an overhang, where a
-            straight slide cannot reach.
+            It still fits a chart's scale. When every radius comes from data,
+            the whole packing grows with the scale, so it runs once at scale 1
+            and reports a length. Pixel gaps break that (#967).
           </li>
           <li>
-            <b>The built-in beeswarm is not this rule either.</b> 229 of 342
-            dots differ and the sliding version is 45% taller, because the
-            built-in fills holes.
-          </li>
-          <li>
-            <b>It is slow as written.</b> The exact version takes 1.2 s for 1000
-            circles against d3's 1.6 ms.
-          </li>
-          <li>
-            <b>It needs a fixed origin.</b> A moving origin packs well but is no
-            longer one coordinate space.
-          </li>
-          <li>
-            <b>GoFish cannot draw it through polar coordinates today.</b>
-            There is no way to say a coordinate is already in pixels, the same
-            wall the beeswarm hit.
+            Two other rules were tried as the decision: "the free spot nearest
+            the center", and "slide in along an angle until something is
+            touched". Both pack within a few percent of d3 and neither is d3's
+            rule.
           </li>
         </ul>
+        <details class="code">
+          <summary>The greedy rule today: 31 lines</summary>
+          <div class="inner">
+            <pre><code class="language-typescript">type Pos = { x: number; y: number };
+type Placed = Pos &amp; { r: number };
+
+function greedyPlace&lt;T extends { r: number }&gt;(
+  items: T[],
+  rule: {
+    candidates: (item: T, placed: Placed[]) =&gt; Pos[];
+    cost: (pos: Pos, item: T, placed: Placed[]) =&gt; number;
+    collides: (pos: Pos, item: T, placed: Placed[]) =&gt; boolean;
+  }
+): Placed[] {
+  const placed: Placed[] = [];
+  for (const item of items) {
+    let best = { x: NaN, y: NaN };
+    let bestCost = Infinity;
+    for (const pos of rule.candidates(item, placed)) {
+      const c = rule.cost(pos, item, placed);
+      if (c &lt; bestCost &amp;&amp; !rule.collides(pos, item, placed)) {
+        best = pos;
+        bestCost = c;
+      }
+    }
+    placed.push({ ...best, r: item.r });
+  }
+  return placed;
+}</code></pre>
+            <pre><code class="language-typescript">const packed = greedyPlace(
+  seafood.map((d) =&gt; ({ r: 4.5 * Math.sqrt(d.count) })),
+  {
+    candidates: (item, placed) =&gt;
+      placed.length === 0
+        ? [{ x: 0, y: 0 }]
+        : placed.length === 1
+          ? [{ x: placed[0].r + item.r, y: 0 }]
+          : placed.flatMap((a, i) =&gt;
+              placed.slice(i + 1).flatMap((b) =&gt; tangentToBoth(a, b, item.r))
+            ),
+    cost: (pos) =&gt; Math.hypot(pos.x, pos.y),
+    collides: (pos, item, placed) =&gt; overlapsAny(pos, item.r, placed),
+  }
+);</code></pre>
+          </div>
+        </details>
+      </div>
+
+      <!-- force + beeswarm -->
+      <div class="card">
+        <h3>
+          Force and the beeswarm: pulls and either-or
+          <span class="tag today">today</span>
+        </h3>
+        <div class="strip">
+          <figure>
+            <img src="img/d3-force-graph.png" alt="Force-directed graph" />
+            <figcaption>
+              d3-force computed the positions. GoFish only drew them.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/greedy-builtin-swarm.png" alt="Beeswarm" />
+            <figcaption>
+              <b>Overlap.separate</b>. A greedy rule in user space matches it
+              dot for dot.
+            </figcaption>
+          </figure>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>d3 force</th>
+                <th>What it is</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <code>forceX</code>, <code>forceY</code>,
+                  <code>forceRadial</code>
+                </td>
+                <td>a pull toward a position or a circle</td>
+              </tr>
+              <tr>
+                <td><code>forceLink</code></td>
+                <td>a pull toward a distance between two marks</td>
+              </tr>
+              <tr>
+                <td><code>forceManyBody</code></td>
+                <td>a push between every pair</td>
+              </tr>
+              <tr>
+                <td><code>forceCollide</code></td>
+                <td>no overlap, which is an either-or between directions</td>
+              </tr>
+              <tr>
+                <td><code>forceCenter</code></td>
+                <td>an exact relation: the mean of all positions is a point</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p class="note">
-          So sliding in is a real relation and it does unify packing with
-          one-directional stacking. It does not replace the existing algorithms,
-          because both of them use holes.
+          None of these is an equation or a minimum gap, so a force layout is a
+          different solver: one that minimizes, with a stopping rule and a seed.
+          The beeswarm is on the border. "This dot is at least clear of that
+          one" is a minimum gap, but each pair also needs "above or below", and
+          deciding that is the greedy rule itself. Given those choices, the
+          minimum-gap solver matches the built-in on all 342 dots. Without them
+          it cannot place the swarm.
         </p>
       </div>
-    </div>
 
-    <h2>Terms</h2>
-    <ul>
-      <li>
-        <b>Plan.</b> The discrete decisions of a layout, as plain data: which
-        items share a row, what order a layer's nodes go in. No pixels are
-        placed yet.
-      </li>
-      <li>
-        <b>Drawing.</b> The plan written out in GoFish operators, which then
-        size and place everything.
-      </li>
-      <li>
-        <b>Kernel.</b> An algorithm that stays inside the library because
-        nothing simpler expresses it.
-      </li>
-      <li>
-        <b>Lowering.</b> Rewriting a construct into simpler ones.
-        <code>spread</code> lowers into <code>layer</code> plus an
-        <code>align</code> and a <code>distribute</code> constraint.
-      </li>
-      <li>
-        <b>Member.</b> One strategy in a family, e.g.,
-        <code>Tiling.squarify</code>.
-      </li>
-      <li>
-        <b>Box.</b> The width and height a parent offers a child during layout.
-      </li>
-      <li>
-        <b>Contour.</b> The left and right outline of a subtree, one pair of
-        numbers per depth.
-      </li>
-      <li>
-        <b>Greedy rule.</b> Take the items in order. Give each the lowest-cost
-        position that does not collide with the items already placed. Never move
-        an item again.
-      </li>
-      <li>
-        <b>Relaxation.</b> Repeating a small adjustment until the layout stops
-        moving.
-      </li>
-      <li>
-        <b>Voronoi diagram.</b> Each site's cell is the region closer to it than
-        to any other site. <b>Delaunay</b> is the same diagram as links between
-        sites whose cells share an edge. A <b>power diagram</b> adds a weight
-        per site so cells can have chosen areas.
-      </li>
-    </ul>
+      <!-- voronoi -->
+      <div class="card">
+        <h3>Voronoi and Delaunay <span class="tag today">today</span></h3>
+        <div class="strip small">
+          <figure>
+            <img
+              src="img/tiling-voronoi-relax0.png"
+              alt="Voronoi cells of random sites"
+            />
+            <figcaption>Random sites</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/tiling-voronoi-relax30.png"
+              alt="Relaxed Voronoi cells"
+            />
+            <figcaption>
+              Sites moved to their cells' centers 30 times
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/tiling-builtin-voronoi.png" alt="Voronoi treemap" />
+            <figcaption>
+              <b>Tile.voronoi</b>: the same loop with a weight per site
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/tiling-voronoi-neighbors.png" alt="Delaunay links" />
+            <figcaption>Delaunay links</figcaption>
+          </figure>
+        </div>
+        <p class="note">
+          A cell is its region cut by one straight line per other site, which is
+          how GoFish's own <code>Tile.voronoi</code> computes it. So a Voronoi
+          diagram is "intersects" relations, and it belongs with the geometry
+          solver. The decision is where the sites go, and a relaxed layout
+          repeats the diagram with the sites moved. Delaunay is not a layout
+          relation. It is which sites are neighbors, and drawing it needed only
+          named points and <code>line</code>.
+        </p>
+        <details class="code">
+          <summary>
+            Relaxation in user code, drawn by <code>partition</code>
+          </summary>
+          <div class="inner">
+            <pre><code class="language-typescript">function relax(sites: Site[], steps: number): Site[] {
+  for (let s = 0; s &lt; steps; s++) {
+    const voronoi = Delaunay.from(sites.map((d) =&gt; [d.x, d.y])).voronoi([
+      0,
+      0,
+      W,
+      H,
+    ]);
+    sites = sites.map((d, i) =&gt; {
+      const [x, y] = centroid(voronoi.cellPolygon(i) as any);
+      return { ...d, x, y };
+    });
+  }
+  return sites;
+}
+
+const cells = (sites: Site[]) =&gt;
+  chart(framed(sites)) // two extra corner rows, see the list of walls
+    .flow(
+      partition({
+        by: struct({ x: &quot;x&quot;, y: &quot;y&quot; }).bin(Bin.voronoi({ seeds: sites })),
+      })
+    )
+    .mark(region({ fill: &quot;continent&quot;, stroke: &quot;white&quot;, strokeWidth: 1.5 }));
+
+const links = chart(edges)
+  .flow(resolve([&quot;source&quot;, &quot;target&quot;], { from: selectAll(&quot;sites&quot;) }))
+  .mark(line({ from: &quot;source&quot;, to: &quot;target&quot;, stroke: &quot;#222&quot; }));</code></pre>
+          </div>
+        </details>
+      </div>
+    </div>
   </section>
 
-  <!-- ============================ APPROACHES ============================ -->
+  <!-- =============================== OPEN =============================== -->
   <section
     class="panel"
-    id="approaches"
+    id="open"
     role="tabpanel"
-    aria-labelledby="tab-approaches"
+    aria-labelledby="tab-open"
+    data-title="What to build, and what is open"
     hidden
   >
-    <h2>What a user-written layout returns</h2>
-    <div class="gallery">
-      <div class="card">
-        <h3>
-          A. Geometry: a function at the seam
-          <span class="tag sketch">sketch</span>
-        </h3>
-        <pre><code class="language-javascript">// A strip tiling as a function from a region to one rectangle per child.
-const strip = (region, weights) =&gt;
-  stripRows(weights, region).flatMap((row) =&gt; row.cells);
-
-chart(countries)
-  .flow(tile({ size: &quot;pop&quot;, tiling: strip }))
-  .mark(rect({ fill: &quot;continent&quot; }));</code></pre>
-        <p class="note">
-          This is #1101's direction, and the seams already exist inside the
-          library. It plugs into the operator that owns the family, so
-          <code>.flow()</code>, coordinates and nesting work. It is the cheapest
-          to build. Each family has its own signature, the function is opaque,
-          and it reaches Python only through the callback runner. It lowers into
-          nothing, so it is an escape hatch and not a language.
-        </p>
-      </div>
-      <div class="card">
-        <h3>
-          B. GoFish operators: a function that returns a drawing
-          <span class="tag today">today</span>
-          <span class="tag sketch">plus one primitive</span>
-        </h3>
-        <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, and return
-// stacks of the cells it was given.
-const squarified = (cells, weights) =&gt;
-  layout(cells, ({ w, h }, cells) =&gt;
-    drawPlan(squarify(weights, [w, h]), cells)
-  );
-
-squarified(
-  countries.map(cell),
-  countries.map((d) =&gt; d.pop)
-).render(container, { w: 360, h: 300 });</code></pre>
-        <p class="note">
-          Every example on the first tab is this. The result is ordinary nodes,
-          so axes, coordinates, selection, animation and nesting apply with no
-          extra work. <code>Tiling.squarify</code> is defined by its rewrite
-          into stacks. It needs one new primitive (reading the box) and one
-          planned one (contour spacing). Plans that need the pixel positions of
-          siblings stay awkward until the decision half can run during layout.
-        </p>
-      </div>
-      <div class="card">
-        <h3>
-          D. Constraints and an objective: the foil
-          <span class="tag sketch">sketch</span>
-        </h3>
-        <pre><code class="language-javascript">layer(circles).relate((c) =&gt; [
-  Constraint.separate({ padding: 1 }, all(c)), // no two overlap
-  Constraint.minimize(Cost.distance({ from: &quot;center&quot; }), all(c)),
-]);</code></pre>
-        <p class="note">
-          As in Penrose, WebCoLa and Auto Layout. It reads well for the
-          continuous half of some algorithms: layered-graph coordinates and
-          minimum-width tidy trees are linear programs once the order is fixed.
-          It does not fit the rest: non-overlap is an either-or, treemap areas
-          are products, and ordering is a permutation. Solvers handle these with
-          search or local minima. GoFish's engine is one pass with one unknown
-          per axis by design, and nothing in the prototypes needed more.
-        </p>
-      </div>
-    </div>
-
-    <h2>How the decisions are written</h2>
-    <div class="gallery">
-      <div class="card">
-        <h3>Plain JS <span class="tag today">today</span></h3>
-        <p class="note">
-          What the prototypes do. The plan is a function. Least machinery, most
-          freedom, opaque.
-        </p>
-      </div>
-      <div class="card">
-        <h3>
-          C. A sequential <code>choose</code> with a <code>Cost</code>
-          <span class="tag sketch">sketch</span>
-        </h3>
-        <pre><code class="language-javascript">// Beeswarm: each dot takes the y nearest the axis that touches no earlier dot.
-scatter({
-  x: &quot;Body Mass (g)&quot;,
-  y: choose(Placement.touching({ padding: 1 }), { cost: Cost.distance() }),
-});
-
-// Circle packing: each circle takes the free spot nearest the center.
-scatter({
-  at: choose(Placement.touching(), { cost: Cost.distance({ from: &quot;center&quot; }) }),
-});
-
-// Strip treemap: close a row when one more item would make its cells less square.
-stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() } });</code></pre>
-        <p class="note">
-          The greedy rule as data, in the choice proposal's spelling.
-          <code>Placement</code> members already generate ranked candidates for
-          labels and one greedy chooser already picks among them. The new part
-          is that a <code>choose</code> on a per-item option is made item by
-          item, each seeing the items before it.
-          <code>Overlap.separate</code> and the label placer become exact
-          rewrites into it. <code>pack</code> does not, so it keeps its kernel.
-          Ordering and relaxation stay plain code.
-        </p>
-      </div>
-    </div>
-
-    <h2>Recommendation</h2>
-    <p>
-      Approach B for what a layout returns, at both levels: plans drawn in
-      operators, and kernels written with <code>layout</code> and
-      <code>measure</code> that still return operators. C is the next step for
-      decisions. A (a function from geometry to geometry per family) is then a
-      special case and is not needed as a separate mechanism.
-    </p>
-    <ul>
-      <li>
-        <b>It lowers into the existing core.</b> principles.md calls treemaps as
-        nested stacks "an even more aspirational example" and says "the engine
-        cannot do that today". The prototype shows it can, at spacing 0.
-      </li>
-      <li>
-        <b>One concept, one operator.</b> B adds no operator.
-        <code>tile</code> keeps its members, and a member becomes a rewrite.
-      </li>
-      <li>
-        <b>Few new terms.</b> Two new functions, <code>layout</code> and
-        <code>measure</code>, which are Typst's names for the same two things,
-        and <code>Spacing.contour</code>, which was already planned.
-      </li>
-      <li>
-        <b>A closed set plus a function escape hatch.</b> A member is a declared
-        kind or a function, as #1101 says. The function returns GoFish, so the
-        escape hatch is the same language as everything else.
-      </li>
-      <li>
-        <b>The same shape in Python.</b> A plan written in Python that returns
-        combinators is a pure spec. It serializes with no callback, because the
-        drawing is nested <code>stack</code>s. Only the box reader needs the
-        callback runner, as <code>derive</code> does.
-      </li>
-    </ul>
-    <div class="gallery">
-      <div class="card">
-        <h3>
-          The drawing in Python <span class="tag sketch">sketch, not run</span>
-        </h3>
-        <pre><code class="language-python">def draw_squarify(plan):
-    cells = stack(
-        [cell(d) for d in plan.row],
-        **along(across(plan.dir), [d[&quot;pop&quot;] for d in plan.row]),
-    )
-    if plan.rest is None:
-        return cells
-    return stack(
-        [cells, draw_squarify(plan.rest)],
-        **along(plan.dir, [total(plan.row), total(flatten(plan.rest))]),
-    )</code></pre>
-      </div>
-    </div>
-
-    <h2>The Mojo reading</h2>
-    <p>
-      Lattner's line for Mojo is "push everything that we can into libraries,
-      and push the magic out of the compiler": <code>Int</code> and
-      <code>Float</code> are library types, and the compiler keeps a small floor
-      of intrinsics. MLIR adds two rules that fit here. Lower in steps, and keep
-      the high-level operation until everything that needs it has read it.
-    </p>
-    <div class="ladder">
-      <div class="rung">
-        <b>Operators and members</b
-        ><span>the vocabulary users write and the IR keeps</span
-        ><code>tile({ tiling: Tiling.squarify })</code>
-      </div>
-      <div class="rung">
-        <b>Plans and drawings</b><span>library code, written in GoFish</span
-        ><code>squarify as nested stack</code>
-      </div>
-      <div class="rung">
-        <b>Constraints</b><span>what stack and spread already lower into</span
-        ><code>align, distribute, position, nest</code>
-      </div>
-      <div class="rung">
-        <b>Kernels</b><span>the floor</span
-        ><code>scale solve, power diagram, contour fit, front chain</code>
-      </div>
-    </div>
-    <p>
-      The test is Lattner's: can a built-in be deleted and replaced by library
-      code with no change in output? For <code>squarify</code> and
-      <code>binary</code> the prototype says yes. Keeping <code>tile</code> in
-      the IR while it lowers inside the engine is the "keep the high-level
-      operation" rule, and it is what constraints-as-core.md already decided for
-      <code>spread</code>.
-    </p>
-    <p>
-      <b>What would change the pick.</b> If reading the box is expensive in the
-      engine (it defers building part of the tree until layout, issue #1334), A
-      alone is the fallback. If the choice proposal lands first, C becomes the
-      natural way to write <code>Overlap.separate</code> and the label placer,
-      and B is then only needed for the dividing layouts.
-    </p>
-
-    <h2>What to add, by how much it unlocks</h2>
+    <h2>What to build, by how much it unlocks</h2>
     <ol>
       <li>
-        <b><code>layout</code>: read the space offered.</b> Every dividing
-        layout: squarify, strip, spiral, pivot, any responsive mark.
+        <b>The minimum gap</b>, with a rule for the slack. Tidy trees,
+        dendrogram levels, sankey columns, layered graphs. One pass, and it
+        stays symbolic. It is a second kind of fact inside the solver: exact
+        gaps glue items into rigid groups, and minimum gaps separate the groups.
       </li>
       <li>
-        <b
-          ><code>Spacing.contour</code>, over vertical position, with Walker's
-          spread.</b
-        >
-        Tidy trees, layered or not.
+        <b>An average of positions.</b> A parent over its children. The last
+        missing piece of "a linear equation between positions".
       </li>
       <li>
-        <b>Custom members (#1101, #692).</b> Lets a function that returns GoFish
-        be passed as <code>tiling:</code> so it works in <code>.flow()</code>.
+        <b><code>layout</code>: read the room offered.</b> Every tiling, and any
+        mark that adapts to its box.
       </li>
       <li>
         <b>One sequential tiling with settings.</b> <code>squarify</code>,
@@ -3264,228 +2240,152 @@ stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() }
         presets of it. The built-in <code>binary</code> is not shown to be one.
       </li>
       <li>
-        <b><code>measure</code>: read a child's geometry.</b> Circle packing,
-        label placement and contour folds in user space, in pixels. Fitting
-        needs the richer before-layout answer described on the review tab.
+        <b>Custom members (#1101, #692).</b> So a function that returns GoFish
+        can be passed as <code>tiling:</code> and work in <code>.flow()</code>.
       </li>
       <li>
-        <b><code>Bin.voronoi</code> takes a region and weights.</b> Voronoi
-        layouts in user space.
+        <b><code>measure</code>, in lengths.</b> Only the box exists in lengths
+        in the engine today. The circle, the outline and a contour exist only in
+        pixels after layout.
       </li>
       <li>
-        <b>Sequential <code>choose</code>.</b> Beeswarm, labels and greedy
-        packing as data. Waits on the choice proposal.
+        <b
+          >An angle axis that wraps, and a baseline per group on
+          <code>stack</code>.</b
+        >
+        Small, and they remove the two workarounds in the pie and streamgraph
+        prototypes.
+      </li>
+      <li>
+        <b><code>choose</code></b
+        >, from the choice proposal, with <code>min</code> in the size algebra
+        (#630).
+      </li>
+      <li>
+        <b>A relation vocabulary that names its solver.</b> Needed before a
+        second solver exists, so the first one's relations are not special.
       </li>
     </ol>
     <p>
-      Not proposed: a geometry namespace, a phase language for graph layout (the
-      sankey proposal's <code>Layering</code> and <code>Ordering</code> helpers
-      cover it as <code>derive</code> steps), a constraint solver.
+      Not proposed: a geometry or optimizing solver now, a constraint that
+      iterates, or a phase language for graph layout.
     </p>
-  </section>
 
-  <!-- ============================ PRECEDENT ============================ -->
-  <section
-    class="panel"
-    id="precedent"
-    role="tabpanel"
-    aria-labelledby="tab-precedent"
-    hidden
-  >
-    <h2>Precedent</h2>
-    <div class="prec">
-      <div class="pc">
-        <h4>Superconductor and its schedule synthesis (2010 to 2013)</h4>
-        <p>
-          Layout as an attribute grammar, with a synthesized and checked
-          schedule of <code>parPre</code> and <code>parPost</code> passes. A
-          five-pass treemap; nine passes for CSS. The model for our fixed passes
-          and for naming the first failing pass in an error.
-        </p>
+    <h2>What is not settled</h2>
+    <div class="gallery">
+      <div class="card">
+        <h3>Three forks</h3>
+        <ul class="tight">
+          <li>
+            <b>The names <code>layout</code> and <code>measure</code></b
+            >, or a second argument to <code>createMark</code>. Shown with the
+            API on the first tab.
+          </li>
+          <li>
+            <b>What spacing means in a tiling:</b> d3's inset or a stack's gap.
+            Shown with the treemap on the second tab. It decides whether the
+            built-in tilings can become presets with no pixel change.
+          </li>
+          <li>
+            <b>The spelling of the minimum gap and its slack rule.</b> This page
+            writes <code>Spacing.atLeast(n)</code> and
+            <code>justify: "start" | "end" | "center" | "even"</code>.
+            <code>justify</code> is CSS's word. "Even" is what an
+            <code>fr</code> gap already does, so the slack rule may be the same
+            option spacing already has.
+          </li>
+        </ul>
       </div>
-      <div class="pc">
-        <h4>Spineless Traversal (2025), Servo</h4>
-        <p>
-          Incremental layout that depends on a tree that does not change during
-          layout and a fixed order of fields. Servo's fixed passes grew from
-          four to seven and were dropped in its rewrite. The cautions for a pass
-          that creates nodes.
-        </p>
+      <div class="card">
+        <h3>Hard parts</h3>
+        <ul class="tight">
+          <li>
+            <b>Shapes in lengths.</b> A node tells its parent how big it is
+            before the scale is chosen, as a box. For a contour fit or a packing
+            to take part in fitting, the contour or the circle has to go up in
+            lengths too. The silhouette note is the start of that design.
+          </li>
+          <li>
+            <b>The contract a scope with another solver must meet.</b> To sit
+            inside a fitted chart its size must be a function of the scale that
+            never shrinks. A packing with data radii meets it. A packing with
+            pixel gaps does not (#967). A force layout has no such function and
+            would need a fixed box.
+          </li>
+          <li>
+            <b>A pass that creates nodes.</b> The layout literature avoids it.
+            Ours is contained because what <code>layout</code> returns reuses
+            the same node kinds and the same passes, inside a box whose size is
+            set from outside. It still means incremental re-layout needs keyed
+            reuse.
+          </li>
+          <li>
+            <b>Pulls.</b> Sankey relaxation and graph straightening are not
+            constraints. Solving "at least" and "at most" as one system
+            contradicts itself. They need the optimizing solver, or they stay
+            plan code.
+          </li>
+          <li>
+            <b>Either-or.</b> The beeswarm and non-overlap in general need a
+            side chosen per pair. The solver can check the choice but not make
+            it.
+          </li>
+        </ul>
       </div>
-      <div class="pc">
-        <h4>Compose SubcomposeLayout, Flutter LayoutBuilder</h4>
-        <p>
-          Children are built during layout, from the constraints. Both refuse
-          size questions through the builder. The model for
-          <code>layout</code> and for its rule that it asks for no room.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Higher-order attribute grammars (1989)</h4>
-        <p>
-          An attribute computes a new tree, which is then attributed by the
-          earlier visits. The nearest formal treatment of the nested second run,
-          with the condition that the new tree cannot feed back into what
-          defined it. It is associated with scheduling at run time, so it does
-          not settle ours.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Lightweight Modular Staging (Scala)</h4>
-        <p>
-          <code>Rep[T]</code> against <code>T</code>: the type says when a value
-          is known, and using it too early is a type error at the use site. The
-          model for <code>Length</code> against a number.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>CSS container queries</h4>
-        <p>
-          A query on a container's size needs containment, so the container's
-          size cannot depend on its contents. Without it the query could feed
-          back into the size it asks about.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Typst context, LaTeX reruns</h4>
-        <p>
-          Layout that reads its own results, settled by repeating it. Typst
-          stops after five attempts. The model GoFish avoids by solving once.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Build Systems à la Carte (2018)</h4>
-        <p>
-          Tasks whose dependencies are known up front against tasks that find
-          them while running, with selective functors in between. The three-way
-          split of <code>measure</code>, <code>choose</code> and
-          <code>layout</code>.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Mojo, MLIR</h4>
-        <p>
-          Library code for <code>Int</code> and <code>Float</code>, lowered in
-          steps to a small floor. Built-ins as library code, intrinsics as the
-          floor.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>d3-hierarchy</h4>
-        <p>
-          <code>tile(node, x0, y0, x1, y1)</code> sets child rectangles:
-          approach A. Inside d3, squarify calls <code>treemapDice</code> or
-          <code>treemapSlice</code> per row, so it is already a plan plus
-          stacks.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>SwiftUI Layout, Compose Layout, CSS Houdini</h4>
-        <p>
-          <code>sizeThatFits</code> and <code>placeSubviews</code>;
-          <code>measure</code> and <code>place</code>. The same steps GoFish's
-          engine runs inside: offer space, measure children, place them. They
-          pass boxes; GoFish passes shapes and scales.
-          <code>ViewThatFits</code> is a built-in <code>choose</code>.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Typst</h4>
-        <p>
-          <code>layout(size =&gt; ...)</code> and <code>measure(content)</code>,
-          both returning content. The protocol as two functions that return the
-          language itself, and the model for the proposed spelling.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Kennedy, "Drawing Trees" (1996)</h4>
-        <p>
-          <code>fit</code>, <code>merge</code> and a fold over extents. A tidy
-          tree is a small algebra over contours.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>van der Ploeg, non-layered tidy trees (2014)</h4>
-        <p>
-          Nodes have their own heights and each child sits right below its
-          parent. The contour walk changes in one place: after comparing a pair
-          of contour nodes, only the one that ends higher advances. A layered
-          tree is the case where every node at a depth has the same height. For
-          symmetry it spreads the extra room evenly over the siblings in
-          between, and says Kennedy's mean of a left and a right packing "tends
-          to cluster smaller subtrees". Fixed y positions per node (a family
-          tree by birth year) come from thin dummy nodes.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Baudel and Broeksema (2012)</h4>
-        <p>
-          Five small functions: order, size, chunk (by a <code>score</code>:
-          close the row when the score drops), recurse, and phrase (which side
-          the next row goes on, and which way its items run). Squarify, strip,
-          pivot, spiral, slice and dice, grids and mosaic plots are settings of
-          one algorithm. Each row is cut from a full side of the room that is
-          left, which is a two-child <code>stack</code> of the row and the rest.
-          So their five functions are a plan, and their fixed loop is the
-          drawing. Voronoi treemaps are out of its scope.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Wadler, Bernardy, Knuth and Plass</h4>
-        <p>
-          <code>group</code>, choice, cost. Choice with a cost stays fast only
-          when the cost adds up along a sequence.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Observable Plot dodge</h4>
-        <p>
-          <code>dodgeY({ anchor, padding })</code>. The beeswarm is a greedy
-          pass in pixel space, after scales.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Penrose</h4>
-        <p>
-          <code>ensure</code>, <code>encourage</code>, stages: approach D. Its
-          stages are an admission that layout is a pipeline.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>WebCoLa, VPSC</h4>
-        <p>
-          Separation constraints. The either-or part of non-overlap is decided
-          by a scan first, and only the rest goes to the solver.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>ELK, OGDF, dagre</h4>
-        <p>
-          Five phases with a strategy per phase. Graph layout decomposes by
-          phase, and each phase is still a procedure.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Atom, productplots, HiVE</h4>
-        <p>
-          A layout per level from a fixed menu. Dividing layouts compose per
-          level, and squarify is the one they cannot express.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>GoTree</h4>
-        <p>
-          Parent-child and sibling relations per axis. Trees from
-          <code>align</code>, <code>distribute</code> and <code>nest</code>,
-          bounding boxes only.
-        </p>
-      </div>
-      <div class="pc">
-        <h4>Bluefish</h4>
-        <p>
-          Relations that share children. A small relation vocabulary composes,
-          and it stops at relations that need no search.
-        </p>
+      <div class="card">
+        <h3>What declared structure buys</h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>What is known</th>
+                <th>What it allows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The decisions did not change, only data</td>
+                <td>
+                  Solve the relations again. Do not decide again. d3's
+                  resquarify does this for treemaps.
+                </td>
+              </tr>
+              <tr>
+                <td>Only the box changed</td>
+                <td>
+                  Size requests do not mention the box, so only the solve and
+                  the place pass run again.
+                </td>
+              </tr>
+              <tr>
+                <td>A node only measures</td>
+                <td>
+                  Its passes can be fused, and its children processed in
+                  parallel or as arrays.
+                </td>
+              </tr>
+              <tr>
+                <td>A scope is contained</td>
+                <td>
+                  A change inside cannot spread out, and separate scopes are
+                  independent.
+                </td>
+              </tr>
+              <tr>
+                <td>A scope scales evenly</td>
+                <td>Run it once at scale 1 and multiply.</td>
+              </tr>
+              <tr>
+                <td>A cost adds up along a sequence</td>
+                <td>
+                  <code>choose</code> can prune alternatives instead of trying
+                  every combination.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">None of this is measured on GoFish.</p>
       </div>
     </div>
 
@@ -3496,24 +2396,63 @@ stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() }
     </p>
     <ul>
       <li>
-        <b>User code cannot read its box</b>, so plans take the size by hand.
-      </li>
-      <li>
-        <b>User code cannot see a scale</b>, so the beeswarm rebuilt GoFish's x
-        scale from a rendered axis.
+        <b>User code cannot read its box, a scale, or a sibling's size.</b>
+        Plans take the size by hand, and the beeswarm rebuilt GoFish's x scale
+        from a rendered axis.
       </li>
       <li>
         <b
           >A mark cannot sit at a data value on one axis and a pixel offset on
           the other.</b
         >
-        <code>scatter({ y: "dy" })</code> fits a scale to the offsets,
-        <code>position</code> inside <code>scatter</code> loses the offset, and
-        <code>offset</code> takes no room so dots are clipped.
+        There is no way to say a coordinate is already in pixels. This also
+        stops a packing from being drawn through <code>Coord.polar()</code>.
+      </li>
+      <li>
+        <b
+          >A <code>stack</code> nested in a stack or spread along the same axis
+          has no size of its own.</b
+        >
+        It silently gets an equal share, or lands on top of its siblings. A
+        stack of data-sized parts beside a data-sized rect in a
+        <code>layer</code> breaks the rect's size, with no warning.
       </li>
       <li>
         <b>Sizes in nested stacks must be shares of the parent.</b> Raw weights
-        do not work, because one scale is shared across nesting levels.
+        share one scale across nesting levels.
+      </li>
+      <li>
+        <b>Even slack cannot be stated beside data sizes.</b>
+        <code>spacing: fr(1)</code> with data-sized rects gives the wrong scale.
+      </li>
+      <li>
+        <b
+          >A <code>distribute</code> between two nested operands is ignored with
+          no warning</b
+        >, and <code>Constraint.position</code> inside a spread with
+        <code>alignment: "start"</code> or <code>"middle"</code> is discarded
+        with no warning.
+      </li>
+      <li>
+        <b
+          ><code>stack({ dir: "y", alignment: "start" })</code> over a rect and
+          a stack throws a placement conflict</b
+        >
+        on some trees. <code>"middle"</code> works.
+      </li>
+      <li>
+        <b>In polar space:</b> a rect spanning the full circle draws nothing, a
+        rect with a pixel height is drawn as a thick stroked arc (so
+        <code>stroke</code> repaints it and its ends are not radial), a sunburst
+        with data-sized rings gets its radii wrong, a spread along the angle
+        does not wrap, and a <code>ribbon</code> runs around the ring instead of
+        across it.
+      </li>
+      <li>
+        <b><code>Bin.voronoi</code> clips to the data's bounding box</b>, which
+        cannot be set, and a <code>rect</code> inside a
+        <code>Tile.voronoi</code> treemap draws its cell's bounding box with no
+        error.
       </li>
       <li>
         <b
@@ -3521,33 +2460,6 @@ stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() }
           runs down</b
         >
         in the same frame.
-      </li>
-      <li>
-        <b><code>Bin.voronoi</code> clips to the data's bounding box</b>, which
-        cannot be set. The story adds two corner rows.
-      </li>
-      <li>
-        <b>One spacing per <code>spread</code>.</b> Contour offsets differ per
-        gap.
-      </li>
-      <li>
-        <b
-          >A <code>distribute</code> between two nested operands is ignored with
-          no warning.</b
-        >
-      </li>
-      <li>
-        <b
-          ><code>Constraint.position</code> inside a <code>spread</code> with
-          <code>alignment: "start"</code> or <code>"middle"</code> is discarded
-          with no warning.</b
-        >
-      </li>
-      <li>
-        <b
-          >A <code>rect</code> inside a <code>Tile.voronoi</code> treemap draws
-          its cell's bounding box</b
-        >, with no error.
       </li>
       <li>
         <b
@@ -3558,54 +2470,292 @@ stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() }
       </li>
       <li>
         <b>Rendering a combinator puts the legend inside <code>w</code></b
-        >, where <code>chart(data, { w })</code> treats <code>w</code> as the
-        plot only.
+        >, and a layer of positioned marks is shifted so its bounding box starts
+        at the corner.
       </li>
     </ul>
+  </section>
+
+  <!-- ============================ BACKGROUND ============================ -->
+  <section
+    class="panel"
+    id="background"
+    role="tabpanel"
+    aria-labelledby="tab-background"
+    data-title="Background"
+    hidden
+  >
+    <h2>Terms</h2>
+    <ul>
+      <li>
+        <b>Decision.</b> A discrete choice a layout makes: an order, a grouping,
+        a side. Also called the plan.
+      </li>
+      <li>
+        <b>Relation.</b> A fact between shapes that a solver can satisfy: these
+        are 10 apart, these touch.
+      </li>
+      <li>
+        <b>Solver.</b> The part of the engine that turns one scope's relations
+        into positions.
+      </li>
+      <li>
+        <b>Scope.</b> A group of nodes solved together. Today, the nodes that
+        share a scale.
+      </li>
+      <li>
+        <b>Length.</b> A size before the scale is chosen, as a function of the
+        scale.
+      </li>
+      <li>
+        <b>Scale.</b> Pixels per data unit, the one unknown the symbolic solver
+        finds for a scope.
+      </li>
+      <li>
+        <b>Minimum gap.</b> "At least this far apart, in this order." Each item
+        takes the nearest position that satisfies all of them.
+      </li>
+      <li>
+        <b>Slack.</b> The room a minimum gap leaves over. A rule says where it
+        goes.
+      </li>
+      <li>
+        <b>Contour.</b> The left and right outline of a subtree at each height.
+      </li>
+      <li>
+        <b>Pass.</b> One sweep over the tree. GoFish has four: resolve what each
+        axis means, measure, solve, place.
+      </li>
+    </ul>
+
+    <h2>How the passes run</h2>
+    <div class="gallery">
+      <div class="card">
+        <h3>The four passes, and where user code runs</h3>
+        <pre><code class="language-plaintext">parPost Node { meaning } ;                 resolve what each axis means
+parPost Node { size(scale) } ;             measure: user `measure` code runs here
+[ solve the scale, once per scope ] ;      not a traversal
+parPre  Node { x, y, w, h }                place
+  { layout -&gt; body ;                       user `layout` body runs here
+              parPost { size(scale&#x27;) } ;   and the same schedule runs again
+              [ solve scale&#x27; ] ;           on the tree it returned
+              parPre  { x, y, w, h } }</code></pre>
+        <p class="note">
+          <code>parPost</code> is a bottom-up pass and <code>parPre</code> a
+          top-down one, in the notation of Meyerovich and others (2013). A
+          function that calls <code>measure</code> runs in the second pass and
+          joins the one solve. A <code>layout</code> body runs in the last one,
+          and the same passes then run again on what it returned, inside its
+          box. Nothing ever loops back.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Where it comes from</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>A <code>layout</code> node's size is set from outside</td>
+                <td>
+                  CSS container queries require containment; Flutter's relayout
+                  boundary
+                </td>
+              </tr>
+              <tr>
+                <td>It asks for no room of its own</td>
+                <td>
+                  Compose and Flutter refuse size questions through a builder
+                </td>
+              </tr>
+              <tr>
+                <td>Its body arranges children and creates no marks</td>
+                <td>
+                  SwiftUI's <code>Layout</code> and CSS Houdini hand the
+                  children in
+                </td>
+              </tr>
+              <tr>
+                <td>Its body is pure</td>
+                <td>Julia's generated functions</td>
+              </tr>
+              <tr>
+                <td>A length does not leave its scope</td>
+                <td>scope extrusion in multi-stage languages</td>
+              </tr>
+              <tr>
+                <td>Nothing loops back</td>
+                <td>
+                  Typst and LaTeX rerun layout; attribute-grammar layout engines
+                  reject cycles
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <h2>Precedent</h2>
+    <div class="prec">
+      <div class="pc">
+        <h4>Issue #485, Spytial</h4>
+        <p>
+          A small relational core, with user-space algorithms that hand it
+          discrete commitments. The source of the decisions-and-relations split.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Baudel and Broeksema (2012)</h4>
+        <p>
+          Rectangular treemaps as one algorithm with five functions. The
+          decision half of a tiling.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Kennedy (1996), van der Ploeg (2014)</h4>
+        <p>
+          A tidy tree as <code>fit</code> and <code>merge</code> over contours,
+          by depth or by vertical position. The minimum gap for trees.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>WebCoLa, VPSC</h4>
+        <p>
+          Separation constraints. The either-or part of non-overlap is decided
+          first and only the rest goes to the solver.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Auto Layout, TeX glue</h4>
+        <p>
+          One constraint with a relation of equal, at least or at most. Exact
+          and minimum gaps as one idea.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>SwiftUI Layout, Compose, CSS Houdini, Typst</h4>
+        <p>
+          Offer space, measure children, place them. GoFish's engine runs the
+          same steps inside. They pass boxes; GoFish passes shapes and scales.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Compose SubcomposeLayout, Flutter LayoutBuilder</h4>
+        <p>
+          Children built during layout. The model for <code>layout</code> and
+          its rules.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Scala LMS</h4>
+        <p>
+          <code>Rep[T]</code> against <code>T</code>: the type says when a value
+          is known. The model for <code>Length</code>.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Build Systems à la Carte (2018)</h4>
+        <p>
+          Dependencies known up front, chosen among fixed alternatives, or found
+          while running. The three ways to write decisions. Applying it to
+          layout is our reading.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Superconductor and its schedule synthesis</h4>
+        <p>
+          Layout as ordered passes over a tree, checked statically. Three to
+          five passes for visualizations. A bottom-up request, a global step and
+          a top-down response is their memory allocation and our measure, solve,
+          place.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Spineless Traversal, Servo</h4>
+        <p>
+          Incremental layout needs a tree that does not change during layout.
+          Servo's fixed passes grew from four to seven and were dropped. The
+          cautions for <code>layout</code>.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Penrose, d3-force</h4>
+        <p>
+          Constraints and energies handed to an optimizer. The model for the
+          third solver, and the reason it is separate.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Mojo, GHC, Lean</h4>
+        <p>
+          A small core, with built-ins written as library code on top of it. The
+          test: can a built-in be replaced by library code with no change in
+          output? For squarify, yes.
+        </p>
+      </div>
+    </div>
+
+    <details>
+      <summary>Alternatives considered</summary>
+      <div class="inner">
+        <ul>
+          <li>
+            <b>A function from geometry to geometry per family</b> (#1101's
+            first form): a tiling takes a region and weights and returns
+            regions. Cheapest to build. It lowers into nothing, each family has
+            its own signature, and it reaches Python only as a callback. It is a
+            special case of a function that returns GoFish.
+          </li>
+          <li>
+            <b>One solver for everything</b>, with non-overlap and costs as
+            constraints, as Penrose does. Non-overlap is an either-or and
+            ordering is a permutation, so the result stops being predictable,
+            and nothing in the exact layouts needed it.
+          </li>
+          <li>
+            <b>Positions out of the plan.</b> What the first prototypes did. It
+            works, but a resize or a data edit has to decide everything again.
+          </li>
+          <li>
+            <b>Circle packing as contour spacing in polar coordinates.</b> It
+            holds in part: one function packs circles and places a beeswarm.
+            Neither d3's packing nor the built-in beeswarm is that rule, because
+            both use holes a straight slide cannot reach.
+          </li>
+        </ul>
+      </div>
+    </details>
 
     <h2>Related issues</h2>
     <ul>
       <li>
-        <b>#1101</b>: one extensibility model for strategy families; a member is
-        a declared kind or a user function. Approach A.
+        <b>#485</b>: a relational core with user-space solvers that emit
+        commitments. This page is a concrete version.
       </li>
       <li>
-        <b>#1279</b>: extensibility audit. Nine of twelve families are closed,
-        and <code>createOperator</code> is not reachable by users.
+        <b>#806</b>: cooperating layout theories across a scope boundary. The
+        solver boundary here.
       </li>
       <li>
-        <b>#692</b>: public <code>defineMark</code> and
-        <code>defineOperator</code>.
+        <b>#1101, #1279, #692</b>: user functions as strategy members, the
+        extensibility audit, public <code>defineOperator</code>.
       </li>
       <li>
-        <b>#631</b>: modular layout algorithms, the research issue behind the
-        July design note. This page is its user-facing half.
+        <b>#631, #610, #355, #541</b>: modular layout algorithms, a
+        layout-program IR, decomposing treemap, tree and Sugiyama, treemap as
+        generated constraints.
       </li>
       <li>
-        <b>#610</b>: a layout-program IR between the frontend and the core. Its
-        guardrail is "do not build this without a concrete consumer", and B
-        needs no such IR.
+        <b>#486, #630, #1194, #122, #40</b>: the choice operator,
+        <code>min</code> in the size algebra, choices in chart chrome, wrap,
+        pretty printing.
       </li>
       <li>
-        <b>#355</b>: decompose treemap, tidy tree and Sugiyama into simpler
-        primitives. The review table is an answer.
-      </li>
-      <li>
-        <b>#541</b>: treemap as a generator of constraints. The rewrite fork is
-        this, taken to stacks.
-      </li>
-      <li>
-        <b>#486, #630, #806, #1194</b>: the choice operator, <code>min</code> in
-        the size algebra, and choices in chart chrome. Approach C builds on
-        these.
-      </li>
-      <li>
-        <b>#37, #1334</b>: layout that depends on the offered size, and lazy
-        node operators. Reading the box.
-      </li>
-      <li>
-        <b>#122, #40</b>: wrap and pretty printing. Strip treemaps are wrap with
-        weights.
+        <b>#37, #1334</b>: layout that depends on the offered size, lazy node
+        operators.
       </li>
       <li>
         <b>#967, #973, #974, #1064</b>: <code>pack</code> fitting its room and
@@ -3616,23 +2766,19 @@ stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() }
         tile, the Voronoi outer shape.
       </li>
       <li>
-        <b>#38, #618, #1163</b>: GoTree examples, parity, and extension packages
+        <b>#38, #618, #1163</b>: GoTree examples and parity, extension packages
         crossing to Python.
-      </li>
-      <li>
-        <b>#1138</b>: the road to beta lists basic graph and tree layout, a
-        recursive choice operator and pretty printing.
       </li>
     </ul>
     <p class="foot">
-      Names: this page uses <code>tile({ tiling: Tiling.squarify })</code> and
-      <code>Placement</code>, the spellings decided on 11-17 (draft PR #1366).
-      The prototype stories run on main, where they are still
-      <code>treemap({ tile: Tile.squarify })</code> and <code>Place</code>.
-      Stories:
+      Names: this page uses <code>tile({ tiling: Tiling.squarify })</code>,
+      decided on 11-17 (draft PR #1366). The prototype stories run on main,
+      where it is still <code>treemap({ tile: Tile.squarify })</code>. Stories:
       <code
-        >packages/gofish-graphics/stories/_proposals/UserSpace{Tilings,Greedy,Trees}.stories.tsx</code
-      >. Markdown copy: <code>proposals/user-space-layouts/proposal.md</code>.
+        >packages/gofish-graphics/stories/_proposals/UserSpace*.stories.tsx</code
+      >. Papers not obtained, so described from the papers that cite them:
+      Kastens (1980), Vogt, Swierstra and Kuiper (1989), TreeFuser, Medea,
+      Cassius.
     </p>
   </section>
 </main>
@@ -3685,12 +2831,10 @@ stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() }
       });
     });
     var start = location.hash.replace("#", "");
-    if (["examples", "review", "approaches", "precedent"].indexOf(start) >= 0)
-      show(start);
+    if (["design", "d3", "open", "background"].indexOf(start) >= 0) show(start);
     window.addEventListener("hashchange", function () {
       var h = location.hash.replace("#", "");
-      if (["examples", "review", "approaches", "precedent"].indexOf(h) >= 0)
-        show(h);
+      if (["design", "d3", "open", "background"].indexOf(h) >= 0) show(h);
     });
   })();
 </script>
