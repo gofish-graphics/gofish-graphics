@@ -16,7 +16,6 @@ def story_default():
 def story_gas_prices():
     return (
         chart(DRIVING_SHIFTS, w=500, h=400)
-        .flow(scatter(by="year", x="year", y="gas"))
-        .mark(line(stroke="steelblue", stroke_width=2)),
+        .mark(line(x="year", y="gas", stroke="steelblue", stroke_width=2)),
         {},
     )

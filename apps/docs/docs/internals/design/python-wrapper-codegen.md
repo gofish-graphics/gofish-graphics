@@ -184,7 +184,7 @@ incrementally. Two things keep the maintenance cost low:
 
 - **Shared field groups.** Most channels aren't per-mark. `boxDims` (the
   `FancyDims` channels: `x, cx, x2, w, emX, y, cy, y2, h, emY, dims`) and
-  `paint` (`fill, stroke, strokeWidth, opacity`) and `filtered` (`filter`) are declared once
+  `paint` (`fill, stroke, strokeWidth, opacity`) and `withEffect` (`effect`) are declared once
   and included by reference; a mark entry then lists only its genuinely own
   fields (rect: `rx, ry, aspectRatio`).
 - **An explicit escape hatch instead of open kwargs.** If raw SVG
@@ -234,7 +234,8 @@ const paint = group({
   stroke:      ch.color("Stroke color. Defaults to `fill`."),
   strokeWidth: { type: t.number, default: 0 },
   opacity:     { type: t.number, default: 1 },
-  filter:      { type: t.string, doc: "Raw SVG filter attribute." },
+  effect:      { type: t.union(t.ref("Effect"), t.string),
+                 doc: "A filter over this whole drawing." },
 });
 
 // --- an operator entry ---------------------------------------------------
@@ -288,20 +289,43 @@ Python keyword (`line`'s `from` field becomes `from_`).
 From the `rect` entry the generator emits, mechanically:
 
 ```python
-def rect(*, x=None, cx=None, x2=None, w=None, em_x=None,
-         y=None, cy=None, y2=None, h=None, em_y=None,
-         dims=None,
-         fill=None, stroke=None, stroke_width=None, opacity=None, filter=None,
-         rx=None, ry=None, aspect_ratio=None,
-         key=None, label=None) -> Mark:
+def rect(*, debug: Optional[bool] = None,
+         x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None,
+         x2: Optional[int | float | str] = None,
+         w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None,
+         y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None,
+         y2: Optional[int | float | str] = None,
+         h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None,
+         dims: Optional[dict] = None,
+         fill: Optional[str] = None, stroke: Optional[str] = None,
+         stroke_width: Optional[float] = None, opacity: Optional[float] = None,
+         effect: Optional[dict | str] = None, key: Optional[str] = None,
+         rx: Optional[float] = None, ry: Optional[float] = None,
+         aspect_ratio: Optional[float] = None,
+         inset: Optional[float | LengthValue] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
-        rx: Corner radius, x. Default 0.
-        aspect_ratio: w/h ratio to enforce; ...
+        ...
+        rx: Corner radius, x. Default: `ry`, or 0 when neither is given.
+        aspect_ratio: w/h ratio to enforce; the constraining axis wins when both are data-driven.
         ...
     """
-    return _leaf("rect", locals())
+    _kw: Dict[str, Any] = {}
+    for _k, _v in [
+        ("debug", debug),
+        ("x", _channel(x)),
+        ...
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
+        ("emX", em_x),
+        ...
+        ("strokeWidth", stroke_width),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
+        ...
+    ]:
+        if _v is not None:
+            _kw[_k] = _v
+    return Mark("rect", **_kw)
 ```
 
 plus a `Rect` `$def` in the JSON Schema (closed property list), the
@@ -398,7 +422,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   `LABEL_OPTIONS`, `_line_opts`, ...), so they never rename by hand. To route the `spread` combinator and the `stack` operator and
   combinator through generated cores (before, they passed their kwargs to
   the wire unchecked), `OPERATORS.spread` and `OPERATORS.stack` now declare
-  the box position `x`/`y` (as `treemap` does), and their combinator
+  the box position `x`/`y` (as `tile` does), and their combinator
   entries declare `key`. The `Constraint.*` methods (`align`,
   `distribute`, `position`, `nest`) keep their refs-first signatures and
   build their options with `_<type>_constraint_opts` cores generated from
@@ -408,7 +432,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
 
 - **Snake case keys in nested option dicts.** The keys a user types inside
   a nested option dict are in snake case too:
-  `axes={"x": {"label_angle": 45}}`. The conversion follows the declared
+  `curve={"kind": "perfectArrows", "pad_end": 12}`. The conversion follows the declared
   type, not the dict. `descriptors.ts` gained `OPTION_TYPES`, which
   declares `AxesOptions` and `AxisOptions` in the `t.*` type language, and
   `CHART_OPTIONS`, the chart-level options. The generator compiles each
@@ -423,7 +447,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   unchanged. A union with several dict branches is allowed only when it is
   tagged: each branch is an object with a `kind` literal or enum, the
   `kind` values do not overlap, and `_to_wire` picks the branch by the
-  dict's `kind` (treemap's `tile` strategies). A union whose dict branches
+  dict's `kind` (`tile`'s `tiling` strategies). A union whose dict branches
   mix a type with a Python class (`Length`, built by `percent(n)`) and
   types without one is told apart by class: a `LengthValue` takes the
   `Length` branch and a plain dict the other (spread's `spacing` routes a

@@ -459,7 +459,7 @@ console.log("# #1087: rect's aspect lock follows the same rules as circle's");
 
 console.log("# #972: a glyph size is a scale of its own");
 {
-  const { scatter, partition, Bin, Coord } = GoFish as any;
+  const { scatter, partition, Binning, Coord } = GoFish as any;
   const rows = [
     { a: 1, b: 10, n: 4 },
     { a: 3, b: 30, n: 9 },
@@ -493,8 +493,8 @@ console.log("# #972: a glyph size is a scale of its own");
       .flow(
         partition({
           by: {
-            x: field("a").bin(Bin.step(1)),
-            y: field("b").bin(Bin.step(10)),
+            x: field("a").bin(Binning.step(1)),
+            y: field("b").bin(Binning.step(10)),
           },
         })
       )
@@ -544,7 +544,7 @@ console.log("# #972: a glyph size is a scale of its own");
       w: 300,
       h: 200,
     })
-      .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+      .flow(partition({ by: field("v").bin(Binning.step(1)), dir: "x" }))
       .mark(rect({ h: field("v").count(), inset: 0.5 }))
       .toDisplayList(),
     ["rect"]

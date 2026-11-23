@@ -33,5 +33,5 @@ def story_basics():
             stroke="none",
             shape=Shape.box(rx=16),
         ),
-        {"w": 410, "h": 116},
+        {},
     )

@@ -51,6 +51,13 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   return (merged as Style) ?? item.style;
 };
 
+/** An SVG `<title>` element with `text`. */
+const svgTitle = (text: string): Element => {
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  t.textContent = text;
+  return t;
+};
+
 /** Deterministic id counter for composite defs and the filter def — same
  *  scheme as gofish-ir's string backend so the two backends agree on id
  *  shape. A module-level counter (Math.random is non-reproducible), never
@@ -99,8 +106,19 @@ const styleProps = (style: Style) =>
     "stroke-linejoin": style?.strokeLinejoin as
       | JSX.PathSVGAttributes<SVGPathElement>["stroke-linejoin"]
       | undefined,
+    "pointer-events": style?.pointerEvents,
     style: cssStyle(style),
   }) as const;
+
+/** A group's transform as an SVG `transform` attribute. */
+const transformAttr = (
+  t: DisplayList.GroupItem["transform"]
+): string | undefined => {
+  const parts: string[] = [];
+  if (t.translate) parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
+  if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
+  return parts.length ? parts.join(" ") : undefined;
+};
 
 /** `item` painted. `filterId` is the id of its render's `luminanceToAlpha`
  *  filter def ({@link paintDocument}). */
@@ -118,6 +136,13 @@ function paintSVG(
   const live = getLiveSlots(item);
   // `data-gf-id` is the hit-testing hook, emitted only when a runtime is active.
   const gfId = interactive ? item.id : undefined;
+  // An item's `title` (a mark's `.tooltip()` text) is its `<title>`
+  // child, the tooltip of a static drawing. A live chart draws its tooltip
+  // as marks, so it writes no `<title>` the browser would show beside them.
+  // It is made in the SVG namespace: Solid compiles a lone `<title>` as the
+  // HTML element, which a browser does not show as an SVG tooltip.
+  const title =
+    item.title !== undefined && !interactive ? svgTitle(item.title) : undefined;
   switch (item.kind) {
     case "rect":
       return (
@@ -130,7 +155,9 @@ function paintSVG(
           ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </rect>
       );
     case "ellipse":
       return (
@@ -141,7 +168,9 @@ function paintSVG(
           ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </ellipse>
       );
     case "path":
       return (
@@ -149,7 +178,9 @@ function paintSVG(
           d={patched(live, "d", item.d)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </path>
       );
     case "text":
       return (
@@ -178,6 +209,7 @@ function paintSVG(
           }
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         >
+          {title}
           {
             // Live text: the "text" slot overrides CONTENT reactively (the box
             // keeps its resolve-time measure).
@@ -198,25 +230,20 @@ function paintSVG(
             item.preserveAspectRatio as JSX.ImageSVGAttributes<SVGImageElement>["preserveAspectRatio"]
           }
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </image>
       );
     case "group": {
-      const t = item.transform;
-      const parts: string[] = [];
-      if (t.translate)
-        parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
-      if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
-      const transform = parts.length ? parts.join(" ") : undefined;
       const children = item.children.map((c) =>
         paintSVG(c, filterId, interactive)
       );
-      const f = item.filter;
-      // `luminanceToAlpha` has no CSS function: it is an SVG `<filter>` def
-      // the render writes once ({@link paintDocument}).
-      const filter =
-        f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
+      // `luminanceToAlpha` refers to the SVG `<filter>` def the render
+      // writes once ({@link paintDocument}).
+      const filter = DisplayList.filterAttribute(item.filter, filterId);
       return (
-        <g transform={transform} filter={filter}>
+        <g transform={transformAttr(item.transform)} filter={filter}>
+          {title}
           {children}
         </g>
       );
@@ -240,7 +267,8 @@ function paintSVG(
       // everywhere else: drawing an image under a fractional translate that
       // its own fractional x cancels makes the browser resample it. A shape
       // is referenced by each mask that reads it, so it rasterizes once per
-      // mask: the price of SVG's mask model.
+      // mask: the price of SVG's mask model. Its title is the group's first
+      // child, as a primitive's is its element's.
       // gofish-ir's `render.ts` draws the same SVG.
       const { x, y, w, h } = item.bbox;
       const plan = DisplayList.compositePlan(
@@ -263,6 +291,7 @@ function paintSVG(
           opacity={item.style?.opacity}
           data-gf-id={gfId}
         >
+          {title}
           <defs>
             {plan.defs.map((d) => (
               <g id={d.id}>

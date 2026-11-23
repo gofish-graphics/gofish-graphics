@@ -30,10 +30,11 @@ async function main() {
     chart,
     partition,
     field,
-    Bin,
+    Binning,
     region,
     text,
     layer: layerOf,
+    rect: rectOf,
   } = await import("../lib");
 
   console.log("# a region reads its cell from the partition around it");
@@ -41,7 +42,7 @@ async function main() {
     // Cells [0, 1) and [1, 2) of a 200px-wide chart over [0, 2].
     const rects = items(
       await chart([{ v: 0.5 }, { v: 1.5 }], { axes: false })
-        .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+        .flow(partition({ by: field("v").bin(Binning.step(1)), dir: "x" }))
         .mark(region())
         .toDisplayList({ w: 200, h: 100 })
     )
@@ -75,8 +76,8 @@ async function main() {
       { a: 1.5, b: 1.5, name: "dddd" },
     ];
     const nested = (mark: any, first: "x" | "y") => {
-      const px = partition({ by: field("a").bin(Bin.step(1)), dir: "x" });
-      const py = partition({ by: field("b").bin(Bin.step(1)), dir: "y" });
+      const px = partition({ by: field("a").bin(Binning.step(1)), dir: "x" });
+      const py = partition({ by: field("b").bin(Binning.step(1)), dir: "y" });
       return chart(rows, { axes: false })
         .flow(...(first === "x" ? [px, py] : [py, px]))
         .mark(mark)
@@ -204,7 +205,7 @@ async function main() {
   {
     const rows = [{ v: 0.5 }, { v: 1.5 }, { v: 1.7 }];
     const dl = await chart(rows, { axes: false })
-      .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+      .flow(partition({ by: field("v").bin(Binning.step(1)), dir: "x" }))
       .mark(region())
       .toDisplayList({ w: 200, h: 100 });
     check(
@@ -231,14 +232,14 @@ async function main() {
       { m: 1.5, x: 1.5, pdf: 4 },
     ];
     const dl = await chart(rows, { axes: false })
-      .flow(partition({ by: field("m").bin(Bin.step(1)), dir: "y" }))
+      .flow(partition({ by: field("m").bin(Binning.step(1)), dir: "y" }))
       .mark(
         row({ h: 80 }, [
           chart()
             .flow(scatter({ x: "x" }))
             .mark(rect({ w: 4, h: "pdf" })),
           chart()
-            .flow(partition({ by: field("x").bin(Bin.step(1)), dir: "x" }))
+            .flow(partition({ by: field("x").bin(Binning.step(1)), dir: "x" }))
             .mark(region()),
         ])
       )
@@ -263,7 +264,7 @@ async function main() {
     // before the round resolves the references, so the operand is read as
     // the handle it is.
     const inner = chart([{ b: 0.5 }, { b: 1.5 }], { axes: false })
-      .flow(partition({ by: field("b").bin(Bin.step(1)), dir: "y" }))
+      .flow(partition({ by: field("b").bin(Binning.step(1)), dir: "y" }))
       .mark(region());
     let error = "";
     let rects: any[] = [];
@@ -312,7 +313,7 @@ async function main() {
     const spreadOn = (dir: "x" | "y") =>
       chart(rows, { axes: false })
         .flow(
-          partition({ by: field("v").bin(Bin.step(1)), dir: "x" }),
+          partition({ by: field("v").bin(Binning.step(1)), dir: "x" }),
           spread({ by: "g", dir })
         )
         .mark(region())
@@ -418,6 +419,36 @@ async function main() {
       console.log(
         `  xfail an align on a cell's axis leaves the cells in place — ${JSON.stringify(rects)}`
       );
+  }
+
+  console.log("# a cell's child claims its outline (#1372)");
+  {
+    // Each rect fills its cell and strokes its edge, half of the stroke
+    // past the cell: the outer cells' outlines stay on the canvas.
+    const rows = [{ v: 5 }, { v: 15 }, { v: 25 }];
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
+    const dl = await chart(rows, { axes: false })
+      .flow(partition({ by: field("v").bin(Binning.step(10)), dir: "x" }))
+      .mark(rectOf({ h: 40, fill: "#ccc", stroke: "black", strokeWidth: 2 }))
+      .toDisplayList({ w: 300, h: 60 });
+    console.warn = warn;
+    const rects = items(dl).filter((it) => it.kind === "rect");
+    check(
+      "a stroked rect in a partition is not drawn past the canvas",
+      warned.length === 0,
+      warned
+    );
+    const first = rects[0];
+    const last = rects[rects.length - 1];
+    check(
+      "the cells span the canvas less the outer outlines: 1 px to 299 px",
+      rects.length === 3 &&
+        near(first.x!, 1) &&
+        near(last.x! + last.w!, 299),
+      rects.map((r) => [r.x, r.w])
+    );
   }
 
   report();

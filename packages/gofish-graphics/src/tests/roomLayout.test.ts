@@ -66,11 +66,11 @@ async function main() {
     );
   }
 
-  console.log("\n# a stack's filler takes what is left");
+  console.log("\n# a spread's filler takes what is left");
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: 30 }),
           rect({ w: 10 }),
         ]),
@@ -87,7 +87,7 @@ async function main() {
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: 20 }),
           rect({ w: 10 }),
           rect({ w: 10 }),
@@ -108,7 +108,7 @@ async function main() {
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: percent(100) }),
           rect({ w: 10, h: 40 }),
         ]),
@@ -125,7 +125,7 @@ async function main() {
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: fr(1) }),
           rect({ w: 10, h: fr(3) }),
         ]),
@@ -221,7 +221,7 @@ async function main() {
     for (const axes of [true, false]) {
       const rects = await rectsOf(
         layer({ w: 300, h: 300 }, [
-          stack({ dir: "y", spacing: 0 }, [
+          spread({ dir: "y", spacing: 0 }, [
             rect({ w: 10, h: fr(1), fill: "red" }),
             chart(data, { w: 100, h: 50, axes }).mark(
               rect({ x: "v", w: 5, h: 5 })
@@ -274,7 +274,7 @@ async function main() {
     const data = [{ v: 1 }, { v: 5 }];
     const rects = await rectsOf(
       layer({ w: 600, h: 300 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           chart(data, { w: 100, h: fr(2) }).mark(rect({ x: "v", w: 5 })),
           chart(data, { w: 100, h: fr(1) }).mark(rect({ x: "v", w: 5 })),
         ]),
@@ -491,12 +491,12 @@ async function main() {
     );
   }
 
-  console.log("\n# a plot covers a difference axis's niced width, centered");
+  console.log("\n# a centered stack's plot covers its widths, with no y axis");
   {
-    // A centered stack has a difference axis on y: its heights 20, 37 and
-    // 31 nice to a width of 40, drawn across the whole 200 px, with the
-    // content centered in it. The plot covers that width, so the x axis
-    // seats past the y line's end, as it does beside any plot.
+    // A centered stack's y has no origin: it is a length scale, so it gets
+    // a length entry in the legend and no axis. Its heights 20, 37 and 31
+    // fill the whole 200 px, and the x axis seats below the plot, as it
+    // does beside any plot.
     const node = await chart(
       [
         { k: "a", v: 3, u: 20 },
@@ -513,45 +513,19 @@ async function main() {
     const rects = items({ items: lowerToDisplayList(data.child) }).filter(
       (i) => i.kind === "rect" && i.style?.fill === "gray"
     );
-    const yLine = rects.find((r) => r.w === 1 && (r.h ?? 0) > 100)!;
-    const xLine = rects.find((r) => r.h === 1 && (r.w ?? 0) > 100)!;
+    const yLine = rects.find((r) => r.w === 1 && (r.h ?? 0) > 100);
+    const xLine = rects.find((r) => r.h === 1 && (r.w ?? 0) > 100);
+    const bars = items({ items: lowerToDisplayList(data.child) }).filter(
+      (i) => i.kind === "rect" && i.style?.fill !== "gray"
+    );
+    const bottom = Math.max(...bars.map((r) => r.y! + r.h!));
     check(
-      "the plot is the whole 200 px, and the x line sits below the y line",
+      "the plot is the whole 200 px, no y line, and the x line below the plot",
       close(plot.dims[1].size, 200) &&
-        yLine !== undefined &&
+        yLine === undefined &&
         xLine !== undefined &&
-        xLine.y! >= yLine.y! + yLine.h! - 1e-6,
-      { plot: plot.dims[1].size, yLine, xLine }
-    );
-  }
-
-  console.log(
-    "\n# a difference axis whose content starts below 0: plot and axis agree"
-  );
-  {
-    // A free bar of -20 and an origin-less bar of 7 overlay to a space
-    // with no data 0 over [-20, 7]. Its frame measures widths from the
-    // content's start, so the plot covers the niced width where the axis
-    // line is drawn (`differenceSpan`), not shifted by the interval's min.
-    const L = Layer as any;
-    const R = Rect as any;
-    const node = await L({ w: 100, h: 200 }, [
-      R({ w: 10, h: value(-20), fill: "red" }),
-      R({ x: 30, y: 5, w: 10, h: value(7), fill: "blue" }),
-    ]);
-    const data = await runLayout({ axes: true }, node);
-    const plot = nodesOf(data.child).find((n) => n._axesBeside)!;
-    const span = plot.domainSpan(1);
-    const yLine = items({ items: lowerToDisplayList(data.child) }).find(
-      (i) => i.kind === "rect" && i.style?.fill === "gray" && (i.h ?? 0) > 100
-    );
-    check(
-      "the plot is the 200 px the axis line spans",
-      span !== undefined &&
-        close(span[1] - span[0], 200, 1e-6) &&
-        close(plot.dims[1].size, 200, 1e-6) &&
-        close(yLine?.h, 200, 1e-6),
-      { span, box: plot.dims[1].size, line: yLine?.h }
+        xLine.y! >= bottom - 1e-6,
+      { plot: plot.dims[1].size, yLine, xLine, bottom }
     );
   }
 

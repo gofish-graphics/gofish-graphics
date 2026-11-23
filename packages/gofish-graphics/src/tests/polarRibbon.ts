@@ -1,7 +1,6 @@
 import _ from "lodash";
 import { gofish } from "../ast/gofish";
 import { value } from "../ast/data";
-import { stack } from "../ast/graphicalOperators/stack";
 import { spread } from "../ast/graphicalOperators/spread";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
@@ -63,8 +62,8 @@ export const testPolarRibbon = (size: { width: number; height: number }) =>
     { width: size.width, height: size.height, transform: { x: 250 } },
     coord({ transform: polar_DEPRECATED() }, [
       layer([
-        stack(
-          { x: 100, dir: 0, spacing: 64, alignment: "end" },
+        spread(
+          { x: 100, dir: 0, spacing: 0, alignment: "end" },
           // TODO: I could probably make the width be uniform flexible basically
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
             spread({ dir: 1, spacing: 0.02, alignment: "middle" },

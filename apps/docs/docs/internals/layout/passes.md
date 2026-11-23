@@ -16,10 +16,12 @@ covers:
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
+  - packages/gofish-graphics/src/ast/geometry/crossSection.ts
+  - packages/gofish-graphics/src/ast/geometry/rowPoints.ts
   - packages/gofish-graphics/src/ast/geometry/clip.ts
   - packages/gofish-graphics/src/ast/geometry/ring.ts
   - packages/gofish-graphics/src/ast/geometry/voronoiTiling.ts
-  - packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx
+  - packages/gofish-graphics/src/ast/graphicalOperators/tile.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -184,7 +186,7 @@ inferSizeDomains: (shared, children) => {
 };
 ```
 
-The `computeIntrinsicSize()` function returns a `Monotonic` function that maps from data values to pixel sizes. This is used later during layout to determine how much space each element needs.
+The `computeIntrinsicSize()` function returns a size claim: a `Pwl.Value`, a piecewise linear function of the scale factor σ (`src/ast/solver/pwl.ts`), that gives the pixel size for a scale. Layout reads it later to decide how much room each element needs.
 
 ### Pass 5.5: Axis-Name Resolution
 
@@ -199,7 +201,7 @@ used in two places, and in both the meaning of a name depends on where the node 
 which a factory does not know when it runs:
 
 - a box-dims mark's `dims` option, keyed by axis name (`rect({ dims: { theta: { size:
-0.4 } } })`), and a treemap's `dims` for its own box. Channel inference has already
+0.4 } } })`), and a `tile`'s `dims` for its own box. Channel inference has already
   run on it at build time: a mark gives each slot a kind by its structure (`size` is
   a size channel; a bare value, `min`, `center`, `max` are positions), and an
   operator gives each slot the channel of its top-level counterpart. Neither depends
@@ -261,7 +263,7 @@ const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
 
 **Implementation**: `src/ast/_node.ts:212-223`
 
-This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: σ-affine `ascent`, `descent`, and `width` Monotonics) from the children's claims and the already-resolved types. Types never read claims; layout reads both.
+This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: `ascent`, `descent`, and `width`, each a `Pwl.Value`, piecewise linear in σ) from the children's claims and the already-resolved types. Types never read claims; layout reads both.
 
 **Underlying Space Kinds** (defined in `src/ast/underlyingSpace.ts`). Since the
 #586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
@@ -279,7 +281,8 @@ This is one of the most important passes. It determines the **underlying space**
     `h: "value"` with no min), `[−descent, ascent]` about its baseline; no
     position scale.
   - `origin: "none"` — **DIFFERENCE**: unanchorable, only differences are
-    meaningful (stacked/centered); delta axis over `[0, width]`.
+    meaningful (stacked/centered); a length scale, so no axis, and a length
+    entry in the legend.
 - **`ORDINAL`**: Discrete categorical scale (e.g., `spread("category")`)
 - **`UNDEFINED`**: No data-driven encoding
 
@@ -375,9 +378,11 @@ The chart's options describe the chrome of the chart root. `layout()` passes
   field). A space with no measure has no title. The title is read off the
   root's space before elaboration re-resolves it, so it names the OUTERMOST
   grouping (`lake`, not the inner `species`).
-- **The legend.** The color scale is resolved once, from the root, so the root
-  carries the legend whenever the scale has something to show and the `legend`
-  option is not `false`.
+- **The legend.** Axes are for scales that have positions; legends are for
+  scales that do not. The color scale is resolved once, from the root, and
+  each length scale the root maps (a space with no origin) is read off the
+  keyed domains (`KeyedDomains.lengthScales`), so the root carries one
+  legend with an entry for each that the `legend` option leaves on.
 
 Each title is a ring seated past the root's axes and centered on the axis line
 it describes. The legend is the ring outside that, so it is seated past the
@@ -428,9 +433,12 @@ the claim, and a coord's budget does not warn. The root's size is that box,
 so a root whose claim overflows the render's size is its claim, seated at
 the canvas's top-left: a y-up root overflows past the bottom, not the top. A
 layer with a size of its own is that size whatever its content claims, so it
-reads its size, not the box. On an axis the render does not size, a root whose nodes with a
-literal size map its keyed domain maps it at the σ they solved
-(`ScopeRegistry.keyedSigma`). Any other unsized root is fitted to the default
+reads its size, not the box. A root whose nodes with a literal size map its
+keyed domain maps it at the σ they solved (`ScopeRegistry.keyedSigma`), on
+an axis the render does not size, and on one it does where the root's
+content claims no data of its own there (its plot has a size of its own, and
+only chrome such as a legend's length entry maps the domain): the render's
+slot sets no second σ. Any other unsized root is fitted to the default
 canvas, which is not a limit: it grows to hold what does not fit, so the fit
 does not warn there (#1179). A pinned axis hands its content the map
 `px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
@@ -546,8 +554,8 @@ direction)`. Geometry a node keeps for its own `lower` (a connector's paths, an
 arrow, a polygon's vertices, a tween's run) is in its axis order too; `lower`
 receives one node-local map, `local` (`p ↦ translate + (x, direction·y)`), the one
 place that geometry is reflected. A node that runs a pixel-native algorithm (the
-treemap's d3 tiling, pack's `packSiblings`) places its children in its own axis
-order like any operator, with no reflection of its own. A treemap or pack with no
+`tile`'s d3 tiling, pack's `packSiblings`) places its children in its own axis
+order like any operator, with no reflection of its own. A `tile` or `pack` with no
 data-driven size has no y axis, so it takes its frame's direction: in free space
 d3's first tile lands at the top left, as in d3; in a chart whose y grows upward
 it lands at the bottom left.
@@ -728,6 +736,14 @@ constraint with a `region` (`PositionRegion`,
   `x2` do (`placedByOwnData`), so the align moves the text to the region
   and never the region to the text. A layer around the region is placed
   by its data the same way.
+- Either way, the child's room is its whole cell. What a child draws may
+  end before its cell does: a band through the rows over a cell of time
+  ends at the last row, a day before the last month's cell ends. The
+  claim walk takes the cell as the room of a child placed by its data
+  (`rooms` in `placeByClaims`), as it does for a child centered in it,
+  and the layer's box covers every cell its regions give (`cellSpans`),
+  so the claim and the box agree, and the canvas holds the last cell
+  whole.
 - A partition inside another partition's cell divides that cell: on each
   axis its key does not place, it gives each child the cell it is in, so
   the child is placed there as a child of the outer partition is. That cell
@@ -735,7 +751,7 @@ constraint with a `region` (`PositionRegion`,
 
 See
 [Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell).
-A cell of a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
+A cell of a binned struct (`struct({ x, y }).bin(Binning.hex(...))`) also has
 an outline, the cell's polygon; every other cell is a box.
 
 #### The shape a parent gives a child
@@ -753,15 +769,15 @@ order. Three parents make one, and two nodes read it:
   to the child in that cell. The cell's span and placement
   still go through the data position above; only the outline goes through
   the shape.
-- A `treemap` hands each child its tile: a box for a rectangular tiling
-  (`boxRing`), a convex polygon for `Tile.voronoi`
+- A `tile` hands each child its cell: a box for a rectangular tiling
+  (`boxRing`), a convex polygon for `Tiling.voronoi`
   (`src/ast/geometry/voronoiTiling.ts`: a power diagram of the region,
   clipped half-plane by half-plane with `clipToHalfPlane`. Each round
   moves every site to its cell's centroid, then fits the weights with a
   damped Newton step, until each cell's area is within 2% of its share
   and the sites have settled). Every
-  `Tile` strategy is one function, a `Tiling` in `treemap.tsx`, from the
-  region and the weights to one ring per child, so the treemap has one
+  `Tiling` strategy is one function, a `CellsFn` in `tile.tsx`, from the
+  region and the weights to one ring per child, so the `tile` has one
   placement loop. The child's size is the ring's box, and the ring is
   shifted into it (`inItsBox`). On an axis where the child fills its room
   (`fillsRoom`) it is centered on that box; on an axis where it does not (a
@@ -769,9 +785,9 @@ order. Three parents make one, and two nodes read it:
   convex cell, where a polygon's box center may not be. A ring with no area
   (`hasArea`: a tile rounded to no width, a cell its `spacing` ate, or a
   Voronoi region with no area, whose cells are all empty) gets a child laid
-  out at size zero with no shape, at the cell's center. `Tile.voronoi`
+  out at size zero with no shape, at the cell's center. `Tiling.voronoi`
   checks that its region is convex whatever the padding, and does not
-  `round` its cells. The treemap's own box is always the region it was
+  `round` its cells. The `tile`'s own box is always the region it was
   given, `[0, w] × [0, h]`, so its `padding` stays inside it.
 - An `enclose` around a member with no size of its own (`fillingLayout`,
   see [Enclose](/internals/frontend/enclose)) hands down its outline.
@@ -782,7 +798,7 @@ a `layer([region, text])` in a cell still finds the cell; a cell's outline
 with the cell's span; and no shape with any other room (a grid cell, a
 share of a scope, a span with no outline, a size a `nest` derives, or what
 a ring's chrome leaves). A
-`treemap` with no size of its own reads its shape as the region it tiles
+`tile` with no size of its own reads its shape as the region it tiles
 (a rectangular tiling there is an error unless the shape is the whole
 box), and a `region` draws it. Every other node ignores it.
 
@@ -861,7 +877,7 @@ fixed-size nodes report their size).
   whose room is fixed from outside its content. That is the render root in
   the canvas, a node with a size of its own, a coordinate space (in its
   own coordinates), a node whose room its parent
-  gives it (a region's cell or a treemap tile, `GoFishNode.givenRoom`, which
+  gives it (a region's cell or a `tile` cell, `GoFishNode.givenRoom`, which
   the plan lists in `SharingPlan.rooms`) when σ sizes its content and its
   data does not place it in its parent's frame (`placedByOwnData`: a layer of marks in a cell,
   or a partition inside another's cell, reads the parent's frame), and a
@@ -945,10 +961,8 @@ fixed-size nodes report their size).
   `GoFishNode.widenToDomain` applies for every reader) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
-  already reach past it. On a difference axis the claim is centered in the
-  niced width, by the same farther-end rule, so widening twice is widening
-  once. The plot an axis is seated beside covers its whole niced domain
-  (`_axesBeside`), a difference axis's centered width included: its plan
+  already reach past it, so widening twice is widening once. The plot an
+  axis is seated beside covers its whole niced domain (`_axesBeside`): its plan
   (`domainPlan` in `layer`) and its layout box (`GoFishNode.domainSpan`)
   both reach the domain's ends, so its axes frame the domain's corner, and
   the room handed to it counts the domain as plot, not as dressing.
@@ -1046,7 +1060,20 @@ fixed-size nodes report their size).
   far as its stand-ins. A child that reads y the other
   way has its plot read reflected with its box, at the one place a
   child's claim meets its parent (`formsOf` in `solver/plan.ts`), which a
-  `nest`'s padding reads too (`plotIn`). A chart with a size of its own
+  `nest`'s padding reads too (`plotIn`). A stack places every part by its
+  data offset from the stack's 0 (`stackPlaces`). A part whose offset is a
+  constant is placed by the solve at that offset times σ, so its claim is
+  its own claim moved there, its stroke included, and the stack adds no
+  overhang between parts or to its data extent. A band in a stacked area
+  is moved by an offset that changes along u, so the box its own claim
+  describes is not where it draws. Its parent claims it at the box it
+  draws there, the interval it covers about the stack's 0 over every u times
+  σ, all of it plot, and its outline past it (`ClaimChild.stackPlace`,
+  `placedForms`). In layout the parent hands the band its offset as the
+  `shear` of its `AxisScale`, and the band adds it to both edges; only a
+  part whose offset changes gets one. This
+  claim is exact only while the band's cross-section is all data; a pixel
+  term in it (a ribbon's `inset`) is a TODO. A chart with a size of its own
   maps the plot of its content into its size, and its labels, like its
   chrome, add around it (#1032). A node
   with a size of its own, and a chart's outer box, are a part of their
@@ -1077,9 +1104,13 @@ fixed-size nodes report their size).
   fits its content inside its box and widens the box it measures by the
   largest outline inside it (`outline` in `coord.tsx`), so its box holds its
   outlines. A space that frames its own window (geo) clips them, as it clips
-  the rest of what its window leaves out. A shape that fills the room it is
-  given has no claim to widen, and its outline is centered on the room's
-  edge.
+  the rest of what its window leaves out. A painted region composite
+  (`intersect` and the rest, with a stroke) strokes its own outline, so it
+  widens its claim the same way. A shape that fills a cell has no claim of
+  its own: the plan reads its claim as the cell widened by its outline
+  (`buildPlan`), so the outlines of the outer cells stay on the canvas. A
+  shape that fills the canvas has no claim to widen, and its outline is
+  centered on the canvas edge.
 
 At the root, `layout()` measures what the root draws past its box after its
 one layout (`drawnOverflow`): its ink and its outlines. A node's box holds
@@ -1088,7 +1119,9 @@ a shape's outline, drawn past its box: the drawing is the hull of the root's
 box, of every ink child's box, and of every node's box grown by its outline.
 A coordinate space's box stands for its interior, and a node that clips its
 content to its box (an `intersect`, `subtract` or `atop` composite: `GoFishNode.clipsToBox`)
-draws nothing past it. The claim walk records the layers that found ink
+draws nothing past it. An overlay (`GoFishNode.overlay`: a tooltip's box and
+the marker on a line's point) is drawn over the graphic and left out, so
+opening a tooltip never resizes the canvas. The claim walk records the layers that found ink
 children on the render session, and layout records whether a shape draws an
 outline, so a render with neither skips the walk. A literal start or
 pixel offset (`spread({ y: 50 })`, `.translate()`) moves a box, and its claim
@@ -1168,8 +1201,19 @@ Once a node is laid out, `node.geometry()` describes its shape in the same
 local frame as `intrinsicDims`, with no translate applied (`src/ast/geometry/`).
 The result always has a `box`, which is `intrinsicDims` as a plain box. It may
 also answer optional queries, one file per query in `src/ast/geometry/`, joined
-into `Geometry` with `extends`. There are two. A consumer calls each query's
-helper, which falls back to the box when the node does not answer.
+into `Geometry` with `extends`. There are four. A consumer calls each query's
+helper, which falls back to the box when the node does not answer, except
+`rowPoints`, which has no fallback.
+
+- `crossSection` (`crossSection(g, axis)`): for each position u on the other
+  axis, the interval the shape covers along `axis` there, as a function
+  value (`Fun<Interval>`, `ast/fun.ts`). The fallback is the box: the box's
+  interval on `axis` at every u across the box (`boxCrossSection`). The shape
+  form of `ribbon` and `line` (`Band`, `src/ast/shapes/band.tsx`) answers it
+  exactly along its value axis: the interval between its two edges at each
+  point of its parameter, in pixels. Its form before layout, in data units,
+  is the space's `profile` (see
+  [Underlying Space](/internals/core/underlying-space)).
 
 - `enclosingCircle` (`enclosingCircle(g)`): a circle around the shape. The
   fallback is the circle through the box corners.
@@ -1205,6 +1249,13 @@ helper, which falls back to the box when the node does not answer.
   placed node's outlines in its parent's frame, moved so the geometry's box
   sits where `p.dims` puts it. Labels and `enclose` read members this way,
   and `outlineSegments` walks an outline's straight pieces for both.
+
+- `rowPoints` (`g.rowPoints?.()`, `geometry/rowPoints.ts`): for a shape drawn
+  through data rows, the point where it draws each row, in the same frame as
+  its outline. Only the shape form of `line` built from rows answers it
+  (`Band`), with each row on its drawn edge; a ribbon is a region and a line
+  drawn from a function has no rows, so neither does. A tooltip seats a
+  row's box beside its point (`tooltipPlace`). It has no fallback.
 
 - A node definition may pass a `geometry` function next to `lower`. `ellipse`
   answers with the circle of its larger radius and its sampled outline,
@@ -1307,14 +1358,14 @@ inside a non-linear coordinate space, where the layout frame is not the screen
 (#1002); the axis scope the scatter elaborates in carries the nearest
 non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 
-The third consumer is `.label()` with a `Place` strategy (see
+The third consumer is `.label()` with a `Placement` strategy (see
 [Labels](/internals/frontend/labels)). Its label layer gets a `labelPlace`
 constraint (`labels/placeStep.ts`), another step the solver never sees:
 `applyConstraints` runs it last, after `overlap`, when the labeled marks and
 the labels a position string placed are where they land. It reads each
 labeled mark's `outline` through its `ref()`, picks each label's first free
 candidate spot, and writes the label's box with `setExtent`. A node definition
-may also pass `labelPosition`, where a `.label()` with no `position` goes on
+may also pass `labelPlacement`, where a `.label()` with no `placement` goes on
 it: a strategy by convention, or `"outline"`, read from its outline when the
 label is placed. After the root's layout, `gofish.tsx` prints one note for the
 labels the step hid (`reportHiddenLabels`).

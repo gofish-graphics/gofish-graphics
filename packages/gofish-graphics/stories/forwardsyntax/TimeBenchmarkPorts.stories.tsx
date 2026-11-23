@@ -9,7 +9,6 @@ import {
   ribbon,
   line,
   circle,
-  blank,
   Color,
   Curve,
   Unit,
@@ -120,11 +119,15 @@ export const StackedArea: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(quarterlySales, { schema: { date: Unit.time() }, w: args.w, h: args.h })
-      .flow(
-        scatter({ by: "date", x: "date" }),
-        stack({ by: "category", dir: "y" })
+      .flow(stack({ by: "category", dir: "y" }))
+      .mark(
+        ribbon({
+          x: "date",
+          h: "sales",
+          fill: "category",
+          curve: Curve.linear(),
+        })
       )
-      .mark(ribbon({ h: "sales", fill: "category", curve: Curve.linear() }))
       .render(container);
     return container;
   },
@@ -195,16 +198,21 @@ export const SurplusDeficitLine: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))
-      .mark(ribbon({ h: "balance", fill: "side", curve: Curve.linear() }))
-      // The line: invisible anchors at the monthly values, then a line
-      // through them.
-      .layer(
-        chart(rows, { schema })
-          .flow(scatter({ by: "date", x: "date", y: "balance" }))
-          .mark(blank())
+      .flow(group({ by: "side" }))
+      .mark(
+        ribbon({ x: "date", h: "balance", fill: "side", curve: Curve.linear() })
       )
-      .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: Curve.linear() }))
+      .layer(
+        chart(rows, { schema }).mark(
+          line({
+            x: "date",
+            y: "balance",
+            stroke: "#222",
+            strokeWidth: 1.5,
+            curve: Curve.linear(),
+          })
+        )
+      )
       .render(container);
     return container;
   },

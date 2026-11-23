@@ -169,15 +169,14 @@ async function main() {
     );
   }
 
-  console.log("\n# a stack claims its parts end to end");
+  console.log("\n# a flush spread claims its parts end to end");
   {
-    // A stack lays each part's tail on the previous part's head, so three
-    // 20 px boxes claim 60 px, as they are laid out.
+    // Three 20 px boxes that touch claim 60 px, as they are laid out.
     const node = await chart(
       ["a", "b", "c"].map((k) => ({ k })),
       { axes: false }
     )
-      .flow(stack({ by: "k", dir: "x" }))
+      .flow(spread({ by: "k", dir: "x", spacing: 0 }))
       .mark(rect({ w: 20, h: 10 }))
       .resolve();
     const data = await runLayout({}, node);
@@ -270,7 +269,7 @@ async function main() {
       ["p", "q"].map((i, j) => ({ g, i, v: 5 * (j + 1) }))
     );
     const dl = await chart(rows, { w: 200, h: 200 })
-      .flow(spread({ by: "g", dir: "x" }), stack({ by: "i", dir: "x" }))
+      .flow(spread({ by: "g", dir: "x" }), spread({ by: "i", dir: "x", spacing: 0 }))
       .mark(rect({ h: "v" }))
       .toDisplayList();
     const bars = items(dl).filter(
@@ -288,7 +287,7 @@ async function main() {
     const rows = ["a", "b", "c"].map((g) => ({ g, v: 1 }));
     const dl = await chart(rows, { axes: false, legend: false, w: 100, h: 150 })
       .flow(spread({ by: "g", dir: "y", spacing: 30 }))
-      .mark(rect({ w: "v" }).label("v", { position: "outset-bottom" }))
+      .mark(rect({ w: "v" }).label("v", { placement: "outset-bottom" }))
       .toDisplayList();
     const bars = items(dl).filter((i) => i.kind === "rect");
     check(
@@ -355,7 +354,7 @@ async function main() {
       rect({ w: 30, h: 10 }),
       chart(data, { axes: false, w: 100, h: 50 })
         .flow(spread({ by: "k", dir: "x" }))
-        .mark(rect({ h: "v" }).label("v", { position: "center" })),
+        .mark(rect({ h: "v" }).label("v", { placement: "center" })),
     ]).toDisplayList({});
     const rects = items(dl).filter((i) => i.kind === "rect");
     const top = Math.min(...rects.slice(1).map((r) => r.y!));
@@ -381,7 +380,7 @@ async function main() {
       const dl = await layerOf([
         chart(data, { axes: false, w: 100, h: 50 })
           .flow(spread({ by: "k", dir: "x" }))
-          .mark(rect({ h: "v" }).label(field("v").sum(), { position })),
+          .mark(rect({ h: "v" }).label(field("v").sum(), { placement: position })),
         text({ x: 0, y: 132, text: "CAP", fontSize: 12 }),
       ]).toDisplayList({});
       const all = items(dl);

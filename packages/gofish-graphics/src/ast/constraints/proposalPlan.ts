@@ -25,6 +25,7 @@ import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import {
   type ConstraintPosScales,
+  type ConstraintRef,
   type KeyOf,
   type ResolvedOperands,
 } from "./shared";
@@ -106,7 +107,7 @@ export type ChildSpan = {
  * interval that pins it there, and of the cell a `region` gives it there (a
  * {@link PositionRegion}: a `partition`'s cell); and the cell's outline as
  * its shape (#1222, `geometry/ring.ts`), when the cell has one (a hexagon
- * of `Bin.hex`, a cell of `Bin.voronoi`). `posScales` are the scales the
+ * of `Binning.hex`, a cell of `Binning.voronoi`). `posScales` are the scales the
  * layer resolves its position constraints against; a datum edge with no
  * scale gives nothing.
  *
@@ -181,6 +182,38 @@ export function buildChildSpans(
     for (const ref of c.children) if (ref) entry(keyOf(ref)).shape = shape;
   }
   return byKey.size === 0 ? undefined : byKey;
+}
+
+/**
+ * The pixels each cell a layer's regions give its children spans, per axis
+ * (a `partition`'s cells), for a cell with a child that takes room there
+ * (`takesRoom`). A layer's box covers its cells whole, whatever its children
+ * draw in them, as its claim does (`placeByClaims`): a band through the rows
+ * over a cell's line ends at the last row, before the last cell does.
+ */
+export function cellSpans(
+  constraints: readonly ConstraintSpec[],
+  posScales: ConstraintPosScales,
+  takesRoom: (ref: ConstraintRef, axis: 0 | 1) => boolean
+): [[number, number][], [number, number][]] {
+  const out: [[number, number][], [number, number][]] = [[], []];
+  for (const c of constraints) {
+    if (c.type !== "position" || c.in !== undefined) continue;
+    for (const axis of [0, 1] as const) {
+      const edges = c.region?.spans[axis];
+      if (
+        (axis === 0 ? c.x : c.y) !== undefined ||
+        edges === undefined ||
+        !c.children.some((r) => r && takesRoom(r, axis))
+      )
+        continue;
+      const a = compilePlacementCoordinate(numbers, edges[0], posScales[axis]);
+      const b = compilePlacementCoordinate(numbers, edges[1], posScales[axis]);
+      if (a !== undefined && b !== undefined)
+        out[axis].push([Math.min(a, b), Math.max(a, b)]);
+    }
+  }
+  return out;
 }
 
 /** Choose the concrete size proposed to one child in a layer.
@@ -259,7 +292,7 @@ export type LayerScales = {
  *     data-valued one, whose box its parent's σ sizes and whose content it
  *     maps into that box;
  *   - or its room is given to it from outside its content (`isScope`: a
- *     region's cell, a treemap tile, pinned data in a slot, a facet panel).
+ *     region's cell, a `tile` cell, pinned data in a slot, a facet panel).
  *     Its box is that room;
  *   - or nothing above it solved a σ to hand it (`handedSigmas` is
  *     undefined): it is the top of its space, and its box is the size it is

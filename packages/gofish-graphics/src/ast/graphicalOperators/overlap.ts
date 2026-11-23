@@ -76,7 +76,7 @@ export function resolveOverlap(
       const smoothing = strategy.smoothing ?? 0;
       const bandwidthPx =
         smoothing === "silverman"
-          ? silvermanBandwidth(items)
+          ? silvermanBandwidth(items.map((it) => it.at))
           : smoothing === 0 || smoothing === Infinity
             ? smoothing
             : smoothing * requireScale(pxPerUnit);
@@ -361,20 +361,20 @@ function erf(x: number): number {
 
 /**
  * Silverman's rule of thumb for a bandwidth, as R's `bw.nrd0` (ggforce's
- * `geom_sina` default): `0.9 · min(sd, IQR / 1.34) · n^(-1/5)`, over the dots'
- * positions on the data axis, in pixels. As in R, a zero IQR uses the
- * standard deviation instead. Fewer than two dots, or every dot at one value,
- * gives 0: no smoothing, so each bell is just the dot's own size (see
- * {@link noiseOutline}).
+ * `geom_sina` default): `0.9 · min(sd, IQR / 1.34) · n^(-1/5)`, over
+ * `values`, in their own units: the dots' positions on the data axis in
+ * pixels here, a sample's values for `kde` (ast/dist.ts). As in R, a
+ * zero IQR uses the standard deviation instead. Fewer than two values, or
+ * every value the same, gives 0: no smoothing, so each bell is just the
+ * dot's own size (see {@link noiseOutline}).
  */
-export function silvermanBandwidth(items: OverlapItem[]): number {
-  const n = items.length;
+export function silvermanBandwidth(values: readonly number[]): number {
+  const n = values.length;
   if (n < 2) return 0;
-  const at = (it: OverlapItem) => it.at;
   // d3's deviation divides by n − 1, and its quantile is R's default (type
   // 7), as `bw.nrd0` uses.
-  const sd = deviation(items, at)!;
-  const iqr = quantile(items, 0.75, at)! - quantile(items, 0.25, at)!;
+  const sd = deviation(values)!;
+  const iqr = quantile(values, 0.75)! - quantile(values, 0.25)!;
   const lo = iqr > 0 ? Math.min(sd, iqr / 1.34) : sd;
   return 0.9 * lo * Math.pow(n, -0.2);
 }

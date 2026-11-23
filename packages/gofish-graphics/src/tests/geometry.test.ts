@@ -28,8 +28,19 @@ import {
   type Outline,
 } from "../ast/geometry";
 import { Text } from "../ast/shapes/text";
+import { crossSection } from "../ast/geometry";
 import { membersOf } from "../ast/graphicalOperators/enclose/members";
-import { chart, line, live, ribbon, scatter, spread, stack, rect } from "../lib";
+import {
+  chart,
+  line,
+  live,
+  ribbon,
+  scatter,
+  spread,
+  stack,
+  rect,
+  Curve,
+} from "../lib";
 import { segDist } from "../ast/geometry/plane";
 
 let passed = 0;
@@ -84,7 +95,9 @@ console.log("# geometry: box fallback");
   ok("rect answers no enclosingCircle of its own", !g.enclosingCircle);
   ok(
     "rect box is its intrinsic box",
-    g.box.min[0] === 0 && g.box.min[1] === 0 && g.box.max[0] === 30 &&
+    g.box.min[0] === 0 &&
+      g.box.min[1] === 0 &&
+      g.box.max[0] === 30 &&
       g.box.max[1] === 40
   );
   const c = enclosingCircle(g);
@@ -107,7 +120,11 @@ console.log("# geometry: ellipse override");
     show(c)
   );
   const d = enclosingCircle(layOut(circle(7)).geometry());
-  ok("a circle encloses itself", sameCircle(d, { cx: 7, cy: 7, r: 7 }), show(d));
+  ok(
+    "a circle encloses itself",
+    sameCircle(d, { cx: 7, cy: 7, r: 7 }),
+    show(d)
+  );
 }
 
 console.log("# geometry: polygon override");
@@ -183,7 +200,10 @@ console.log("# outline: box fallback");
     "a filled rect's outline is the fallback's",
     JSON.stringify(rg.outline(0.5)) === JSON.stringify([down])
   );
-  ok("the fallback is one closed rect", down.closed && down.points.length === 4);
+  ok(
+    "the fallback is one closed rect",
+    down.closed && down.points.length === 4
+  );
   ok(
     "the fallback gives its box exactly, in the same frame as its points",
     JSON.stringify(down.box) === JSON.stringify(g.box)
@@ -217,7 +237,7 @@ console.log("# outline: ellipse");
 {
   const g = layOut(circle(20)).geometry();
   for (const tol of [0.1, 1]) {
-    const [o] = (g).outline(tol);
+    const [o] = g.outline(tol);
     ok(`circle outline is closed (tolerance ${tol})`, o.closed);
     ok(
       `circle samples lie on the circle (tolerance ${tol})`,
@@ -232,10 +252,14 @@ console.log("# outline: ellipse");
       `${sagitta}`
     );
   }
-  const fine = (g).outline(0.1)[0].points.length;
-  const coarse = (g).outline(1)[0].points.length;
-  ok("a finer tolerance takes more samples", fine > coarse, `${fine} ${coarse}`);
-  const e = (g).outline(0.5)[0].ellipse;
+  const fine = g.outline(0.1)[0].points.length;
+  const coarse = g.outline(1)[0].points.length;
+  ok(
+    "a finer tolerance takes more samples",
+    fine > coarse,
+    `${fine} ${coarse}`
+  );
+  const e = g.outline(0.5)[0].ellipse;
   ok(
     "a circle's outline gives its ellipse exactly",
     e !== undefined && e.cx === 20 && e.cy === 20 && e.rx === 20 && e.ry === 20,
@@ -253,26 +277,35 @@ console.log("# outline: polygon and text");
     [10, 30],
     [0, 30],
   ];
-  const [o] = (layOut(Polygon({ points: ring })).geometry()).outline(0.5);
+  const [o] = layOut(Polygon({ points: ring }))
+    .geometry()
+    .outline(0.5);
   ok(
     "polygon outline is its ring, closed",
     o.closed && JSON.stringify(o.points) === JSON.stringify(ring)
   );
   ok("a polygon is filled by default", o.filled && o.width === undefined);
 
-  const [u] = (layOut(
-      Polygon({ points: ring, fill: "none", stroke: "black", strokeWidth: 3 })
-    ).geometry()).outline(0.5);
+  const [u] = layOut(
+    Polygon({ points: ring, fill: "none", stroke: "black", strokeWidth: 3 })
+  )
+    .geometry()
+    .outline(0.5);
   ok(
     "an unfilled polygon's outline is closed, not filled, as wide as its stroke",
     u.closed && !u.filled && u.width === 3,
     JSON.stringify({ closed: u.closed, filled: u.filled, width: u.width })
   );
-  const [tr] = (layOut(Polygon({ points: ring, fill: "transparent" })).geometry()).outline(0.5);
+  const [tr] = layOut(Polygon({ points: ring, fill: "transparent" }))
+    .geometry()
+    .outline(0.5);
   ok("a transparent fill is not filled", tr.closed && !tr.filled);
 
-  const [ro] = (layOut(Rect({ w: 20, h: 10, fill: "none", stroke: "red", strokeWidth: 2 }))
-      .geometry()).outline(0.5);
+  const [ro] = layOut(
+    Rect({ w: 20, h: 10, fill: "none", stroke: "red", strokeWidth: 2 })
+  )
+    .geometry()
+    .outline(0.5);
   ok(
     "a rect's box outline carries its paint",
     ro.closed && !ro.filled && ro.width === 2 && ro.box !== undefined
@@ -299,8 +332,11 @@ console.log("# outline: polygon and text");
 
   const t = layOut(Text({ text: "hello", fontSize: 10, rotate: 90 }));
   const tg = t.geometry();
-  const [to] = (tg).outline(0.5);
-  ok("rotated text outline is a closed quad", to.closed && to.points.length === 4);
+  const [to] = tg.outline(0.5);
+  ok(
+    "rotated text outline is a closed quad",
+    to.closed && to.points.length === 4
+  );
   const xs = to.points.map((p) => p[0]);
   const ys = to.points.map((p) => p[1]);
   ok(
@@ -353,7 +389,11 @@ console.log("# outline: paths");
       len;
     worst = Math.max(worst, d);
   }
-  ok("a flattened bezier stays within the tolerance", worst <= 0.25, `${worst}`);
+  ok(
+    "a flattened bezier stays within the tolerance",
+    worst <= 0.25,
+    `${worst}`
+  );
   ok(
     "flattening keeps the ends",
     pts[0][0] === 0 && pts[0][1] === 0 && pts[n][0] === 100 && pts[n][1] === 0
@@ -386,8 +426,7 @@ console.log("# outline: paths");
 /** Every node of a laid-out tree, depth first. */
 function* walk(node: GoFishNode): Generator<GoFishNode> {
   yield node;
-  for (const c of node.children)
-    if (c instanceof GoFishNode) yield* walk(c);
+  for (const c of node.children) if (c instanceof GoFishNode) yield* walk(c);
 }
 
 console.log("# outline: line and ribbon connectors");
@@ -403,10 +442,14 @@ console.log("# outline: line and ribbon connectors");
     .resolve()) as GoFishNode;
   await lineChart.toDisplayList({ w: 200, h: 100, axes: false });
   const conn = [...walk(lineChart)].find((n) => n.type === "connect")!;
-  const lo = (conn.geometry()).outline(0.5);
+  const lo = conn.geometry().outline(0.5);
   ok("a line's outline is one open path", lo.length === 1 && !lo[0].closed);
   ok("a line's outline samples its curve", lo[0].points.length > 3);
-  ok("a line's outline carries its stroke width", lo[0].width === 1, `${lo[0].width}`);
+  ok(
+    "a line's outline carries its stroke width",
+    lo[0].width === 1,
+    `${lo[0].width}`
+  );
   const g = conn.geometry();
   ok(
     "a line's outline lies in its box",
@@ -430,13 +473,16 @@ console.log("# outline: line and ribbon connectors");
   );
 
   const band = (await chart(rows)
-    .flow(spread({ by: "x", dir: "x", spacing: 20 }), stack({ by: "s", dir: "y" }))
+    .flow(
+      spread({ by: "x", dir: "x", spacing: 20 }),
+      stack({ by: "s", dir: "y" })
+    )
     .mark(rect({ h: "y", w: 0 }))
     .layer(ribbon({ by: "s" }))
     .resolve()) as GoFishNode;
   await band.toDisplayList({ w: 200, h: 100, axes: false });
   const rib = [...walk(band)].find((n) => n.type === "connect")!;
-  const ro = (rib.geometry()).outline(0.5);
+  const ro = rib.geometry().outline(0.5);
   ok("a ribbon's outline is one closed band", ro.length === 1 && ro[0].closed);
   ok("a ribbon's band has no stroke width", ro[0].width === undefined);
 
@@ -487,7 +533,9 @@ function checkPacked(label: string, node: GoFishNode): void {
   const dims = node.intrinsicDims!;
   ok(
     `${label}: box is [0, 2R] on both axes`,
-    dims[0].min === 0 && near(dims[0].size!, 2 * R) && dims[1].min === 0 &&
+    dims[0].min === 0 &&
+      near(dims[0].size!, 2 * R) &&
+      dims[1].min === 0 &&
       near(dims[1].size!, 2 * R)
   );
   ok(
@@ -626,6 +674,102 @@ console.log("# simplifyRing keeps a ring within the tolerance");
   ok(
     "a tolerance of 0 keeps every point",
     simplifyRing(ring, 0).length === ring.length
+  );
+}
+
+console.log("# geometry: cross-section falls back to the box");
+{
+  const box = {
+    min: [10, 20] as [number, number],
+    max: [40, 25] as [number, number],
+  };
+  const alongY = crossSection({ box }, 1);
+  const alongX = crossSection({ box }, 0);
+  ok(
+    "a box's cross-section along y is its y interval at every x across it",
+    alongY.at(10).min === 20 &&
+      alongY.at(40).max === 25 &&
+      alongY.domain.min === 10 &&
+      alongY.domain.max === 40
+  );
+  ok(
+    "and along x it is its x interval at every y across it",
+    alongX.at(22).min === 10 &&
+      alongX.at(22).max === 40 &&
+      alongX.domain.min === 20 &&
+      alongX.domain.max === 25
+  );
+}
+
+console.log("# geometry: the shape form of ribbon and line");
+{
+  const rows = [
+    { x: 0, h: 10 },
+    { x: 1, h: 30 },
+    { x: 2, h: -20 },
+  ];
+  const root = (await chart(rows, { w: 200, h: 100 })
+    .mark(ribbon({ x: "x", h: "h", curve: Curve.linear() }))
+    .resolve()) as GoFishNode;
+  await root.toDisplayList({ w: 200, h: 100, axes: false });
+  const band = [...walk(root)].find((n) => n.type === "ribbon")!;
+  const g = band.geometry();
+  ok(
+    "a band's box is its parameter's width by its values' extent",
+    near(g.box.min[0], 0) &&
+      near(g.box.max[0] - g.box.min[0], 200) &&
+      near(g.box.max[1] - g.box.min[1], 100),
+    JSON.stringify(g.box)
+  );
+  const [o] = g.outline(0.5);
+  ok(
+    "a band's outline is one closed ring with no stroke width",
+    g.outline(0.5).length === 1 && o.closed && o.width === undefined
+  );
+  ok(
+    "the outline lies in the box",
+    o.points.every(
+      ([px, py]) =>
+        px >= g.box.min[0] - EPS &&
+        px <= g.box.max[0] + EPS &&
+        py >= g.box.min[1] - EPS &&
+        py <= g.box.max[1] + EPS
+    )
+  );
+  // Across y at x = 50 px (data x = 0.5, h = 20): the interval from the
+  // baseline up to h, one fifth of the 100 px value extent (−20 to 30).
+  const cs = crossSection(g, 1);
+  const at = cs.at(50);
+  const unit = 100 / 50;
+  ok(
+    "a band's cross-section is exact: from its baseline to its edge",
+    near(at.max - at.min, 20 * unit, 1e-6),
+    JSON.stringify(at)
+  );
+  ok(
+    "and the band's cross-section changes along x (not a box)",
+    !near(cs.at(100).max - cs.at(100).min, at.max - at.min, 1e-3)
+  );
+  ok(
+    "across x it falls back to the box",
+    near(crossSection(g, 0).at(50).max - crossSection(g, 0).at(50).min, 200)
+  );
+
+  const lineRoot = (await chart(rows, { w: 200, h: 100 })
+    .mark(line({ x: "x", y: "h", strokeWidth: 3 }))
+    .resolve()) as GoFishNode;
+  await lineRoot.toDisplayList({ w: 200, h: 100, axes: false });
+  const path = [...walk(lineRoot)].find((n) => n.type === "line")!;
+  const lo = path.geometry().outline(0.5);
+  ok(
+    "a line's outline is one open path with its stroke width",
+    lo.length === 1 && !lo[0].closed && lo[0].width === 3
+  );
+  const lcs = crossSection(path.geometry(), 1).at(100);
+  ok(
+    "a line's cross-section is its one value: an empty interval",
+    near(lcs.max, lcs.min),
+    JSON.stringify(lcs)
   );
 }
 

@@ -11,6 +11,7 @@ export { displayListToSVG } from "./render.js";
 export {
   compositeLayers,
   compositePlan,
+  filterAttribute,
   usesLuminanceToAlpha,
   LUMINANCE_TO_ALPHA_FILTER,
   type CompositeLayer,

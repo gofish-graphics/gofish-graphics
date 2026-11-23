@@ -400,7 +400,7 @@ console.log("end to end");
   }
 
   // Labels that `label.angle` does not rotate are not scored by "auto": a
-  // difference axis's delta labels, and a time axis's row labels.
+  // length entry's label in the legend, and a time axis's row labels.
   {
     const deltaChart = chart([
       { g: "a", v: 10 },
@@ -417,7 +417,7 @@ console.log("end to end");
       (b) => `${b.dim}:${b.kind}`
     );
     ok(
-      "a difference axis's delta labels are not scored",
+      "a length entry's label is not scored",
       deltaRows.length === 3 && deltaRows.every((r) => r === "0:ordinal"),
       deltaRows.join(" ")
     );

@@ -65,8 +65,7 @@ export const DailyLine: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(prices, { schema: { date: Unit.time() }, w: args.w, h: args.h })
-      .flow(scatter({ by: "date", x: "date", y: "price" }))
-      .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .mark(line({ x: "date", y: "price", stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
   },
@@ -101,8 +100,7 @@ export const HourlyLine: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(readings, { w: args.w, h: args.h })
-      .flow(scatter({ by: "time", x: "time", y: "temp" }))
-      .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .mark(line({ x: "time", y: "temp", stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
   },
@@ -129,8 +127,7 @@ export const DaylightSavingZone: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(scatter({ by: "time", x: "time", y: "load" }))
-      .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .mark(line({ x: "time", y: "load", stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
   },
@@ -190,8 +187,7 @@ export const WeekOverMonthRows: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(scatter({ by: "day", x: "day", y: "visits" }))
-      .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .mark(line({ x: "day", y: "visits", stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
   },

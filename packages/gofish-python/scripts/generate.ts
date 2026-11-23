@@ -18,7 +18,7 @@
  *  - The five compositing operators + enclose/arrow **combinator-only**
  *    marks — pure kwargs-collection, named by their wire `type`.
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
- *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
+ *    stack, scatter, group, table, tile, line, ribbon, layer) — the
  *    mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
  *    hand-written in `ast.py`, calling these cores (every generated
@@ -30,8 +30,8 @@
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
  *    nested option dict (`axes={"x": {"label": {"angle": 45}}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
- *  - The strategy family modules, `gofish/<family>.py` (`tile.py`,
- *    `overlap.py`, `curve.py`, `bin.py`, `calendar.py`), one factory per kind
+ *  - The strategy family modules, `gofish/<family>.py` (`tiling.py`,
+ *    `overlap.py`, `curve.py`, `binning.py`, `calendar.py`), one factory per kind
  *    and per preset of the STRATEGIES table. Each builds
  *    `{"kind": ..., **params}` with snake_case keys, which `_to_wire` renames
  *    at the option the strategy is passed to (each family is an OPTION_TYPES
@@ -49,7 +49,7 @@
  * `selectAll`, and the Color family module (`color.py`; see the note on
  * STRATEGIES) stay hand-written.
  */
-import { writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -161,7 +161,7 @@ function acceptsDict(type: FieldType): boolean {
 
 /** The field that tells the branches of a tagged union apart: a dict value's
  *  `kind` names the branch it means. It is the convention the strategy
- *  objects (treemap `tile`, scatter `overlap`) already follow. */
+ *  objects (`tile`'s `tiling`, scatter `overlap`) already follow. */
 const DISCRIMINATOR = "kind";
 
 /** The `kind` values that select an object branch of a tagged union, or null
@@ -653,7 +653,7 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
   ["scatter", "_scatter_opts"],
   ["group", "_group_opts"],
   ["table", "_table_opts"],
-  ["treemap", "_treemap_opts"],
+  ["tile", "_tile_opts"],
   ["pack", "_pack_opts"],
   // Operator-only, like group: the wrapper in ast.py takes `by` and `dir`.
   ["partition", "_partition_opts"],
@@ -669,7 +669,7 @@ for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
 // The combinator form of a dual-form wrapper gets its own core from its
 // COMBINATOR_MARKS entry, which adds combinator-only fields (`key`) to the
 // operator's. Both kinds of core take the operator base kwargs (`debug`).
-for (const name of ["treemap", "spread", "stack"]) {
+for (const name of ["tile", "spread", "stack"]) {
   const d = COMBINATOR_MARKS[name];
   parts.push(
     renderOptsCore(
@@ -1024,9 +1024,9 @@ interface FamilyFactory {
   /** Param values, by field name, this member sets before the caller's. */
   preset: Record<string, unknown>;
   doc: string;
-  /** The param that is positional-only; the rest are keyword-only
-   *  (`StrategyKind.positional`, `ConstructDescriptor.positional`). */
-  positional?: string;
+  /** The params that are positional-only, in order; the rest are
+   *  keyword-only (`StrategyKind.positional`, `ConstructDescriptor.positional`). */
+  positional: readonly string[];
 }
 
 /** One member of a family module. It checks each param at the call, from
@@ -1036,14 +1036,16 @@ interface FamilyFactory {
  *  list. */
 function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
   const { family, name, tag, params, preset, doc, positional } = f;
-  if (positional !== undefined && !Object.hasOwn(params, positional))
-    throw new Error(`${family}.${name}: no param ${positional}`);
+  for (const p of positional)
+    if (!Object.hasOwn(params, p))
+      throw new Error(`${family}.${name}: no param ${p}`);
   const keyOf = (field: string) =>
     wire.keys === "snake" ? pyKwarg(field) : (params[field].wire ?? field);
-  // The positional param comes first.
-  const fields = Object.keys(params).sort(
-    (a, b) => Number(b === positional) - Number(a === positional)
-  );
+  // The positional params come first, in their order.
+  const fields = [
+    ...positional,
+    ...Object.keys(params).filter((field) => !positional.includes(field)),
+  ];
   const ents = fields.map(
     (field) => [field, pyKwarg(field), params[field]] as const
   );
@@ -1080,7 +1082,7 @@ function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
     const lines = pyParamChecks(
       spec.type,
       py,
-      field === positional
+      positional.includes(field)
         ? `${family}.${name}(${py})`
         : `${family}.${name}(${py}=...)`
     );
@@ -1116,12 +1118,13 @@ function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
     `    return out`,
   ].join("\n");
   const sigs = ents.map(([, py, spec]) => pySig(py, spec));
+  const n = positional.length;
   const paramList = (
-    positional === undefined
+    n === 0
       ? [`*`, ...sigs]
-      : sigs.length === 1
-        ? [sigs[0], `/`]
-        : [sigs[0], `/`, `*`, ...sigs.slice(1)]
+      : sigs.length === n
+        ? [...sigs, `/`]
+        : [...sigs.slice(0, n), `/`, `*`, ...sigs.slice(n)]
   ).join(", ");
   return [
     ...bare,
@@ -1130,6 +1133,17 @@ function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
     body,
   ].join("\n");
 }
+
+/** The first line of every family module this script writes, and of no other
+ *  file. After writing, the script removes any `gofish/*.py` that starts with
+ *  it and was not written in this run: the module of a family that was
+ *  renamed or deleted. `_generated.py` and the hand-written modules never
+ *  start with it, so they are never removed. */
+const FAMILY_MODULE_MARKER =
+  "# GENERATED family module: `pnpm --filter gofish-python gen` deletes it once its family is gone.";
+
+/** The family modules written in this run, by file name. */
+const writtenFamilyModules = new Set<string>();
 
 /** Write `gofish/<module>.py`, the module the package binds as `family`:
  *  one function per factory. */
@@ -1144,12 +1158,23 @@ function writeFamilyModule(opts: {
 }): void {
   const { family, doc, table, wire, factories } = opts;
   // The module is the family's name in lowercase. A Python package's
-  // submodule and its attribute share one name, so importing
-  // `gofish.filter` would replace the `filter` operator: a module whose
-  // name is also an operator's takes a trailing `_` (`gofish.filter_`), as
-  // a kwarg that is a Python keyword does (`from_=`).
+  // submodule and its attribute share one name, so a family module named
+  // like a construct would replace that construct on import. The naming rule
+  // forbids the clash (`descriptors.test.ts` checks it); this is a backstop.
   const lower = family.toLowerCase();
-  const module = Object.hasOwn(OPERATORS, lower) ? `${lower}_` : lower;
+  const clash = (
+    [
+      ["operator", OPERATORS],
+      ["mark", LEAF_MARKS],
+      ["mark", COMBINATOR_MARKS],
+    ] as const
+  ).find(([, table]) => Object.hasOwn(table, lower));
+  if (clash !== undefined)
+    throw new Error(
+      `[gofish-python gen] the strategy family ${family} clashes with the ` +
+        `${clash[0]} ${lower}: importing gofish.${lower} would replace it. ` +
+        `Rename one of them (apps/docs/docs/internals/design/api-design.md).`
+    );
   const example = factories[0].name;
   const bareExample = wire.bare
     ? factories.find((f) =>
@@ -1178,13 +1203,14 @@ function writeFamilyModule(opts: {
         ]
       : [`camelCase wire keys; the JS side rebuilds the value from it.`];
   const source = [
+    FAMILY_MODULE_MARKER,
     `# GENERATED by packages/gofish-python/scripts/generate.ts from the gofish-ir`,
     `# ${table} table — do not edit; run \`pnpm --filter gofish-python gen\`.`,
     `"""`,
     `The \`\`${family}\`\` family. ${doc}`,
     ``,
     `The package binds this module as \`\`${family}\`\`, so \`\`${family}.${example}\`\` and`,
-    `\`\`from gofish.${module} import ${example}\`\` reach the same member. Each member`,
+    `\`\`from gofish.${lower} import ${example}\`\` reach the same member. Each member`,
     `returns a plain dict, \`\`{"${wire.tag}": ..., **params}\`\`, with`,
     ...keys,
     `Mirrors JS \`\`gofish-graphics/${lower}\`\`.`,
@@ -1209,8 +1235,9 @@ function writeFamilyModule(opts: {
     code,
     ``,
   ].join("\n");
-  const outFile = join(HERE, "..", "gofish", `${module}.py`);
+  const outFile = join(HERE, "..", "gofish", `${lower}.py`);
   writeFileSync(outFile, source);
+  writtenFamilyModules.add(`${lower}.py`);
   console.log(`wrote ${outFile}`);
 }
 
@@ -1232,7 +1259,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
         params: k.params,
         preset: {},
         doc: k.doc,
-        positional: k.positional,
+        positional: k.positional ?? [],
       })),
       ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
         family,
@@ -1241,6 +1268,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
         params: spec.kinds[p.kind].params,
         preset: p.values,
         doc: p.doc,
+        positional: [],
       })),
     ],
   });
@@ -1260,6 +1288,19 @@ writeFamilyModule({
     params: resolveFields(d),
     preset: {},
     doc: d.doc ?? "",
-    positional: d.positional,
+    positional: d.positional === undefined ? [] : [d.positional],
   })),
 });
+
+// Remove the family modules no family wrote in this run (a family renamed or
+// deleted), so the CI freshness check sees a tracked one's deletion. Only a
+// file whose first line is FAMILY_MODULE_MARKER is a family module.
+const GOFISH_DIR = join(HERE, "..", "gofish");
+for (const name of readdirSync(GOFISH_DIR)) {
+  if (!name.endsWith(".py") || writtenFamilyModules.has(name)) continue;
+  const file = join(GOFISH_DIR, name);
+  const firstLine = readFileSync(file, "utf8").split("\n", 1)[0];
+  if (firstLine !== FAMILY_MODULE_MARKER) continue;
+  unlinkSync(file);
+  console.log(`removed stale family module ${file}`);
+}

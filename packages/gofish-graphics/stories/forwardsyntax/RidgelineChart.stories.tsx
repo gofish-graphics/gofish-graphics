@@ -3,8 +3,10 @@ import { initializeContainer } from "../helper";
 import { seattleWeather } from "../../src/data/seatle-weather";
 import {
   chart,
+  derive,
+  kde,
   spread,
-  scatter,
+  layer,
   field,
   rect,
   datum,
@@ -40,39 +42,18 @@ const monthNames = [
   "Dec",
 ];
 
-// Classic "temperature distributions by month" ridgeline: bin every day's
-// high temperature (across all four years) into fixed-width buckets shared
-// by every month, then count days per (month, bucket). Zero-count buckets
-// are included at both ends of each month's range so every ridge returns to
-// its own baseline instead of getting clipped mid-slope.
-const binWidth = 2.5;
-const temps = seattleWeather.map((d) => d.temp_max);
-const minTemp = Math.floor(Math.min(...temps) / binWidth) * binWidth;
-const maxTemp = Math.ceil(Math.max(...temps) / binWidth) * binWidth;
-const binCount = Math.round((maxTemp - minTemp) / binWidth);
-const binCenters = Array.from(
-  { length: binCount },
-  (_, i) => minTemp + (i + 0.5) * binWidth
-);
-
-const counts = new Map<string, number>();
-for (const d of seattleWeather) {
-  const month = monthNames[new Date(d.date).getUTCMonth()];
-  const bin = Math.min(
-    binCount - 1,
-    Math.floor((d.temp_max - minTemp) / binWidth)
-  );
-  const key = `${month}|${bin}`;
-  counts.set(key, (counts.get(key) ?? 0) + 1);
-}
-
-const ridgelineData = monthNames.flatMap((month) =>
-  binCenters.map((temp_max, bin) => ({
-    month,
-    temp_max,
-    count: counts.get(`${month}|${bin}`) ?? 0,
-  }))
-);
+// Classic "temperature distributions by month" ridgeline: each month's
+// density of daily highs (across all four years), a kernel density over
+// that month's days.
+const days = seattleWeather.map((d) => ({
+  ...d,
+  month: monthNames[new Date(d.date).getUTCMonth()],
+}));
+// The rules under the ridges run across the whole x axis, past the tails
+// of every month's density (each runs three bandwidths past its month's
+// days), so each month's name sits left of every ridge.
+const ruleFrom = -10;
+const ruleTo = 40;
 
 // Fixed row-to-row pitch shared by the ridge spread and the rule spread
 // below, so a month's rule and label sit at the same baseline as its
@@ -82,7 +63,7 @@ const ridgelineData = monthNames.flatMap((month) =>
 const rowPitch = 24;
 
 // Each month's section is a fixed height: the tallest ridge (the largest
-// count) is this many px, whatever the width, the pitch or the number of
+// density) is this many px, whatever the width, the pitch or the number of
 // months. The ridges overlap because it is far more than `rowPitch`, and the
 // chart's height follows from the sections, so the chart sets no `h`.
 const ridgeHeight = 140;
@@ -100,7 +81,8 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(ridgelineData, {
+    const temp = field("temp_max");
+    chart(days, {
       axes: { x: true, y: false },
       schema: { temp_max: { name: "Max temperature", unit: Unit("°C") } },
       w: args.w,
@@ -111,17 +93,20 @@ export const Default: StoryObj<Args> = {
           dir: "y",
           spacing: Spacing.pitch(rowPitch, { at: "baseline" }),
         }),
-        scatter({ x: "temp_max", h: ridgeHeight })
+        derive(kde("temp_max"))
       )
       .mark(
-        ribbon({
-          h: "count",
-          fill: "steelblue",
-          stroke: "white",
-          strokeWidth: 1,
-          opacity: 0.85,
-          blendMode: "normal",
-        })
+        layer({ h: ridgeHeight }, [
+          ribbon({
+            x: temp.domain(),
+            h: temp.density(),
+            fill: "steelblue",
+            stroke: "white",
+            strokeWidth: 1,
+            opacity: 0.85,
+            blendMode: "normal",
+          }),
+        ])
       )
       // Per-row baseline labeling, in the style of a ggridges ridgeline: a
       // thin rule along each month's baseline with the month name to the
@@ -129,10 +114,8 @@ export const Default: StoryObj<Args> = {
       // that can't line up with 12 overlapping, unevenly-tall silhouettes.
       // The rules are the same fixed-pitch baseline spread as the ridges, a
       // bare rect per month, so each registers exactly on its ribbon's zero
-      // line. Each rule spans the ribbon's run, from the first bin's center
-      // to the last's, so the ribbon's white outline lies along the whole
-      // rule. Each rule carries its month as a label outside its left end,
-      // standing on the rule. `.zOrder(-1)` paints the rules BEHIND the
+      // line. Each rule spans the x axis. Each rule carries its month as a
+      // label outside its left end, standing on the rule. `.zOrder(-1)` paints the rules BEHIND the
       // ribbons, visible only outside the silhouettes, the classic look.
       .layer(
         chart(monthNames.map((month) => ({ month })))
@@ -145,12 +128,12 @@ export const Default: StoryObj<Args> = {
           )
           .mark(
             rect({
-              x: datum(binCenters[0]),
-              w: datum(binCenters[binCount - 1] - binCenters[0]),
+              x: datum(ruleFrom),
+              w: datum(ruleTo - ruleFrom),
               h: 1,
               fill: "#999",
             }).label("month", {
-              position: "outset-left-end",
+              placement: "outset-left-end",
               fontSize: 11,
               color: "#666",
             })

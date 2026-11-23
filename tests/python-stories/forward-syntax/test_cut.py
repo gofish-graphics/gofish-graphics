@@ -26,7 +26,7 @@ the JS story's `d.name("slice")`.
 
 import os
 
-from gofish import chart, cut, datum, image, layer, rect, spread, stack, text
+from gofish import chart, cut, datum, image, layer, rect, spread, text
 from gofish import Constraint
 
 # Vite-served URL of the bottle PNG. JS imports it via
@@ -160,12 +160,13 @@ def story_rect_equal_slices():
 
 
 def story_rect_flush_stack():
-    """Regression coverage for `stack`'s flush recomposition of a cut: the same
-    rect cut into 4 equal slices and collapsed back flush with `stack` (no
-    spacing option) — a correct recompose shows one continuous border."""
+    """Regression coverage for the flush recomposition of a cut: the same rect
+    cut into 4 equal slices and laid back side by side with `spread(spacing=0)`
+    (the slices are boxes of pixels, so they touch rather than stack) — a
+    correct recompose shows one continuous border."""
     return (
         chart(ABCD_DATA)
-        .flow(stack(dir="x"))
+        .flow(spread(dir="x", spacing=0))
         .mark(
             rect(
                 w=400, h=80, fill="tomato", stroke="#333", stroke_width=3

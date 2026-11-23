@@ -279,7 +279,7 @@ export const connect = createNodeOperator(
       {
         type: "connect",
         // Labeled by its outline: a line at its end, a band inside itself.
-        labelPosition: "outline",
+        labelPlacement: "outline",
         // The domain-building walk (`GoFishNode.resolveColorScale`) only
         // reads a node's single `color` property to register a field-valued
         // paint into the shared discrete-color scale. Prefer whichever

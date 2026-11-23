@@ -30,7 +30,7 @@ def story_mixed_shapes():
             ]),
             circle(r=30, fill=COLORS[4]),
         ]),
-        {"w": 420, "h": 420},
+        {},
     )
 
 
@@ -56,5 +56,5 @@ def story_enclosed():
             fill="#eee",
             stroke="#333",
         ),
-        {"w": 300, "h": 300},
+        {},
     )

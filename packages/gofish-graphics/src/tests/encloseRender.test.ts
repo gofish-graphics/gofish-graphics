@@ -33,7 +33,7 @@ const {
   selectAll,
   Shape,
   spread,
-  treemap,
+  tile,
 } = GoFish as any;
 
 let passed = 0;
@@ -239,14 +239,14 @@ console.log("# enclose lowers any fresh subtree, as layer does");
       .flow(
         spread({ by: "g", dir: "x", spacing: 10 }),
         enclose({ padding: 4 }),
-        treemap({ size: "v" })
+        tile({ size: "v" })
       )
       .mark(rect({ w: 40, h: 40, fill: "#888" }))
       .toDisplayList({ w: 300, h: 100 });
     kinds = items(dl).map((it) => it.kind);
   });
   check(
-    "spread → enclose → treemap renders each group's outline and cells",
+    "spread → enclose → tile renders each group's outline and cells",
     message === "" && kinds.filter((k) => k === "rect").length === 5,
     message || JSON.stringify(kinds)
   );

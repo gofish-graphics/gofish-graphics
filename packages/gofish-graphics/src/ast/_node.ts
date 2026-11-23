@@ -58,6 +58,7 @@ import {
 } from "./coordinateTransforms/bake";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
+import { walkItems } from "../interaction/runtime";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
@@ -84,6 +85,7 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
+  domainOver,
   differenceSpan,
   originIs,
   placeBaseline,
@@ -151,11 +153,10 @@ import {
 import {
   type LabelAccessor,
   type LabelOptions,
+  type LabelPlacement,
   type LabelSpec,
 } from "./labels/labelPlacement";
 import type { HiddenLabels } from "./labels/placeStep";
-import type { Place } from "../families/place";
-import type { LabelPosition } from "./labels/labelPlacement";
 import { withKindValues } from "./strategyKind";
 import { packEnclose } from "d3-hierarchy";
 import type { KeyCell } from "./cells";
@@ -408,7 +409,7 @@ export function placeUnplacedChild(child: Placeable): void {
 // `shape` is the shape of the space proposed (#1222, `geometry/ring.ts`): a
 // convex ring inside the box `[0, w] × [0, h]` of `size`, in the node's axis
 // order, or undefined for the box itself. A node that fills its space (a
-// `treemap`, a `region`) fills it, and hands its children the shapes it cuts
+// `tile`, a `region`) fills it, and hands its children the shapes it cuts
 // it into; any other node reads only `size`.
 export type Layout = (
   size: Size,
@@ -543,7 +544,7 @@ export const shareAll: ResolveSharing = (childNodes) => ({
 });
 
 /** Every child in a set of its own on both axes, nested in a frame of its
- *  own, its tile, which is its room (a treemap). */
+ *  own, its tile, which is its room (a `tile`). */
 export const nestEach: ResolveSharing = (childNodes) => {
   const sets = childNodes.map((_, i) => i + 1);
   const all = () => new Set(childNodes.map((_, i) => i));
@@ -585,6 +586,26 @@ export const placedByOwnData = (
   parent.sharing().sets[axis][i] === 0 &&
   originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
   originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
+
+/** `root` and the nodes below it, breadth first (a leaf of the module
+ *  graph, so the interaction runtime can walk a tree without importing the
+ *  operators): every node at one depth
+ *  before any deeper one. */
+export function* breadthFirst(root: GoFishNode): Generator<GoFishNode> {
+  const queue: GoFishNode[] = [root];
+  for (let i = 0; i < queue.length; i++) {
+    const n = queue[i];
+    yield n;
+    for (const c of n.children) if (c instanceof GoFishNode) queue.push(c);
+  }
+}
+
+/** Make every item in `items`, the items of groups and of composites'
+ *  operands included, no pointer target (`GoFishNode.overlay`). */
+const clearPointerEvents = (items: DisplayList.DisplayItem[]): void =>
+  walkItems(items, (item) => {
+    item.style = { ...item.style, pointerEvents: "none" };
+  });
 
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
@@ -830,8 +851,8 @@ export class GoFishNode {
   public paintedStyle?: DisplayList.Style;
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
-  /** Where a `.label()` with no `position` goes (see the constructor). */
-  public labelPosition?: LabelPosition | Place | "outline";
+  /** Where a `.label()` with no `placement` goes (see the constructor). */
+  public labelPlacement?: LabelPlacement | "outline";
   /** Nodes that belong to this node as a mark but live OUTSIDE its subtree:
    *  today the label `Text`s the label pass seats for it in the tier above
    *  (`labels/elaborate.tsx`), which stay out of the subtree so they never
@@ -858,7 +879,7 @@ export class GoFishNode {
   /** Set when a node is built as one that never paints (`blank()`): it is
    *  hidden whatever `.hidden()` says ({@link isHidden}). */
   public _neverPaints = false;
-  /** Set by a `filter` option (`drawFilter.ts`): the filter the node's
+  /** Set by an `effect` option (`drawEffect.ts`): the filter the node's
    *  whole drawing is drawn under. A filtered node is a bake boundary. */
   public _filter: DisplayList.DisplayFilter | undefined = undefined;
   private renderSession?: RenderSession;
@@ -893,7 +914,7 @@ export class GoFishNode {
    *  apart from the transitions it draws over them, and the layer its frame
    *  holds, every tier of a `.layer()` chain included (`frameChart`). A
    *  label is a layer of text on the nearest one around its mark
-   *  (`elaborateLabels`). */
+   *  (`labelLayer`). */
   public _chartContent?: true;
   /** Set by chrome elaboration on the box a node's axes are seated beside,
    *  continuous axes and category label rows alike, the content of its
@@ -905,7 +926,7 @@ export class GoFishNode {
    *  out: data `v` is at `σ·v + originPx` in its own axis order, from its
    *  local origin. On an axis with no data 0 it measures lengths of its σ
    *  from that origin (`originPx` 0), as the claim walk reads its plan (a
-   *  difference axis). Undefined where it has no σ, and on a node that is
+   *  centered stack). Undefined where it has no σ, and on a node that is
    *  no layer. A `position` with `in` reads a datum through it
    *  (`PositionOptions.in`). */
   public layoutFrames?: [AxisMap | undefined, AxisMap | undefined];
@@ -962,6 +983,21 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /** Text that describes this node, written as the `title` of the items it
+   *  draws itself (a mark's `.tooltip()` content), or of all its items when
+   *  it draws none itself. A static drawing shows it on hover. */
+  public title?: string;
+  /** Set on a node drawn over the graphic, inside it (a tooltip's box and
+   *  the marker on a line's point): nothing it draws is a pointer target
+   *  (its items paint with `pointerEvents: "none"`), and the canvas is
+   *  sized without it (`drawnOverflow` in `gofish.tsx`), so opening it
+   *  moves nothing else. */
+  public overlay?: true;
+  /** Set on a node drawn as a path through its data rows, one point per
+   *  row (the shape form of `line` built from rows, `shapes/band.tsx`): a
+   *  tooltip focuses one of its rows, and a field list names the rows'
+   *  fields (`tooltip/request.ts`). */
+  public throughRows?: true;
   /** The box its own options give it (`elaborateOwnDims`), for a construct
    *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
    *  the construct reads. Its length is read here ({@link lengthOn}). */
@@ -984,6 +1020,11 @@ export class GoFishNode {
    * graphic leaves room for it at its edges.
    */
   public strokeOverhang = 0;
+  /** The axis it draws a data offset along that changes along the other
+   *  axis (`AxisScale.shear`): a band's value axis. A stack whose parts'
+   *  offsets change along u hands each part its offset this way, and a part
+   *  that draws none is an error there. */
+  public shearAxis?: 0 | 1;
   /** Whether it draws its content only inside its box (a `mask`, a
    *  composite clipped to its first child): what its content would draw
    *  past its box, an outline included, is not drawn. */
@@ -1051,7 +1092,8 @@ export class GoFishNode {
       geometry,
       color,
       strokeOverhang,
-      labelPosition,
+      labelPlacement,
+      shearAxis,
     }: {
       key?: string;
       type: string;
@@ -1065,14 +1107,16 @@ export class GoFishNode {
       color?: MaybeValue<string>;
       /** See {@link GoFishNode.strokeOverhang}. */
       strokeOverhang?: number;
-      /** Where a `.label()` with no `position` goes on this node: a
-       *  position or a `Place` strategy by convention (a dot is labeled
+      /** Where a `.label()` with no `placement` goes on this node: a
+       *  position or a `Placement` strategy by convention (a dot is labeled
        *  around itself, an arrow at its end), or `"outline"`, read from the
        *  outline the node draws when the label is placed: at the end of an
        *  open path, around a closed outline with no fill, inside a filled
        *  one. Default `"outset"` (above its box). A node that sets it draws
        *  its own ink and is itself the target of a `.label()` on it. */
-      labelPosition?: LabelPosition | Place | "outline";
+      labelPlacement?: LabelPlacement | "outline";
+      /** See {@link GoFishNode.shearAxis}. */
+      shearAxis?: 0 | 1;
     },
     children: GoFishAST[]
   ) {
@@ -1094,7 +1138,8 @@ export class GoFishNode {
     this.args = args;
     this.color = color;
     this.strokeOverhang = strokeOverhang ?? 0;
-    this.labelPosition = labelPosition;
+    this.labelPlacement = labelPlacement;
+    this.shearAxis = shearAxis;
   }
 
   /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to
@@ -1361,7 +1406,7 @@ export class GoFishNode {
   }
 
   /** Whether this node's parent nests it in a slot of its own on `dim` (a
-   *  spread, grid or treemap slot): a set of its own that sits in a frame of
+   *  spread, grid or `tile` slot): a set of its own that sits in a frame of
    *  its own. A child nested at a datum is in its parent's set, so it is not
    *  in a slot. Read by a layer's σ solve (`solveLayerScales`). */
   public inSlot(dim: 0 | 1): boolean {
@@ -1724,7 +1769,7 @@ export class GoFishNode {
    *  slot (a spread or grid slot), or inside a node that is, short of a
    *  scope ({@link isScope}). A node in no slot (a rule laid over a bar
    *  chart) is given the whole room of what holds it, and a node its parent
-   *  gives a room ({@link givenRoom}: a region's cell, a treemap tile) is
+   *  gives a room ({@link givenRoom}: a region's cell, a `tile` cell) is
    *  given that room. */
   private inShare(axis: 0 | 1): boolean {
     for (let n: GoFishNode | undefined = this; n !== undefined; ) {
@@ -1737,7 +1782,7 @@ export class GoFishNode {
   }
 
   /** Whether this node's parent gives it its room on `axis`, from outside
-   *  its content: a region's cell (a `partition` cell) or a treemap tile
+   *  its content: a region's cell (a `partition` cell) or a `tile` cell
    *  (`SharingPlan.rooms`). A child its own data places in its parent's
    *  frame ({@link placedByOwnData}: a layer of marks in a cell, or a
    *  partition inside another's cell) is in its cell already and reads the
@@ -1756,7 +1801,7 @@ export class GoFishNode {
    * solves σ for its content in that room. That is a node with a size of
    * its own, a literal or a data value; a coordinate space; a node whose
    * room its parent gives
-   * it ({@link givenRoom}: a region's cell, a treemap tile), with content
+   * it ({@link givenRoom}: a region's cell, a `tile` cell), with content
    * that σ sizes (of any type but UNDEFINED: data, or a chain of keyed
    * parts); and a node of pinned data in a slot (a facet panel). Content
    * that σ does not size (a text, a shape that fills) has nothing to solve,
@@ -1935,7 +1980,7 @@ export class GoFishNode {
    *
    * A room that is given only at layout, from outside a scope whose content
    * is in a σ of its own (a share-sized node, a facet panel, a region cell,
-   * a treemap tile, a coordinate space), is neither a constant nor a σ term
+   * a `tile` cell, a coordinate space), is neither a constant nor a σ term
    * of the content's scope, so a percent there is an error.
    * TODO(#1176): a percent inside such a scope needs its room, a term of the
    * outer σ, inside the inner scope's claim.
@@ -1963,7 +2008,7 @@ export class GoFishNode {
             ? "a coordinate space, whose room is in its own units (#1238)"
             : n.parent !== undefined && n.isScope(axis)
               ? `the room ${n.type} is given at layout (a facet panel, a ` +
-                `region cell or a treemap tile)`
+                `region cell or a tile cell)`
               : undefined;
       if (given !== undefined)
         throw new Error(
@@ -2110,6 +2155,16 @@ export class GoFishNode {
     return (
       this._chartRing === true && !hasOrigin(this._underlyingSpace?.[axis])
     );
+  }
+
+  /**
+   * Whether this node or an ancestor is an overlay, no pointer target
+   * ({@link overlay}).
+   */
+  private underOverlay(): boolean {
+    for (let n: unknown = this; n instanceof GoFishNode; n = n.parent)
+      if (n.overlay) return true;
+    return false;
   }
 
   /**
@@ -2470,8 +2525,10 @@ export class GoFishNode {
         if (show) this.axisDemand[dim] = ticksOf(dim);
         claim(dim, sig ?? AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
       } else if (space && !isUNDEFINED(space[dim]) && enabled.has(dim)) {
-        // A baseline magnitude ("free") owns no guide yet — only an anchored
-        // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
+        // A baseline magnitude ("free") owns no guide yet, and an
+        // origin-less space ("none") has no positions to name, so it owns
+        // none at all (its scale gets a length entry in the legend). Only an
+        // anchored (POSITION) or ORDINAL axis does.
         const s = space[dim];
         const prior = claimed.get(dim);
         let sig: string | undefined;
@@ -2852,18 +2909,17 @@ export class GoFishNode {
    * type on `axis` is `space`, the type its whole niced domain is read in
    * there: `space` placed ({@link placedSpace}). A plot covers that domain,
    * in its claim (`domainPlan` in `layer`) and in its layout
-   * ({@link domainSpan}). On a difference axis (no data 0, an axis over
-   * widths) the domain is a width, which its content sits centered in, as
-   * the axis draws it (`elaborateDifferenceAxis`) and as the claim widens
-   * (`widenTo`). Undefined on any other node, on an axis with no axis over
-   * it, and outside a render.
+   * ({@link domainSpan}). On a space with no data 0 the domain is a width,
+   * which its content sits centered in, as the claim widens (`widenTo`).
+   * Undefined on any other node, on a space that maps no domain, and
+   * outside a render.
    */
   public coveredDomain(
     axis: 0 | 1,
     space: UnderlyingSpace | undefined
   ): UnderlyingSpace | undefined {
     return this._axesBeside === true &&
-      (hasOrigin(space) || axisOver(space) === "delta") &&
+      (hasOrigin(space) || domainOver(space) === "widths") &&
       this.tryGetRenderSession()?.keyedDomains !== undefined
       ? this.placedSpace(space!, axis)
       : undefined;
@@ -2877,9 +2933,9 @@ export class GoFishNode {
    * is (`KeyedDomains.scope`). That box is a plot, and a plot covers its
    * niced domain, not only the hull of its marks, so an axis seated beside
    * it sits at the domain's floor, on both axes (a facet panel that draws
-   * only its y axis still covers the shared x domain). On a difference
-   * axis the niced width is centered on the content's. Undefined on any
-   * other node, and on an axis with no axis over it.
+   * only its y axis still covers the shared x domain). On a space with no
+   * data 0 the domain's width is centered on the content's. Undefined on
+   * any other node, and on a space that maps no domain.
    */
   public domainSpan(axis: 0 | 1): [number, number] | undefined {
     const frame = this.layoutFrames?.[axis];
@@ -2892,10 +2948,10 @@ export class GoFishNode {
       undefined
     )[0];
     if (!isCONTINUOUS(niced) || !isCONTINUOUS(space)) return undefined;
-    // A difference axis's niced width, centered on the content's, in the
-    // content's frame (`differenceSpan`), as the axis draws it.
+    // A width domain, centered on the content's, in the content's frame
+    // (`differenceSpan`).
     const [min, max] =
-      axisOver(space) === "delta"
+      domainOver(space) === "widths"
         ? differenceSpan(space, niced)
         : [niced.dataInterval.min, niced.dataInterval.max];
     if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
@@ -3307,15 +3363,20 @@ export class GoFishNode {
     return drawn;
   }
 
-  /** The node's drawing under its `filter` option, which filters the whole
+  /** The node's drawing under its `effect` option, which filters the whole
    *  drawing as one picture. Both {@link INTERNAL_lower} and a lent drawing
    *  ({@link INTERNAL_lendDrawing}) draw through it. */
   private filtered(
     items: DisplayList.DisplayItem[]
   ): DisplayList.DisplayItem[] {
-    if (this._filter === undefined || items.length === 0) return items;
+    if (items.length === 0 || this._filter === undefined) return items;
     return [
-      { kind: "group", transform: {}, filter: this._filter, children: items },
+      {
+        kind: "group",
+        transform: {},
+        filter: this._filter,
+        children: items,
+      },
     ];
   }
 
@@ -3372,6 +3433,13 @@ export class GoFishNode {
         this.paintedStyle ??= style;
       }
     }
+    if (this.title !== undefined) {
+      const own = items.filter((item) => item.id === this.uid);
+      for (const item of own.length > 0 ? own : items) item.title = this.title;
+    }
+    // A container lowers its leaves through their own `lowerWith`, so each
+    // node looks up its ancestors for the flag, as for visibility.
+    if (items.length > 0 && this.underOverlay()) clearPointerEvents(items);
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure
@@ -3696,7 +3764,7 @@ export class GoFishNode {
 
   /** Whether the bake stops at this node, which lowers its own subtree
    *  (`coordinateTransforms/bake.ts`): a boundary type, or a node with a
-   *  `filter`, which draws its subtree as one filtered picture. */
+   *  `effect`, which draws its subtree as one picture. */
   public isBakeBoundary(): boolean {
     return BAKE_BOUNDARY_TYPES.has(this.type) || this._filter !== undefined;
   }

@@ -22,6 +22,7 @@ import type {
 } from "./schema.js";
 import {
   compositePlan,
+  filterAttribute,
   LUMINANCE_TO_ALPHA_FILTER,
   usesLuminanceToAlpha,
 } from "./composite.js";
@@ -51,6 +52,8 @@ const styleAttrs = (style: Style | undefined): string => {
     parts.push(`paint-order="${esc(style.paintOrder)}"`);
   if (style.strokeLinejoin !== undefined)
     parts.push(`stroke-linejoin="${esc(style.strokeLinejoin)}"`);
+  if (style.pointerEvents !== undefined)
+    parts.push(`pointer-events="${esc(style.pointerEvents)}"`);
   return parts.length ? " " + parts.join(" ") : "";
 };
 
@@ -58,17 +61,23 @@ const styleAttrs = (style: Style | undefined): string => {
  *  filter def. */
 const itemToSVG = (item: DisplayItem, filterId: string): string => {
   const s = styleAttrs(item.style);
+  // An item's `title` is its first child, an SVG `<title>` (a composite's
+  // is its group's, `compositeToSVG`).
+  const title =
+    item.title !== undefined ? `<title>${esc(item.title)}</title>` : "";
+  // A primitive with no children closes itself.
+  const close = (tag: string) => (title ? `>${title}</${tag}>` : "/>");
   switch (item.kind) {
     case "rect": {
       const r =
         (item.rx !== undefined ? ` rx="${item.rx}"` : "") +
         (item.ry !== undefined ? ` ry="${item.ry}"` : "");
-      return `<rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}"${r}${s}/>`;
+      return `<rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}"${r}${s}${close("rect")}`;
     }
     case "ellipse":
-      return `<ellipse cx="${item.cx}" cy="${item.cy}" rx="${item.rx}" ry="${item.ry}"${s}/>`;
+      return `<ellipse cx="${item.cx}" cy="${item.cy}" rx="${item.rx}" ry="${item.ry}"${s}${close("ellipse")}`;
     case "path":
-      return `<path d="${esc(item.d)}"${s}/>`;
+      return `<path d="${esc(item.d)}"${s}${close("path")}`;
     case "text": {
       const fs =
         item.fontSize !== undefined ? ` font-size="${item.fontSize}px"` : "";
@@ -96,14 +105,14 @@ const itemToSVG = (item: DisplayItem, filterId: string): string => {
         item.rotate !== undefined
           ? ` transform="rotate(${item.rotate} ${item.x} ${item.y})"`
           : "";
-      return `<text x="${item.x}" y="${item.y}"${fs}${ff}${fst}${fw}${ta}${db}${rot}${s}>${esc(item.text)}</text>`;
+      return `<text x="${item.x}" y="${item.y}"${fs}${ff}${fst}${fw}${ta}${db}${rot}${s}>${title}${esc(item.text)}</text>`;
     }
     case "image": {
       const par =
         item.preserveAspectRatio !== undefined
           ? ` preserveAspectRatio="${esc(item.preserveAspectRatio)}"`
           : "";
-      return `<image x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" href="${esc(item.href)}"${par}${s}/>`;
+      return `<image x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" href="${esc(item.href)}"${par}${s}${close("image")}`;
     }
     case "group": {
       const t = item.transform;
@@ -112,14 +121,9 @@ const itemToSVG = (item: DisplayItem, filterId: string): string => {
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const tr = parts.length ? ` transform="${parts.join(" ")}"` : "";
-      const f = item.filter;
-      const fa =
-        f?.kind === "css"
-          ? ` filter="${esc(f.value)}"`
-          : f?.kind === "luminanceToAlpha"
-            ? ` filter="url(#${filterId})"`
-            : "";
-      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
+      const f = filterAttribute(item.filter, filterId);
+      const fa = f !== undefined ? ` filter="${esc(f)}"` : "";
+      return `<g${tr}${fa}${s}>${title}${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
     }
     case "composite":
       return compositeToSVG(item, filterId);
@@ -174,9 +178,12 @@ const compositeToSVG = (item: CompositeItem, filterId: string): string => {
       ? `<g style="mix-blend-mode:${esc(l.blendMode)}">${out}</g>`
       : out;
   });
+  // Its title is the group's first child, as a primitive's is its element's.
+  const title =
+    item.title !== undefined ? `<title>${esc(item.title)}</title>` : "";
   return (
     `<g style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
-    `<defs>${defs}</defs>${drawn.join("")}</g>`
+    `${title}<defs>${defs}</defs>${drawn.join("")}</g>`
   );
 };
 

@@ -90,8 +90,7 @@ export const DailyHighsOverReadings: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(readings, { w: args.w, h: args.h })
-      .flow(scatter({ by: "time", x: "time", y: "temp" }))
-      .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .mark(line({ x: "time", y: "temp", stroke: "steelblue", strokeWidth: 2 }))
       .layer(
         chart(dailyHighs)
           .flow(scatter({ by: "time", x: "time", y: "temp" }))

@@ -10,6 +10,7 @@ from gofish import (
     chart,
     circle,
     datum,
+    field,
     fr,
     layer,
     percent,
@@ -42,11 +43,15 @@ def _panel(fill, label, **dims):
     )
 
 
-def story_area_fr_gaps():
+def story_ribbon_chart_fr_gaps():
     return (
-        chart(SEAFOOD, w=500, h=200)
-        .flow(spread(by="lake", dir="x", spacing=fr(1)), stack(by="species", dir="y"))
-        .mark(ribbon(h="count", fill="species", opacity=0.8)),
+        chart(SEAFOOD, w=560, h=240)
+        .flow(
+            spread(by="lake", dir="x", spacing=fr(1)),
+            stack(by=field("species").sort("count"), dir="y"),
+        )
+        .mark(rect(w=24, h="count", fill="species"))
+        .layer(ribbon(opacity=0.8)),
         {},
     )
 

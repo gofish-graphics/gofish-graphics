@@ -24,5 +24,5 @@ def story_iptp():
                 y={"kind": "align", "alignment": "start"},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

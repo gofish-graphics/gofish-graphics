@@ -19,7 +19,7 @@ import {
   LayerBuilder,
   PREVIOUS_LAYER_MARKS,
 } from "../ast/marks/chart";
-import type { AxesOptions, View } from "../ast/gofish";
+import type { AxesOptions, LegendOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
 import { RelateOperand } from "../ast/constraints";
 import type {
@@ -401,11 +401,17 @@ function operatorFromIR(
   ctx: IRContext
 ): Operator<any, any> | null {
   const { bridge } = ctx;
-  const { type, translate, label, ...opts } = op as Record<string, any>;
+  const { type, translate, label, name, ...opts } = op as Record<string, any>;
   let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
     bridge,
   });
   if (operator === undefined) return null;
+  if (
+    operator &&
+    name !== undefined &&
+    typeof (operator as any).name === "function"
+  )
+    operator = (operator as any).name(name);
   if (
     operator &&
     label !== undefined &&
@@ -518,7 +524,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
 /**
  * `mark` with the modifiers its IR carries, chained in the order a JS
  * author writes them: `.translate(...)`, `.name(...)`, `.zOrder(...)`,
- * `.hidden(...)`. A `zOrder` or `hidden` is a constant, or a Python function
+ * `.hidden(...)`, `.tooltip(...)`. A `zOrder` or `hidden` is a constant, or a Python function
  * (`{__gofish_lambda}`), which the mark resolves over the inputs it is
  * applied to (`inputsResolver`), as it calls a JS `.zOrder((d) => ...)` per
  * input.
@@ -530,6 +536,7 @@ function withMarkMeta<M>(
     name?: unknown;
     zOrder?: unknown;
     hidden?: unknown;
+    tooltip?: unknown;
   },
   ctx: IRContext
 ): M {
@@ -544,6 +551,9 @@ function withMarkMeta<M>(
   }
   if (spec.hidden != null && typeof out.hidden === "function") {
     out = out.hidden(unwrapOpts(spec.hidden, ctx.bridge));
+  }
+  if (spec.tooltip != null && typeof out.tooltip === "function") {
+    out = out.tooltip(spec.tooltip === true ? undefined : spec.tooltip);
   }
   return out;
 }
@@ -677,7 +687,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   }
 
   // Combinator-form marks: a layout operator (`spread`, `layer`, `arrow`,
-  // `treemap`, Porter-Duff) used as a mark, with explicit nested children.
+  // `tile`, Porter-Duff) used as a mark, with explicit nested children.
   if (spec.__combinator) {
     const childMarks = mapMarkChildren(
       (spec.children ?? []) as MarkSpec[],
@@ -706,13 +716,14 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     return withMarkMeta(mark, spec, ctx);
   }
 
-  // `name`, `zOrder` and `hidden` are not factory options: `withMarkMeta`
+  // `name`, `zOrder`, `hidden` and `tooltip` are not factory options: `withMarkMeta`
   // applies them below.
   const {
     type,
     name: _name,
     zOrder: _zOrder,
     hidden: _hidden,
+    tooltip: _tooltip,
     ...rest
   } = spec as any;
   // Label is an array of `{accessor, ...opts}` specs — pull out and call the
@@ -870,7 +881,7 @@ export interface RenderIROptions {
   w?: number;
   h?: number;
   axes?: AxesOptions;
-  legend?: boolean;
+  legend?: LegendOptions;
   debug?: boolean;
 }
 

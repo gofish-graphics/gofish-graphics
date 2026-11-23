@@ -6,7 +6,7 @@ import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
 import { withKindValues } from "../strategyKind";
 import { rowsReached } from "../datumProjection";
-import type { AxesOptions } from "../gofish";
+import type { AxesOptions, LegendOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
@@ -25,7 +25,7 @@ import {
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
 import { resolveRefData } from "./resolveRefData";
-import { nameableMark } from "./createOperator";
+import { nameableMark, type RegistrationTag } from "./createOperator";
 import type { RelationalMark } from "./chart";
 import {
   layerKey,
@@ -74,13 +74,24 @@ export type ChartOptions = {
    */
   axes?: AxesOptions;
   /**
-   * Whether to render the color-scale legend for this chart. Default `true`:
-   * a chart whose marks resolve a categorical or gradient color scale grows a
-   * swatch column / colorbar beside its content. `false` suppresses it — the
-   * colors still come from the scale, only the chrome is dropped (e.g. a
-   * 72-species basemap where a swatch column would eat the canvas).
+   * Which legend entries to draw for this chart. A legend holds the guides
+   * of the scales that have no place in the plot: a color scale (a swatch
+   * column, or a colorbar for a gradient), and a length scale (the widths
+   * of a space with no origin, such as a streamgraph's thickness), drawn as
+   * a bracket of a round amount. Scales that have positions get axes
+   * instead (`axes`). By default the color entry is drawn, and a length
+   * entry is drawn on a dim whose axes the chart draws (`axes`), since it
+   * stands in for that dim's axis.
+   * - `true` draws every entry; `false` draws none. The scales still paint
+   *   the marks: only the chrome is dropped (e.g. a 72-species basemap
+   *   where a swatch column would eat the canvas).
+   * - `{ color?, x?, y? }` sets each entry on its own, and one left out
+   *   keeps its default: `color: false` drops the color entry, `y: false` drops the
+   *   length entry of the scales along y, and `y: { title }` names its
+   *   amount ("2000 unemployed (thousands)"; without a title, the measure's
+   *   name, as an axis title is).
    */
-  legend?: boolean;
+  legend?: LegendOptions;
   /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
   padding?: number;
   /**
@@ -120,14 +131,15 @@ export type ChartOptions = {
  * produced by createMark, can itself carry a name).
  */
 function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
-  const layerName = (node as { __layerRegistration?: string | symbol })
-    .__layerRegistration;
-  if (layerName) {
-    layerContext.register(layerName, node);
+  const tagged = node as RegistrationTag;
+  const keys = tagged.__layerRegistration;
+  if (keys) {
+    // A node is filed under each name it was given: a mark's own, and the
+    // name of each named operator whose group it is.
+    for (const key of keys) layerContext.register(key, node);
     // One-shot — repeat resolves (e.g. embedded Layer renders) would
     // otherwise re-push the same node.
-    (node as { __layerRegistration?: string | symbol }).__layerRegistration =
-      undefined;
+    tagged.__layerRegistration = undefined;
   }
 }
 
@@ -509,7 +521,7 @@ function rejectUnfusedOptions(fusable: RelationalFusable | undefined): void {
 /** The chart-level config a builder threads through to every terminal. */
 type RenderMeta = {
   axes?: AxesOptions;
-  legend?: boolean;
+  legend?: LegendOptions;
   colorConfig?: ColorConfig;
   /** The root tier's coordinate space, read by `LayerBuilder.resolve` so it can
    *  HOIST it over every tier rather than let the root tier keep it. */
@@ -1456,7 +1468,7 @@ async function resolveForRender(
     options: {
       ...options,
       axes: (options.axes as AxesOptions | undefined) ?? meta.axes,
-      legend: (options.legend as boolean | undefined) ?? meta.legend,
+      legend: (options.legend as LegendOptions | undefined) ?? meta.legend,
       colorConfig: meta.colorConfig,
     },
   };

@@ -33,5 +33,5 @@ def story_oak_tree_vis():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 520, "h": 520},
+        {},
     )

@@ -141,6 +141,46 @@ chart(select_all("bars")) \
     .mark(ribbon(opacity=0.8))
 ```
 
+## `spread` or `stack`
+
+A `spread` keeps each child in a space of its own and puts `spacing` between
+them. A [`stack`](./stack) adds its children's data amounts, so they share
+one data axis on `dir`. A stack is for data: every part needs a data size on
+`dir`, and a part sized in pixels or by its content is an error. Pixel boxes,
+text, images and nested layouts only touch, so lay them out with
+`spread(..., spacing=0)`. `glue=True` makes a spread a stack, with the same
+rule.
+
+## Baselines
+
+`baseline` sets where the spread puts its own 0, the point its parent lines
+up with its other children. It takes a member of the
+[`Baseline`](/python/api/baseline) family: `Baseline.start()`,
+`Baseline.end()`, `Baseline.middle()` or `Baseline.at(part, point)`. The
+start of a spread is the start of its first child, and its end is the end of
+its last child. The gaps between children are part of the way from one to
+the other. Without `baseline`, a spread's 0 is its start.
+`Baseline.wiggle()` is for `stack` only, and on a spread it is an error.
+
+A spread's baseline only places it. The spread keeps its space, a sequence
+of separate spaces, so it draws no data axis along `dir`. Here each row's 0
+is the middle of its Neutral bar, and the rows keep the gaps between their
+bars:
+
+```python
+chart(survey, color=likert_colors, axes={"x": False, "y": True}).flow(
+    spread(by="question", dir="y"),
+    spread(by="response", dir="x", spacing=3, baseline=Baseline.at("Neutral", 0.5)),
+).mark(rect(w="count", fill="response"))
+```
+
+::: gofish example:diverging-likert-chart-with-gaps hidden
+:::
+
+A parent's `alignment="start"`, `"middle"` or `"end"` draws the same
+picture as giving each child that baseline and keeping the parent's
+default, `alignment="baseline"`.
+
 ## Field-expression pipeline {#field-expression-pipeline}
 
 `field(name)` returns a chainable accessor — a builder where each method
@@ -153,10 +193,117 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.median()`, `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
-  position).
+  position). `.map(fn)` and `.reduce(fn)` compute values with your own
+  function ([below](#map-and-reduce)).
 
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 raises.
+
+### `map` and `reduce` {#map-and-reduce}
+
+```python
+field(name).map(lambda x, i, xs: y, unit=None)
+field(name).reduce(lambda xs: result, unit=None)
+```
+
+`map` gives one new value per row: `fn(x, i, xs)`, where `xs` is all of the
+group's values. `fn` may take fewer arguments, as in `lambda x: x * 2`. Maps
+come before a reduce.
+
+`reduce` runs once per group on the group's values. Its result is lifted by
+its shape:
+
+| The reduce returns | The expression is                                                          |
+| ------------------ | -------------------------------------------------------------------------- |
+| a number           | one value per group, for any value channel                                 |
+| a dict             | an object with one method per key, read with `s.lo()`, each lifted in turn |
+| a list             | an error; return a dict instead                                            |
+| a function         | an error: a Python reduce cannot return a function of `t` yet              |
+
+A channel takes only a number, so a dict must be read down to one. Nothing
+chains after a value: `field("v").reduce(f).sum()` raises when the chart
+renders.
+
+`unit` mirrors the result's shape. It is one unit for every number of the
+result, or a dict with a unit per key. A number whose unit is not declared
+cannot be summed or stacked.
+
+Each Python map or reduce is called across the bridge once per chart, with
+every group's values, and answers one result per group. A function of `t`
+is read many times during layout, which is synchronous, so a Python reduce
+cannot return one.
+
+```python
+import statistics
+
+def five_numbers(xs):
+    q1, median, q3 = statistics.quantiles(xs, n=4, method="inclusive")
+    return {"lo": min(xs), "q1": q1, "median": median, "q3": q3, "hi": max(xs)}
+
+box = field("body_mass_g").reduce(five_numbers, unit="g")
+
+chart(penguins).flow(spread(by="species", dir="x")).mark(
+    layer([
+        rect(w=1, y=box.lo(), y2=box.hi()),
+        rect(w=16, y=box.q1(), y2=box.q3()),
+    ])
+)
+```
+
+Each named method is a built-in callback, on the same path:
+
+| Method         | Stands for                                                |
+| -------------- | --------------------------------------------------------- |
+| `.sum()`       | `reduce(lambda xs: sum(xs))`, missing values aside        |
+| `.mean()`      | `reduce(statistics.mean)`, missing values aside           |
+| `.median()`    | `reduce(statistics.median)`, missing values aside         |
+| `.count()`     | `reduce(len)`, in the unit "count"                        |
+| `.distinct()`  | `reduce(lambda xs: len(set(xs)))`, in the unit "count"    |
+| `.normalize()` | `map(lambda x, i, xs: x / sum(xs))`, a share of the whole |
+
+The named methods run in JS and cross the bridge as data, with no call
+into Python.
+
+`map` and `reduce` read one column. A computation over several columns, such
+as a fit, belongs in [`derive`](/python/api/operators/derive)
+([why](/internals/design/api-design#data-types)).
+
+### Distribution members {#distribution-members}
+
+A column can hold a distribution, a [`Dist`](/python/api/dist), instead of
+numbers: `derive(kde("x"))` smooths each group's values into a kernel density
+that the column then holds ([`kde`](/python/api/dist#kde)). A field of such a column reads the
+distribution through these methods:
+
+| Method         | Gives                                                                      |
+| -------------- | -------------------------------------------------------------------------- |
+| `.density()`   | a function of `t`: the distribution's density                              |
+| `.domain()`    | a function of `t`: `t` itself, over the interval the density is drawn over |
+| `.cdf()`       | a function of `t`: the share of the mass at or below `t`, a ratio          |
+| `.quantile(p)` | one value per group: the inverse of the cdf at `p`                         |
+| `.median()`    | one value per group: `.quantile(0.5)`                                      |
+| `.mean()`      | one value per group: the distribution's mean                               |
+
+A kernel density is in the column's count per unit, so the densities of
+several groups add up and stack. `.domain()` is in the column's unit, so its
+axis joins the column's. Every row of a group holds the same distribution;
+different ones in one group are an error. In a cell of a
+[`partition`](/python/api/operators/partition#a-distribution-s-cells) by the same field, each method reads the
+distribution restricted to the cell. The other methods are an error on such
+a column.
+
+On a column of numbers, `.median()` and `.mean()` are the data's, and
+`.density()`, `.domain()`, `.cdf()` and `.quantile(p)` are an error that
+names `derive(kde("x"))`.
+They run in JS and cross the bridge as data.
+
+```python
+mass = field("Body Mass (g)")
+
+chart(penguins).flow(
+    stack(by="Species", dir="y"), derive(kde("Body Mass (g)"))
+).mark(ribbon(x=mass.domain(), h=mass.density(), fill="Species"))
+```
 
 One method is neither: `.between(lo, hi, closed=None)` returns a **field
 predicate** for [`filter`](/python/api/operators/filter) rather than appending
@@ -202,7 +349,7 @@ order.
 ```python
 # One bar per half-point cell of `rating`, height = row count per cell
 chart(data).flow(
-    spread(by=field("rating").bin(Bin.step(0.5)), dir="x")
+    spread(by=field("rating").bin(Binning.step(0.5)), dir="x")
 ).mark(rect(h=field("rating").count()))
 
 # One bar per month of the year, all Junes in one bar
@@ -224,11 +371,11 @@ holds its start and not its end. The partition is one of:
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | a [Calendar](/python/api/core/calendar) value | The calendar cells of a time column, in the column's zone. A level that is a part of a larger one gives its parts, a cycle: `Calendar.month` is the month of the year, so all Junes are one cell. `Calendar.year` and `Calendar.week` are parts of nothing and give cells of the time line. |
 | a list of Calendar values                     | A product, `[Calendar.year, Calendar.month]`: one cell where one cell of each level meets one of the next (the June of 2015), labeled `"Jun 2015"`.                                                                                                                                         |
-| `Bin.step(size)`                              | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
-| `Bin.thresholds(n)`                           | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `Bin.thresholds(10)`.                                                                                                                                                                  |
-| `Bin.thresholds([t1, ...])`                   | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
+| `Binning.step(size)`                          | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
+| `Binning.thresholds(n)`                       | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `Binning.thresholds(10)`.                                                                                                                                                              |
+| `Binning.thresholds([t1, ...])`               | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
 
-`Bin.step` and `Bin.thresholds` are members of the [`Bin`](/python/api/bin)
+`Binning.step` and `Binning.thresholds` are members of the [`Binning`](/python/api/binning)
 family. A thresholds partition includes its top edge, so the largest value
 falls in the last cell. Custom cell labels (`.format`) are JS-only for now.
 
@@ -265,7 +412,7 @@ on a continuous axis, use [`partition`](/python/api/operators/partition) with th
 # Rows with a null/missing "genre" are excluded entirely, instead of
 # forming their own "null" group
 chart(data).flow(
-    treemap(by=field("genre").drop_nulls(), size="worldwideGross")
+    tile(by=field("genre").drop_nulls(), size="worldwideGross")
 )
 ```
 

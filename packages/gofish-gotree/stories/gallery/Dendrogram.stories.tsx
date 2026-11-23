@@ -107,7 +107,7 @@ export const Dendrogram: StoryObj = {
         }),
       },
       dendroData
-    ).render(container, { w: 900, h: 520 });
+    ).render(container);
     return container;
   },
 };

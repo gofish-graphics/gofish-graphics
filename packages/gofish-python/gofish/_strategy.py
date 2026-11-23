@@ -4,7 +4,7 @@ A kind of a strategy family with no required option is a value as it is, and
 calling it sets options: ``Curve.monotone`` is ``Curve.monotone()``,
 ``Calendar.month`` is ``Calendar.month()``, and ``Calendar.month(every=3)``
 sets its step. A kind with a required option stays a function only
-(``Bin.step(0.5)``). Mirrors JS ``gofish-graphics/src/ast/strategyKind.ts``.
+(``Binning.step(0.5)``). Mirrors JS ``gofish-graphics/src/ast/strategyKind.ts``.
 
 The generated family modules (``gofish/<family>.py``) apply
 :func:`bare_kind` to each such factory. The bare kind is the dict the

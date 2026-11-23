@@ -15,7 +15,7 @@ gf.layer([
   gf.position({ x: 20, y: 30 }, [
     gf.rect({ w: 60, h: 40, fill: gf.color.blue[2] }),
   ]),
-]).render(root, { w: 120, h: 90 });
+]).render(root);
 ```
 
 :::

@@ -5,13 +5,13 @@ order: 65
 # region
 
 Draws the cell it is in, such as the cell a
-[`partition`](/python/api/operators/partition) gives each group or the tile a
-[`treemap`](/python/api/operators/treemap) gives each child. A region has
+[`partition`](/python/api/operators/partition) gives each group or the cell a
+[`tile`](/python/api/operators/tile) gives each child. A region has
 no size or position of its own: on each axis where it is in a cell, it is
 that cell, placed by its data through the partition's scale, and on an axis
 where it is in no cell, it fills the space it is given.
 A region in a cell with an outline, such as a hexagon or a Voronoi cell of a
-partition over a binned struct, a cell of a treemap with `Tile.voronoi`, or
+partition over a binned struct, a cell of a `tile` with `Tiling.voronoi`, or
 the oval of an [`enclose`](/python/api/operators/enclose) around it,
 is drawn as that outline; any other region is drawn as a rectangle.
 
@@ -19,13 +19,13 @@ is drawn as that outline; any other region is drawn as a rectangle.
 :::
 
 ```python
-from gofish import Bin, Color, chart, field, partition, region
+from gofish import Binning, Color, chart, field, partition, region
 
 chart(movies, color=Color.gradient("blues"), axes=True).flow(
     partition(
         by={
-            "x": field("IMDB Rating").bin(Bin.step(0.5)),
-            "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+            "x": field("IMDB Rating").bin(Binning.step(0.5)),
+            "y": field("Rotten Tomatoes Rating").bin(Binning.step(5)),
         }
     )
 ).mark(region(fill=field("IMDB Rating").count())).render(w=480, h=320)

@@ -56,6 +56,7 @@ import {
   pointInRing,
   segDist,
   cross,
+  convexHull,
   segsMeet,
   windingAt,
 } from "../../geometry/plane";
@@ -63,7 +64,6 @@ import {
   boxGrid,
   boxOf,
   ccw,
-  convexHull,
   type Box,
   type Disc,
   type Member,

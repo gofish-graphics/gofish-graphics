@@ -7,7 +7,7 @@ https://seaborn.pydata.org/generated/seaborn.jointplot.html
 """
 
 from gofish import (
-    Bin,
+    Binning,
     Constraint,
     layer,
     chart,
@@ -43,14 +43,14 @@ def story_default():
 
     top_hist = (
         chart(data, h=80)
-        .flow(partition(by=field("Beak Length (mm)").bin(Bin.step(2)), dir="x"))
+        .flow(partition(by=field("Beak Length (mm)").bin(Binning.step(2)), dir="x"))
         .mark(rect(h=field("Beak Length (mm)").count(), fill="steelblue"))
         .name("topHist")
     )
 
     right_hist = (
         chart(data, w=80)
-        .flow(partition(by=field("Beak Depth (mm)").bin(Bin.step(1)), dir="y"))
+        .flow(partition(by=field("Beak Depth (mm)").bin(Binning.step(1)), dir="y"))
         .mark(rect(w=field("Beak Depth (mm)").count(), fill="steelblue"))
         .name("rightHist")
     )

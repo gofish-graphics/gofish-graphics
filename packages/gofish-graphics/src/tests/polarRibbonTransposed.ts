@@ -1,11 +1,10 @@
 import _ from "lodash";
 import { gofish } from "../ast/gofish";
 import { value } from "../ast/data";
-import { stack } from "../ast/graphicalOperators/stack";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { line, Curve } from "../lib";
+import { line, Curve, spread } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { cubes } from "rybitten/cubes";
@@ -63,11 +62,11 @@ export const testPolarRibbonTransposed = (size: { width: number; height: number 
     { width: size.width, height: size.height, transform: { x: 400, y: 400 } },
     coord({ transform: clock() }, [
       layer([
-        stack(
+        spread(
           { y: 100, dir: 0, spacing: 0, alignment: "start" },
           // TODO: I could probably make the width be uniform flexible basically
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
-            stack({ dir: 1, alignment: "middle" },
+            spread({ spacing: 0, dir: 1, alignment: "middle" },
               items.toReversed().map((d) =>
                 rect({
                   name: `${d.category}-${d.group}`,

@@ -123,17 +123,6 @@ export async function wrapRing(
   return root;
 }
 
-/** `root` and the nodes below it, breadth first: every node at one depth
- *  before any deeper one. */
-export function* breadthFirst(root: GoFishNode): Generator<GoFishNode> {
-  const queue: GoFishNode[] = [root];
-  for (let i = 0; i < queue.length; i++) {
-    const n = queue[i];
-    yield n;
-    for (const c of n.children) if (c instanceof GoFishNode) queue.push(c);
-  }
-}
-
 /** Stringify a tick value without floating-point noise (0.1 + 0.2 → "0.3").
  *  Shared by the axis and legend (colorbar) tick-label builders. It ignores
  *  the runtime's locale (no digit grouping, a period as the decimal point),

@@ -44,5 +44,5 @@ def story_htree_layout():
             ),
             sibling=alternate([H, V]),
         ),
-        {"w": 720, "h": 560},
+        {},
     )

@@ -11,8 +11,8 @@ captured DOM is byte-identical.
 import os
 
 from gofish import (
-    Bin,
-    Filter,
+    Binning,
+    Effect,
     atop,
     chart,
     circle,
@@ -55,7 +55,7 @@ def _build_children():
     """The shared `image + rect` pair — the image full-size in grays, the rect
     over the bottom half."""
     return [
-        image(href=BOTTLE_PNG, x=0, y=0, w=W, h=H, filter=Filter.grayscale),
+        image(href=BOTTLE_PNG, x=0, y=0, w=W, h=H, effect=Effect.grayscale),
         rect(x=0, y=SPLIT_Y_PX, w=W, h=SPLIT_H, fill=BG_COLOR),
     ]
 
@@ -96,7 +96,7 @@ def story_luminance_mask():
                     y=0,
                     w=W,
                     h=H,
-                    filter=Filter.luminance_to_alpha,
+                    effect=Effect.luminance_to_alpha,
                 ).hidden(),
                 cover,
             ]
@@ -114,7 +114,7 @@ def story_intersect_painted():
             stroke="#467DA8",
             stroke_width=2,
         ),
-        {"w": 220, "h": 180},
+        {},
     )
 
 
@@ -128,7 +128,7 @@ def story_intersect_image_fill():
             ],
             fill="#467DA8",
         ),
-        {"w": 193, "h": 678},
+        {},
     )
 
 
@@ -137,7 +137,7 @@ def story_intersect_in_cells():
     # cell draws its own copy, centered in that cell, as a layer would be.
     return (
         chart([{"v": 5}, {"v": 15}, {"v": 25}], w=480)
-        .flow(partition(by=field("v").bin(Bin.step(10)), dir="x"))
+        .flow(partition(by=field("v").bin(Binning.step(10)), dir="x"))
         .mark(
             intersect(
                 [
@@ -154,7 +154,6 @@ def story_intersect_in_cells():
 # No fill: each operand draws its own paint where the result keeps it. A fill:
 # the result is one new shape.
 
-_PAIR_SIZE = {"w": 220, "h": 180}
 _FILL = "#D1E4F6"
 
 
@@ -171,38 +170,38 @@ def _pair():
 
 
 def story_union_shapes():
-    return union(_pair()), _PAIR_SIZE
+    return union(_pair()), {}
 
 
 def story_union_filled():
-    return union(_pair(), fill=_FILL), _PAIR_SIZE
+    return union(_pair(), fill=_FILL), {}
 
 
 def story_intersect_shapes():
-    return intersect(_pair()), _PAIR_SIZE
+    return intersect(_pair()), {}
 
 
 def story_subtract_shapes():
-    return subtract(_pair()), _PAIR_SIZE
+    return subtract(_pair()), {}
 
 
 def story_subtract_filled():
-    return subtract(_pair(), fill=_FILL), _PAIR_SIZE
+    return subtract(_pair(), fill=_FILL), {}
 
 
 def story_exclude_shapes():
-    return exclude(_pair()), _PAIR_SIZE
+    return exclude(_pair()), {}
 
 
 def story_exclude_filled():
-    return exclude(_pair(), fill=_FILL), _PAIR_SIZE
+    return exclude(_pair(), fill=_FILL), {}
 
 
 def story_atop_shapes():
-    return atop(_pair()), _PAIR_SIZE
+    return atop(_pair()), {}
 
 
 def story_hidden_mask():
     # A hidden operand gives its shape and no paint: the square, clipped to the
     # circle, with the circle itself not drawn.
-    return intersect([_disk().hidden(), _square()]), _PAIR_SIZE
+    return intersect([_disk().hidden(), _square()]), {}

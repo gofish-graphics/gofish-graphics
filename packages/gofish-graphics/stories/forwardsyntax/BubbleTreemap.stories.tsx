@@ -55,7 +55,7 @@ export const Default: StoryObj = {
         pack()
       )
       .mark(country)
-      .render(container, { w: 720, h: 600 });
+      .render(container);
 
     return container;
   },
@@ -88,7 +88,7 @@ export const Uncertainty: StoryObj = {
         pack()
       )
       .mark(country)
-      .render(container, { w: 760, h: 640 });
+      .render(container);
 
     return container;
   },
@@ -123,7 +123,7 @@ export const Composed: StoryObj = {
     chart(countryPopulations)
       .flow(bubbleTreemap({ by: ["continent", "region"] }))
       .mark(country)
-      .render(container, { w: 720, h: 600 });
+      .render(container);
 
     return container;
   },

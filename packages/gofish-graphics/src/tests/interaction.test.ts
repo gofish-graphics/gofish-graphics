@@ -927,6 +927,86 @@ async function main() {
     ok("drag inactive after pointerup", dr.isActive() === false);
   }
 
+  /* ---------- a captured drag: events retargeted to the host ---------- */
+  // A browser retargets every event of a captured pointer to the element that
+  // holds the capture, so after the press a drag's moves and its release
+  // arrive with `target === container`, wherever the pointer is. happy-dom
+  // neither captures nor retargets, so the test does it: it records the
+  // capture the drag asks for and dispatches the later events on the
+  // container itself. A drag whose rule re-runs the chart on every move also
+  // replaces the svg mid-drag, which must not lose the capture.
+  console.log("\na captured drag survives retargeting and re-runs");
+  {
+    const container = makeContainer() as any;
+    const dr = drag();
+    let runs = 0;
+    await chart(data, { axes: false })
+      .flow(spread({ by: "cat", dir: "x" }))
+      .mark(rect({ h: "count" }))
+      .layer(
+        rect({
+          y: () => {
+            runs++;
+            return (dr.current()?.x ?? 0) / 10;
+          },
+          h: 2,
+        })
+      )
+      .render(container, { w: 200, h: 120 });
+    await settle();
+    const captured = new Set<number>();
+    container.setPointerCapture = (id: number) => captured.add(id);
+    container.releasePointerCapture = (id: number) => captured.delete(id);
+    container.hasPointerCapture = (id: number) => captured.has(id);
+    const P = (globalThis as any).PointerEvent;
+    const svg0 = container.querySelector("svg");
+    svg0.dispatchEvent(
+      new P("pointerdown", {
+        clientX: 10,
+        clientY: 10,
+        pointerId: 7,
+        bubbles: true,
+      })
+    );
+    ok("the drag captured the pointer on the host", captured.has(7));
+    await settle();
+    ok(
+      "the press re-ran the chart (the svg was replaced)",
+      container.querySelector("svg") !== svg0 && runs > 1,
+      String(runs)
+    );
+    // Past the svg's right edge: a captured move lands on the host.
+    container.dispatchEvent(
+      new P("pointermove", {
+        clientX: 260,
+        clientY: 20,
+        pointerId: 7,
+        bubbles: true,
+      })
+    );
+    ok(
+      "a captured move reaches the drag",
+      dr.current()?.x === 260,
+      JSON.stringify(dr.current())
+    );
+    await settle();
+    container.dispatchEvent(
+      new P("pointerup", {
+        clientX: 250,
+        clientY: 30,
+        pointerId: 7,
+        bubbles: true,
+      })
+    );
+    ok("a captured release ends the drag", dr.isActive() === false);
+    ok(
+      "the release is where it happened",
+      dr.current()?.x === 250,
+      JSON.stringify(dr.current())
+    );
+    await settle();
+  }
+
   /* ------------- local point honors a scaled screen CTM ------------- */
   // When the svg is visually scaled (CSS transform — e.g. Storybook's preview
   // zoom), client coords must be mapped through the inverse screen CTM or

@@ -37,6 +37,16 @@ two operators cover much of the same ground by different routes. When a
 degenerate overlap exists, build it through one shared mechanism so the
 operators cannot drift apart.
 
+**Stacks are in data space.** A `stack` glues its children's spaces into one
+space, and a `spread` keeps them separate. So a stack adds data amounts, and
+every part needs a continuous data space on the stack axis. It does not make
+sense to stack pixels, nor to count a boundary's stroke width, since neither
+is data. A part sized in pixels or by its content (a `rect({ h: 20 })`, a
+`text`, an `image`, a nested `spread`) is an error at the stack that points
+to `spread({ spacing: 0 })`: parts that only touch are a spread with no
+spacing. A stack has no `spacing` either, since its parts touch by
+construction.
+
 **Prefer the simple general rule to a case split.** If a fix special-cases a
 shape or a count (`length === 1`, the first element, a fallback value), ask
 what the general operation is. Usually it has a known name in math or
@@ -71,7 +81,7 @@ the same (#1267).
 stroke and its opacity. There is no separate shape channel. `.hidden()` drops
 a node's paint and keeps its shape, so a hidden child of a compositing
 operator is a mask, and a filter that writes alpha
-(`Filter.luminanceToAlpha`) makes a luminance mask (#1267).
+(`Effect.luminanceToAlpha`) makes a luminance mask (#1267).
 
 **A node's box is as tight as the visible result allows, while staying cheap
 to compute.** An intersect's box is the overlap (#1267).
@@ -141,6 +151,33 @@ drawn. `Domain` and `Trait` are families, but never
 reach the wire: the wire carries the traits they expand into. Named types such as `Price` or `Revenue` are sugar over the
 traits, like chart templates over operators, so design the traits
 first.
+
+**GoFish draws data, it does not transform it.** GoFish is a visualization
+library, not a data transformation library. It builds in only simple
+summaries of one column per group: sum, mean, median, min, max, count and
+the like. Computing those beforehand would add columns to the table that
+exist only for the picture. `map` and `reduce` take the user's own callback
+over one column for the same reason. Anything more, such as a fit or a
+computation that combines columns, is a data transform. The user writes it
+in `derive` or before the visualization, and returns rows that keep the
+original column names, so the axes and units join. A least-squares trend
+line over a scatter is a `derive` that returns two rows, the line's ends,
+named like the scatter's columns, drawn with `line({ x, y })`. GoFish has
+no built-in regression, smoothing or other fit in a channel. A helper that
+does one is a function of rows for `derive`.
+
+**A smoothing belongs in `derive`: `kde` is the worked example.** A kernel
+density was once a field method, `field(x).density()`, while `median()` of the
+same field read the data. One field then gave two different distributions,
+and its median did not sit at the middle of its density's area. Now
+`derive(kde("x"))` smooths the rows into one row whose column `x` holds a
+distribution, a value like any other. After it, every member of `field("x")`
+reads that one distribution, so its density, cdf, quantiles, median and mean
+agree. Before it, the field reads the data. A visualization that wants the
+data's median on a kernel density, as ggplot2's `geom_violin` and seaborn's
+`violinplot` draw it, reads the median before the `kde` and keeps it as a
+column. On a column of numbers, `density()` is an error that names
+`derive(kde(...))`. See [`kde`](/js/api/dist#kde).
 
 **Add a type only where a real example forces it.** A type earns its place by
 removing a special case that a real example runs into. For time and binning,
@@ -218,12 +255,12 @@ between them: `chart(data)`, `field("x")`, `layer([a, b])`, and the operators
 handed to `.flow(spread(...), stack(...))`. A method chain is a universal
 interface that can read the caller's internal state, and even branch on it,
 or turn it into a new object: `.bin(...)` reads the field's type (a time
-column takes `Calendar`, a number takes `Bin`), `.format(fn)` sees fields that
+column takes `Calendar`, a number takes `Binning`), `.format(fn)` sees fields that
 depend on the partition it is called on, `.sort()` uses the type's order, and
 `chart(...).flow(...).mark(...)` builds a spec step by step. An option is a
 local adjective of one thing, usually specific to its kind, such as
 `Calendar.month({ every: 3 })`, `Calendar.week({ start })` or
-`Bin.hex({ radius })`; a few, such as `w`, `h` and `fill`, apply almost
+`Binning.hex({ radius })`; a few, such as `w`, `h` and `fill`, apply almost
 everywhere. So `every` is an option, because it describes the month
 partition and reads nothing from a parent, while `.format(fn)` is a method
 (#1133).
@@ -239,9 +276,20 @@ several named strategies, the family is a capitalized namespace such as
 `Overlap.separate` or `Curve.monotone` (#1013). A kind with no required option
 is a value as it is, and calling it sets options: `Curve.monotone` is
 `Curve.monotone()`, and `Calendar.month({ every: 3 })` sets the step. A kind
-with a required option is a call only, as in `Bin.step(0.5)` (#1133). An
-option may also take a bare value as shorthand for one member: a bare
-`spacing` amount is `Spacing.box(amount)`. The
+with a required option is a call only, as in `Binning.step(0.5)` (#1133). A
+family is a capitalized noun for what one member is. When the members are the
+ways an operator does its work, the noun is what the operator makes
+(`Tiling`, `Packing`, `Binning`, `Placement`), and it is never the operator's
+own name. The option key is always the same word in lowercase:
+`curve: Curve.monotone`, `tiling: Tiling.voronoi`,
+`placement: Placement.around`, `effect: Effect.grayscale`. The rule does not
+apply where there is no single keyed slot. Several slots are named by their
+roles, as in `.transition({ enter, exit })` and an axis's `levels`, a list of
+`Calendar` units with one per level. A method whose only argument
+is the strategy takes it bare, as in `.bin(Binning.step(0.5))`. `pack` will
+follow the rule with `pack({ packing: Packing.circles })` when it gets a
+second strategy (#1355). An option may also take a bare value as shorthand
+for one member: a bare `spacing` amount is `Spacing.box(amount)`. The
 details, and why an option with one strategy has no option at all, are in
 [Three Surfaces](/internals/design-evolution/three-surfaces).
 

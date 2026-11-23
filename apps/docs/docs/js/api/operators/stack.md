@@ -4,9 +4,8 @@ order: 20
 
 # stack
 
-Shorthand for [`spread`](/js/api/operators/spread)`({ glue: true })`. Children
-are glued together and their data-driven sizes sum into a continuous
-positional axis at this level. Used for stacked bar charts.
+Adds its children's data amounts along `dir`. Each part starts where the one
+before it ends, and the parts share one data axis. Used for stacked bar charts.
 
 ::: gofish
 
@@ -22,11 +21,19 @@ gf.chart(seafood, { axes: true })
 
 :::
 
+## Parts are data amounts
+
+Every part needs a data size along `dir`: a `rect({ h: "count" })`, a ribbon
+with a data `h`, or another stack. A part sized in pixels or by its content (a
+`rect({ h: 20 })`, a `text`, an `image`, a `spread`) has no amount to add, so
+it is an error that names the part. Parts like these only touch. Lay them out
+with [`spread`](/js/api/operators/spread)`({ dir, spacing: 0 })`.
+
 ## Signature
 
 ```ts
 // Operator form:
-stack({ by?, dir, alignment?, ... })
+stack({ by?, dir, alignment?, baseline?, ... })
 
 // Combinator form:
 stack({ dir, ... }, [m1, m2, ...])
@@ -41,14 +48,13 @@ stack({ dir, ... }, [m1, m2, ...])
 declares, such as `"theta"` under polar; see
 [`spread` → naming the axis](/js/api/operators/spread#naming-the-axis-with-dir).
 
-Same as [`spread`](/js/api/operators/spread) without `spacing` or `glue` —
-`stack` always glues, so neither is configurable. Its `by` is the same
+Same as [`spread`](/js/api/operators/spread) without `spacing`:
+the parts touch, so there is no gap to set. Its `by` is the same
 path-aware option (`"field"`, which also works on refs after a
 [selection](/js/api/selection/ref), a function, or a
 [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor); see
-[`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by). If you want gaps between
-children plus a continuous data axis, use `spread({ spacing: N })` —
-`spread`'s "data-driven SIZE composition" mode is the natural fit there.
+[`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by). For gaps
+between the parts, use `spread({ spacing: N })`.
 
 `size` sets each entry's stack-axis extent (a field name, a `field(...)`
 accessor, or an explicit array). Set it to `field(<name>).normalize()` to make
@@ -76,12 +82,25 @@ stacked bar), group by sign first, so each stack holds one sign:
 )
 ```
 
+## Baselines
+
+`baseline` sets where the stack puts its own 0, the point its parent lines up
+with its other children. It takes a member of the
+[`Baseline`](/js/api/baseline) family: `Baseline.start()` (the default),
+`Baseline.end()`, `Baseline.middle()`, `Baseline.wiggle()` or
+`Baseline.at(part, point)`.
+
+```ts
+stack({ by: "response", dir: "x", baseline: Baseline.at("Neutral", 0.5) });
+```
+
 ## Centered stacks
 
 When the chart's `schema` gives the `by` column a midpoint
 ([`Unit({ domain: Domain.discrete(levels), traits: [Trait.diverging()] })`](/js/api/core/schema)), the stack's 0 is
-the midpoint of that order instead of the start of its first part. The parts
-must be nonnegative. This draws Likert charts and population pyramids:
+the midpoint of that order instead of the start of its first part: a
+`Baseline.at` at that midpoint. The parts must be nonnegative, and the stack
+takes no `baseline` option. This draws Likert charts and population pyramids:
 
 ```ts
 chart(survey, {
@@ -98,6 +117,38 @@ chart(survey, {
   )
   .mark(rect({ w: "count", fill: "response" }));
 ```
+
+## Stacked areas
+
+A stack of [shape-form ribbons](/js/api/marks/ribbon#shape-form) is a stacked
+area. A band's thickness changes along `x`, so the stack moves each band by
+an amount that changes along `x` too: the thickness of the bands before it,
+moved by the baseline. Each band keeps its thickness at every `x`. Outside its
+own rows a band has thickness 0, so series may be sampled at different `x`.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(stack({ by: "series", dir: "y" }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series" }));
+```
+
+::: gofish example:stacked-area-chart hidden
+:::
+
+With `Baseline.wiggle()` the stack is a streamgraph. With `Baseline.middle()`
+it is centered at every `x`.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series" }));
+```
+
+::: gofish example:streamgraph hidden
+:::
+
+Every part of such a stack must be a band. A `rect` or a `text` in a stack of
+bands is an error.
 
 ## Example
 

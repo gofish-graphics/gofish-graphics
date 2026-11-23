@@ -9,6 +9,10 @@ covers:
   - packages/gofish-graphics/src/ast/marks/chart.ts
   - packages/gofish-graphics/src/ast/marks/markResult.ts
   - packages/gofish-graphics/src/ast/constraints/relationalPaint.ts
+  - packages/gofish-graphics/src/ast/tooltip/tooltip.ts
+  - packages/gofish-graphics/src/ast/tooltip/request.ts
+  - packages/gofish-graphics/src/ast/tooltip/content.ts
+  - packages/gofish-graphics/src/ast/tooltip/place.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -235,8 +239,11 @@ Walking `withGoFish.ts:431-477`:
      ordered column lists its domain in that order. (A `derive` types its
      result with `applySchema`, like chart data: a column keeps its input's
      type while its values still fit it, and `derive(fn, { schema })`
-     overrides that, so the types reach the mark. A `filter` carries its
-     input's types over as they are.)
+     overrides that, so the types reach the mark. A unit's values fit it
+     when they are numbers or distributions as data, so the column that
+     `derive(kde("x"))` fills with a distribution keeps `x`'s name and unit.
+     `kde` is a function of rows, in `chart.ts` beside `normalize` and
+     `repeat`. A `filter` carries its input's types over as they are.)
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is
@@ -386,6 +393,38 @@ methods:
   input an operator applies the mark to, also when the mark sits inside a
   `layer([...])` or a compositing mark, which forward their children's batch
   form (see [The Operator Factory](/internals/frontend/operator-factory)).
+- `mark.tooltip(fields?)`, in a static drawing, writes on every produced
+  node the rows a box describing it would show, as the node's `title`. In
+  a live chart, which paints no titles, it records on every node a request:
+  its rows, a key from its call and its data, and the rows its box shows when the call
+  names its fields (checked there, so a missing field fails the render);
+  without a list, the rows are made only for the focused node. The mark
+  also reads its chart's focus, so a change of focus re-runs the chart, and
+  a chart whose resolve read no focus lowers no tooltip layer
+  (`hasTooltips`). The render lowers the box after the labels, as a layer over its selection (`tooltipLayer` in
+  `ast/tooltip/tooltip.ts`, through `lowerSelectionLayers`, see
+  [Labels](/internals/frontend/labels)): it takes the requests off the
+  tree, hands the chart's focus every mark with a tooltip, selects the first mark
+  with the focused key, and draws a box beside it on the render root, so
+  the box paints over the marks, their labels and the chrome. With no focus
+  nothing is lowered. The box is ordinary marks (an `enclose` of two
+  `spread` columns of `text`), and it is ink (`inkOn`) that takes no
+  pointer. A post-solve constraint, `tooltipPlace` (`place.ts`, run after
+  `labelPlace`), seats it: right of the mark, else left, centered on its
+  row; else under or over it, flush with its end; else moved into the
+  graphic's box. On a row of a line it seats the box beside the row's
+  point instead, with a marker on the point (see
+  [Reactivity](/internals/frontend/reactivity)). The box and the marker are
+  overlays (`GoFishNode.overlay`): no pointer lands on them, and the canvas
+  is sized without them. The row values come from `content.ts`:
+  with no list, every field with one value on the mark's rows, and a size
+  or position channel's field with the value it draws, inferred as the
+  channel infers it (a sum for a size). On a node drawn through its rows
+  (`GoFishNode.throughRows`, which `Band` sets on a line built from rows),
+  a list names the rows' fields: a name need only be a column, the box
+  shows the focused row's values, less the listed fields that row lacks
+  (`rowTooltipRows`), and the title keeps only the listed fields with one
+  value on the whole line (none: no title).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
   each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
@@ -403,7 +442,11 @@ methods:
 - `mark.translate({ x?, y? })` — wraps the produced node in a structural
   translation node. This is deliberately not equivalent to merging `x`/`y` into
   the mark's own options: a mark or operator may already give `x`/`y`
-  domain-specific channel meanings.
+  domain-specific channel meanings. The wrapper carries the base mark's wire
+  with the translate (the IR's mark `translate`), and a `.tooltip()` chained
+  after it goes on the base mark, which the tooltip describes, so the two
+  chain in either order. `.name()` and `.zOrder()` stay on the wrapper: they
+  act on the placed node.
 
 These methods wrap or rebuild the base mark rather than mutating it, so naming,
 labeling, or positioning one mark never affects another.
@@ -534,6 +577,70 @@ forms:
   (`flowStepOperator`) that applies it to each group's subtree as its one
   fresh operand, with its paint resolved off that operand's rows. Position alone tells the two meanings apart; see
   [Enclose and the Shape Family](/internals/frontend/enclose).
+
+### The shape form of `line` and `ribbon`
+
+`line` and `ribbon` also have a shape form, which is not a connector. A
+position channel picks it: `ribbon({ x, h })`, `ribbon({ y, w })` or
+`line({ x, y })`. The exported `line` and `ribbon` in `chart.ts` check the
+options first. With no `x` and no `y` they return the connector built by
+`createRelationalMark`, unchanged. With one, they return `shapeForm(...)`.
+
+`shapeForm` builds an ordinary leaf mark, the way `createMark` builds one. The
+mark is called with its group's rows, like `rect`. It resolves its accessors
+from `MARK_CHANNELS`, resolves its paint once per group (`resolveGroupPaint`,
+the same check a connector makes), and builds one `Band` node
+(`src/ast/shapes/band.tsx`). It is sealed with its rows and carries its wire,
+so `.name()`, `.label()` and the round trip through the IR work as they do for
+`rect`.
+
+`bandOfRows` turns the rows into two edges, the lower and the upper. Each is a
+`Fun<number>` of the parameter in data units, made by `through` over the rows
+sorted by the parameter. A band's lower edge is 0 and its upper edge is `h`.
+A line's two edges are the same curve. Two rows of one group at one parameter
+value are an error, and so is a parameter column with levels.
+
+The node reports a pinned space on the parameter's axis. On the other axis a
+band reports a free space over `[min(0, h), max(0, h)]`, with its
+cross-section as the space's `profile`, and a line reports a pinned space over
+its values. In layout it reads its edges through the axis maps into local
+pixels (`reparameterize` in `fun.ts` for the parameter). It draws them as exact
+lines and Béziers, and resamples them only under a coordinate transform. Its
+geometry gives the box, the outline of the drawn path, and the exact
+cross-section along its value axis. A line built from rows also keeps each
+row's parameter (`rows`), and its geometry gives the point where it draws
+each row (`rowPoints`), which a tooltip seats a row's box beside. It marks
+itself `throughRows`, which the tooltip's content reads before layout.
+
+A band sets the node's `shearAxis` to its value axis, so a stack can move it
+by an offset that changes along the parameter (a stacked area, see
+[the underlying space](/internals/core/underlying-space)). Options that only a
+connector reads (`dir`, `from`, `to`, `along` and the anchor keys) are an
+error in the shape form.
+
+A channel of the shape form may hold a function expression instead of a
+column: `ribbon({ x: f.domain(), h: f })` with `f` made by `fun(at, { domain
+})` (`src/ast/groupExpr.ts`). The mark then has one parameter t, and
+`bandOfFunctions` builds the edges from the functions instead of the rows:
+`groupFun` reads each channel's function for the group, their domains must be
+equal, a number in the value channel is a constant over t, and a column
+beside a function is an error. The position must be one increasing line in
+t, so the values are read through it with `reparameterize`. An opaque edge
+has no pieces, so `edgePath` draws it by sampling it to half a pixel
+(`sampledEdgePath`). Any other mark given a function value throws, in the
+channel loop of `withGoFish.ts` (`functionInChannelError`) and in an
+operator's `applyChannels`.
+
+A function expression may also be a `field(x).reduce(fn)` whose `fn`
+returns a `Fun`, one function per group. Whether a reduce gives a function
+is known only when it runs, so the shape form decides per group, inside the
+mark: `groupFun(o[parameter], rows)` asks each channel for the group's
+function (undefined for a column, or a reduce that gives a number), and
+`ofT` is true when either channel has one. The reduce runs once per group
+(the step cache in `fieldExpr.ts`), so asking here and again in
+`bandOfFunctions` costs one call. The guard in `withGoFish.ts` asks
+`groupFun` the same way, so a reduce that returns a function in a `rect`
+channel throws there.
 
 ### A connector's datum, and its `live()` channels
 

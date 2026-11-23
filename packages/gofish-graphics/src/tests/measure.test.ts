@@ -19,7 +19,7 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { getQuantity } from "../ast/data";
-import { applyEntryNormalize } from "../ast/fieldExpr";
+import { applyWindowMaps } from "../ast/fieldExpr";
 import {
   columnType,
   columnTypeOf,
@@ -68,14 +68,14 @@ const {
   partition,
   region,
   struct,
-  Bin,
+  Binning,
   Calendar,
   ribbon,
   line,
   Unit,
   Trait,
   stack,
-  treemap,
+  tile,
   normalize,
 } = GoFish as any;
 
@@ -300,7 +300,7 @@ console.log("# measure: the join table, shared axis");
           {
             axis: 1,
             glue: true,
-            origin: { part: 0, fraction: 0, mirrored: false },
+            baseline: { kind: "start" },
           }
         )
       )
@@ -878,7 +878,7 @@ console.log("# measure: titles are Quantity (unit)");
   // quantity, in x's unit.
   const histOf = (schema: any) =>
     chart(penguins, { schema, axes: true })
-      .flow(partition({ by: field("flipper").bin(Bin.step(20)), dir: "x" }))
+      .flow(partition({ by: field("flipper").bin(Binning.step(20)), dir: "x" }))
       .mark(rect({ h: field("flipper").count() }));
   const hist = textsOf(await histOf({}).toDisplayList(SIZE));
   ok(
@@ -1001,7 +1001,7 @@ console.log("# measure: titles are Quantity (unit)");
       .flow(
         partition({
           by: struct({ x: "flipper", y: "mass" }).bin(
-            Bin.hex({ radius: { x: 10, y: 100 } })
+            Binning.hex({ radius: { x: 10, y: 100 } })
           ),
         })
       )
@@ -1317,13 +1317,13 @@ console.log("# measure: CanSum");
 
   const tree = await errorOf(() =>
     chart(sales, { schema: { temp: Unit("°C") } })
-      .flow(treemap({ by: "region", size: field("temp").mean() }))
+      .flow(tile({ by: "region", size: field("temp").mean() }))
       .mark(rect({}))
       .toDisplayList(SIZE)
   );
   ok(
-    "a treemap of mean °C throws",
-    tree !== undefined && /treemap/.test(tree),
+    "a tile of mean °C throws",
+    tree !== undefined && /tile/.test(tree),
     tree
   );
 
@@ -1363,8 +1363,10 @@ console.log("# measure: CanSum");
   // A window's shares: a NaN entry makes the total NaN, so every share is 0
   // with a warning, never a NaN share beside valid ones.
   const shares = (xs: number[]) =>
-    applyEntryNormalize(
-      xs.map((datum) => ({ type: "datum", datum }) as any)
+    applyWindowMaps(
+      xs.map((datum) => ({ type: "datum", datum }) as any),
+      [{ op: "normalize" }],
+      "v"
     ).map((v: any) => v.datum);
   const warn = console.warn;
   let warned = 0;

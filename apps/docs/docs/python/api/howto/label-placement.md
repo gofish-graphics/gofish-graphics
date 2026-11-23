@@ -1,13 +1,13 @@
 # How to place labels
 
-A label's `position` can be a value of the [`Place`](/python/api/place)
+A label's `placement` can be a value of the [`Placement`](/python/api/placement)
 family. A place reads the mark's outline and tries spots in order, so labels
 keep off the marks, off each other, and off any nodes you list. A label with
 no free spot is hidden.
 
 ## Label points
 
-A dot's label goes around it by default (`Place.around()`): the first of
+A dot's label goes around it by default (`Placement.around()`): the first of
 eight spots, upper right first, that covers no other dot or label. Sort the
 rows so the labels you care about most come first; they are placed first.
 
@@ -27,17 +27,21 @@ from gofish import chart, circle, scatter
 
 ## Name lines at their ends
 
-A line's label goes past its last point by default (`Place.end()`), so the
+A line's label goes past its last point by default (`Placement.end()`), so the
 labels can replace a legend. Labels that would cover each other slide apart
-vertically. Use `Place.start()` to name the lines where they begin.
+vertically. Use `Placement.start()` to name the lines where they begin.
 
 ```python
-from gofish import Place, Unit, chart, group, line, scatter
+from gofish import Placement, Unit, chart, group, line
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
-    .mark(line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end()))
+    .flow(group(by="symbol"))
+    .mark(
+        line(x="date", y="price", stroke="symbol", stroke_width=2).label(
+            "symbol", placement=Placement.end()
+        )
+    )
     .render(w=560, h=320, axes=True, legend=False)
 )
 ```
@@ -47,22 +51,22 @@ from gofish import Place, Unit, chart, group, line, scatter
 
 ## Write a label on its line
 
-`Place.along(at=..., orient="sloped")` puts the label on the line, `at` of
+`Placement.along(at=..., orient="sloped")` puts the label on the line, `at` of
 the way along it, turned to follow it. Add a `halo` so the line does not run
 through the text. A label that would cover another line slides along its
 own. `side` puts the label beside the line instead: `"above"`, `"below"`, or
 a list such as `["above", "below"]`, tried in order at each spot.
 
 ```python
-from gofish import Place, Unit, chart, group, line, scatter
+from gofish import Placement, Unit, chart, group, line
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+    .flow(group(by="symbol"))
     .mark(
-        line(stroke="symbol", stroke_width=2).label(
+        line(x="date", y="price", stroke="symbol", stroke_width=2).label(
             "symbol",
-            position=Place.along(at=0.6, orient="sloped"),
+            placement=Placement.along(at=0.6, orient="sloped"),
             halo={},
             font_weight=600,
         )
@@ -76,21 +80,18 @@ from gofish import Place, Unit, chart, group, line, scatter
 
 ## Label the bands of a streamgraph
 
-A band's label goes inside it by default (`Place.interior()`), where the
+A band's label goes inside it by default (`Placement.interior()`), where the
 label's box can grow largest. A band too thin for its label leaves it out.
 A `polygon` is labeled the same way.
 
 ```python
-from gofish import chart, ribbon, spread, stack
+from gofish import chart, ribbon, stack, Baseline, Unit
 
 (
-    chart(seafood)
-    .flow(
-        spread(by="lake", dir="x", spacing=64, alignment="middle"),
-        stack(by="species", dir="y"),
-    )
-    .mark(ribbon(h="count", fill="species", opacity=0.8).label("species"))
-    .render(w=520, h=360, legend=False)
+    chart(unemployment, schema={"date": Unit.time()})
+    .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
+    .mark(ribbon(x="date", h="count", fill="series").label("series"))
+    .render(w=560, h=360, legend=False)
 )
 ```
 
@@ -104,16 +105,14 @@ or a list of marks such as `ref(...)`. Draw those nodes before the labels,
 so they are placed when the labels look for them.
 
 ```python
-from gofish import blank, chart, circle, line, scatter, select_all
+from gofish import chart, circle, line, scatter, select_all
 
 (
     chart(trend_ends)
-    .flow(scatter(by="fertility", x="fertility", y="life_expect"))
-    .mark(blank().name("ends"))
-    .layer(
-        chart(select_all("ends")).mark(
-            line(stroke="#9e9e9e", stroke_width=2).name("trend")
-        )
+    .mark(
+        line(
+            x="fertility", y="life_expect", stroke="#9e9e9e", stroke_width=2
+        ).name("trend")
     )
     .layer(
         chart(countries)
@@ -129,11 +128,11 @@ from gofish import blank, chart, circle, line, scatter, select_all
 
 ## Put a bar's value above it, or inside
 
-`Place.around(directions=["top"], side=["outset", "inset"])` puts the value
+`Placement.around(directions=["top"], side=["outset", "inset"])` puts the value
 above the bar, or just inside its top when there is no room above.
 
 ```python
-from gofish import Place, chart, rect, spread
+from gofish import Placement, chart, rect, spread
 
 (
     chart(sales)
@@ -141,11 +140,11 @@ from gofish import Place, chart, rect, spread
     .mark(
         rect(h="units").label(
             "units",
-            position=Place.around(directions=["top"], side=["outset", "inset"]),
+            placement=Placement.around(directions=["top"], side=["outset", "inset"]),
         )
     )
 )
 ```
 
-For a horizontal bar, `Place.along(at="x-max", side=["outset", "inset"])`
+For a horizontal bar, `Placement.along(at="x-max", side=["outset", "inset"])`
 puts the value just past the bar's end, within the bar's height.

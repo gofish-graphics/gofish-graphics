@@ -24,7 +24,7 @@ chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).render(
 rect(*, x=None, cx=None, x2=None, w=None, em_x=None,
      y=None, cy=None, y2=None, h=None, em_y=None,
      dims=None,
-     fill=None, stroke=None, stroke_width=None, opacity=None, filter=None,
+     fill=None, stroke=None, stroke_width=None, opacity=None, effect=None,
      rx=None, ry=None, aspect_ratio=None, inset=None, key=None) -> Mark
 ```
 

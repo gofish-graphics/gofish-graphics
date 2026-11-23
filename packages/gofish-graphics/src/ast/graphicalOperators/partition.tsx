@@ -21,6 +21,12 @@ import { createNodeOperator } from "../withGoFish";
 import { Constraint, PositionRegion } from "../constraints";
 import { enclosingCell, type ColumnDatum } from "../constraints/position";
 import { isStruct, structBin, type StructExpr } from "../structExpr";
+import {
+  distKeyCells,
+  isDistExpr,
+  isDistKey,
+  type DistExpr,
+} from "../distExpr";
 import { axisName, childSlots } from "../constraints/shared";
 import { layer } from "./layer";
 import type { Alignment } from "./alignment";
@@ -64,6 +70,16 @@ import type { Alignment } from "./alignment";
  * then y. It is built by that rewrite (`compose`), so it adds no behavior of
  * its own, and on the wire it is those two partitions.
  *
+ * **A distribution's cells**, `by: d.bin(p)` with `d` a `Dist` family,
+ * divide the axis into the cells of `p` over the distribution's interval
+ * (`Binning.quantiles(5)` at its quintiles). Every cell's group holds every row
+ * (the rows are the distribution's parameters), and in it the distribution
+ * is the whole one restricted to the cell (groupCell.ts), so a
+ * `ribbon({ x: d.domain(), h: d.density() })` in each cell draws the part
+ * of the curve over it, and the parts meet. A field binned over a column
+ * that holds a distribution (after `derive(kde(x))`) is cut the same way,
+ * and a field's cells restrict a band through the rows over it too.
+ *
  * **The plane form**, `by: struct({ x, y }).bin(b)`, divides both axes at
  * once into polygon cells. It is the same split and the same constraints:
  * the struct's columns are placed along x and y, so each child's region
@@ -79,8 +95,9 @@ type PartitionCommon = {
 
 /** The 1D form: divide one axis. */
 export type PartitionAxisOptions = PartitionCommon & {
-  /** The key whose regions divide the space: `field(x).bin(p)`. */
-  by: FieldExpr<true>;
+  /** The key whose regions divide the space: `field(x).bin(p)`, or a
+   *  distribution's cells, `d.bin(p)`. */
+  by: FieldExpr<true> | DistExpr;
   /** The axis to divide: `x`/`y` (axis 0/1 in any coordinate space), or a
    *  name the enclosing coordinate space declares (`theta`/`r` in polar). */
   dir: AxisName;
@@ -99,7 +116,7 @@ export type PartitionProductOptions = PartitionCommon & {
 };
 
 /** The plane form: divide both axes at once into the polygon cells of a
- *  binned struct, `struct({ x, y }).bin(Bin.hex({ radius }))`. */
+ *  binned struct, `struct({ x, y }).bin(Binning.hex({ radius }))`. */
 export type PartitionPlaneOptions = PartitionCommon & {
   by: StructExpr<true>;
   dir?: never;
@@ -117,14 +134,14 @@ const noRegion = (by: unknown): Error => {
     return new Error(
       `partition: \`by\` must be a key that has a region, and ` +
         `struct({ x: "${by.fields.x}", y: "${by.fields.y}" }) has none until ` +
-        `it is binned: add .bin(Bin.hex({ radius })) or ` +
-        `.bin(Bin.voronoi({ seeds })), so each group is placed in its cell.`
+        `it is binned: add .bin(Binning.hex({ radius })) or ` +
+        `.bin(Binning.voronoi({ seeds })), so each group is placed in its cell.`
     );
   const name = typeof by === "string" ? by : isField(by) ? by.name : "x";
   return new Error(
     `partition: \`by\` must be a key that has a region, such as ` +
       `field("${name}").bin(Calendar.month) or ` +
-      `field("${name}").bin(Bin.step(1)). Each group is placed in its ` +
+      `field("${name}").bin(Binning.step(1)). Each group is placed in its ` +
       `cell, so the key must say what the cells are. To give each value an ` +
       `equal slot instead, use spread({ by, dir }).`
   );
@@ -250,9 +267,10 @@ function columnDatum(
 /** Whether `by` has a region: a field binned by `.bin(p)`, or a struct
  *  binned by `.bin(b)`. */
 const hasRegion = (by: unknown): boolean =>
-  isStruct(by)
+  isDistKey(by) ||
+  (isStruct(by)
     ? structBin(by) !== undefined
-    : isField(by) && getFieldOps(by).some((op) => op.op === "bin");
+    : isField(by) && getFieldOps(by).some((op) => op.op === "bin"));
 
 const partitionOperator = createOperator<
   any,
@@ -271,9 +289,14 @@ const partitionOperator = createOperator<
         throw cycleHasNoRegion(by as FieldAccessor, part as CycleCell);
       if (![...entries.keys()].every((k) => k instanceof RegionCell))
         throw noRegion(by);
-      const columns = isStruct(by)
+      // A distribution's cells are placed along its variable, so the axis
+      // joins one over d.domain().
+      const variable = isDistKey(by) ? distKeyCells(by, d).variable : undefined;
+      const columns: ColumnDatum[] = isStruct(by)
         ? [columnDatum(d, by.fields.x), columnDatum(d, by.fields.y)]
-        : [columnDatum(d, (by as FieldAccessor).name, by)];
+        : variable !== undefined
+          ? [(v) => columnValue(v, { quantity: variable }, undefined)]
+          : [columnDatum(d, (by as FieldAccessor).name, by)];
       return { entries, layoutOpts: { columns } };
     },
     // The axis it divides is a value axis (the cells' positions), as a
@@ -291,10 +314,14 @@ const partitionOperator = createOperator<
   }
 );
 
-/** Whether `by` is the product form's `{ x, y }` (and not a field or a
- *  struct). */
+/** Whether `by` is the product form's `{ x, y }` (and not a field, a
+ *  struct or a distribution). */
 const isProductKey = (by: unknown): by is PartitionProductOptions["by"] =>
-  typeof by === "object" && by !== null && !isField(by) && !isStruct(by);
+  typeof by === "object" &&
+  by !== null &&
+  !isField(by) &&
+  !isStruct(by) &&
+  !isDistExpr(by);
 
 /**
  * Divide the space into the cells of `by`, one group per cell, each given its
@@ -303,8 +330,8 @@ const isProductKey = (by: unknown): by is PartitionProductOptions["by"] =>
  * - `partition({ by: field(x).bin(p), dir })` divides one axis.
  * - `partition({ by: { x: field(a).bin(p), y: field(b).bin(q) } })` divides
  *   both: it is the 1D partition on x, then the 1D partition on y.
- * - `partition({ by: struct({ x: a, y: b }).bin(Bin.hex({ radius })) })`
- *   divides both at once, into hexagons (or Voronoi cells, `Bin.voronoi`).
+ * - `partition({ by: struct({ x: a, y: b }).bin(Binning.hex({ radius })) })`
+ *   divides both at once, into hexagons (or Voronoi cells, `Binning.voronoi`).
  *
  * It has only the operator form: its children are the groups of its key, so
  * there is no list of children to pass it.

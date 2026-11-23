@@ -16,16 +16,14 @@ import * as GoFish from "../../dist/index.js";
 import { check, items, report } from "./testHelpers";
 
 const {
-  Bin,
+  Binning,
   chart,
   circle,
-  derive,
   field,
   image,
   intersect,
   layer,
   partition,
-  quantileRows,
   rect,
   region,
   ribbon,
@@ -151,6 +149,37 @@ console.log("# intersect with paint");
   );
 }
 {
+  // The stroke is drawn centered on the result's outline, so half of it is
+  // past the 50 px lens on each side: the canvas holds it (#1372).
+  const warned: string[] = [];
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
+  const stroked = (size?: { w: number; h: number }) =>
+    intersect({ fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 }, [
+      rect({ x: 0, y: 0, w: 100, h: 100 }),
+      rect({ x: 50, y: 50, w: 100, h: 100 }),
+    ]).toDisplayList(size);
+  const unsized = (await stroked()).viewport;
+  const fitted = await stroked({ w: 100, h: 100 });
+  console.warn = warn;
+  check(
+    "a painted intersect's stroke takes room: 50 px lens, 52 px canvas",
+    unsized.w === 52 && unsized.h === 52,
+    unsized
+  );
+  check(
+    "a painted intersect's stroke is not drawn past a given canvas",
+    warned.length === 0,
+    warned
+  );
+  const lens = items(fitted).find((it) => it.kind === "path");
+  check(
+    "the lens sits 1 px in from the canvas edge",
+    lens !== undefined && /^M\s*1[ ,]/.test(lens.d ?? ""),
+    lens?.d
+  );
+}
+{
   const dl = await intersect({ fill: "#467DA8" }, [
     image({ href: "x.png", x: 0, y: 0, w: 100, h: 100 }),
     rect({ x: 50, y: 0, w: 100, h: 100 }),
@@ -225,7 +254,7 @@ console.log("# intersect with paint");
   let drawn: unknown[] = ["not drawn"];
   try {
     const dl = await chart([{ v: 5 }, { v: 15 }, { v: 25 }], { axes: false })
-      .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+      .flow(partition({ by: field("v").bin(Binning.step(10)), dir: "x" }))
       .mark(
         intersect({ fill: "#eee", stroke: "black" }, [
           rect({ x: 0, y: 0, w: 1000, h: 50 }),
@@ -244,8 +273,10 @@ console.log("# intersect with paint");
   );
 }
 {
-  // The croissant spec narrow enough that the inset empties some cells.
-  const normPdf = (x: number) => Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+  // The croissant spec narrow enough that the inset empties some cells:
+  // the standard normal's curve, cut at its deciles.
+  const normPdf = (x: number) =>
+    Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
   const grid = Array.from({ length: 401 }, (_, i) => {
     const x = -4 + (8 * i) / 400;
     return { x, pdf: normPdf(x) };
@@ -260,10 +291,15 @@ console.log("# intersect with paint");
       .relate(({ density }: any) => [
         chart(grid)
           .flow(
-            derive((rows: any) =>
-              quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
-            ),
-            partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
+            partition({
+              by: field("x").bin(
+                Binning.thresholds([
+                  -1.2816, -0.8416, -0.5244, -0.2533, 0, 0.2533, 0.5244, 0.8416,
+                  1.2816,
+                ])
+              ),
+              dir: "x",
+            })
           )
           .mark(
             intersect({ fill: "#eee", stroke: "black", strokeWidth: 2 }, [
@@ -297,9 +333,8 @@ console.log("# intersect: a ribbon operand gives its exact outline");
   const drawn = items(dl);
   check(
     "a stroked intersect of a ribbon and a rect is one exact path",
-    drawn.filter(
-      (it) => it.kind === "path" && it.style?.stroke === "#467DA8"
-    ).length === 1 && !drawn.some((it) => it.kind === "composite"),
+    drawn.filter((it) => it.kind === "path" && it.style?.stroke === "#467DA8")
+      .length === 1 && !drawn.some((it) => it.kind === "composite"),
     drawn.map((it) => it.kind)
   );
 }
@@ -433,7 +468,7 @@ console.log("# intersect under a partition");
   // Operands at literal positions: each cell's copy is centered in its
   // cell, as a layer's would be, not stacked at the origin.
   const dl = await chart([{ v: 5 }, { v: 15 }, { v: 25 }], { axes: false })
-    .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+    .flow(partition({ by: field("v").bin(Binning.step(10)), dir: "x" }))
     .mark(
       intersect([
         rect({ x: 0, y: 0, w: 90, h: 40, fill: "red" }),
@@ -455,7 +490,8 @@ console.log("# intersect: a ref operand claims no room");
 {
   // The density is laid out by its own chart and read through a ref, so it
   // claims nothing in each cell, and the overlap is the cell region's: on a
-  // domain far from 0, as well as on one around it (#1267).
+  // domain far from 0, as well as on one around it (#1267). The cells are
+  // the curve's quartiles.
   const gauss = (x: number) => Math.exp(-0.5 * ((x - 4500) / 500) ** 2);
   const grid = Array.from({ length: 121 }, (_, i) => {
     const x = 2200 + (4600 * i) / 120;
@@ -472,10 +508,10 @@ console.log("# intersect: a ref operand claims no room");
       .relate(({ density }: any) => [
         chart(grid)
           .flow(
-            derive((rows: any) =>
-              quantileRows(rows, { x: "x", density: "pdf", n: 200 })
-            ),
-            partition({ by: field("x").bin(Bin.quantiles(4)), dir: "x" })
+            partition({
+              by: field("x").bin(Binning.thresholds([4162.8, 4500, 4837.2])),
+              dir: "x",
+            })
           )
           .mark(intersect({ fill: "#ddd" }, [density, region({ inset: 2 })])),
       ])

@@ -13,11 +13,11 @@ of labels per level.
 :::
 
 ```python
-from gofish import chart, scatter, line, Calendar
+from gofish import chart, line, Calendar
 
-chart(readings, axes={"x": {"levels": [Calendar.hour(every=6), Calendar.day]}}).flow(
-    scatter(by="time", x="time", y="temp")
-).mark(line(stroke="steelblue", stroke_width=2)).render(w=560, h=200)
+chart(readings, axes={"x": {"levels": [Calendar.hour(every=6), Calendar.day]}}).mark(
+    line(x="time", y="temp", stroke="steelblue", stroke_width=2)
+).render(w=560, h=200)
 ```
 
 ## Signature
@@ -186,9 +186,7 @@ chart(
     visits,
     schema={"day": Unit.time()},
     axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
-).flow(scatter(by="day", x="day", y="visits")).mark(
-    line(stroke="steelblue", stroke_width=2)
-)
+).mark(line(x="day", y="visits", stroke="steelblue", stroke_width=2))
 ```
 
 Rain by month of the year, all Junes in one bar:

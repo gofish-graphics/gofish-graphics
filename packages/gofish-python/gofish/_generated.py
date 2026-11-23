@@ -19,7 +19,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, DatumValue, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
+    from .ast import ChunkKey, DatumValue, DistAccessor, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -33,21 +33,24 @@ _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
+    "LegendOptions": ("object", {"color": ("color", None), "x": ("x", ("ref", "LengthEntryOptions")), "y": ("y", ("ref", "LengthEntryOptions"))}),
+    "LengthEntryOptions": ("object", {"title": ("title", None)}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
     "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
     "Length": ("object", {"type": ("type", None), "percent": ("percent", None), "px": ("px", None), "fr": ("fr", None)}),
-    "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
+    "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", ("ref", "LegendOptions")), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
     "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),
-    "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
-    "Filter": ("tagged", "kind", {"grayscale": ("object", {"kind": ("kind", None), "amount": ("amount", None)}), "luminanceToAlpha": ("object", {"kind": ("kind", None)})}),
-    "Tile": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "voronoi": ("object", {"kind": ("kind", None), "seed": ("seed", None)})}),
+    "StructBinning": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Effect": ("tagged", "kind", {"grayscale": ("object", {"kind": ("kind", None), "amount": ("amount", None)}), "luminanceToAlpha": ("object", {"kind": ("kind", None)})}),
+    "Tiling": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "voronoi": ("object", {"kind": ("kind", None), "seed": ("seed", None)})}),
     "Overlap": ("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),
     "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
-    "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Binning": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
     "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
     "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
-    "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
+    "Placement": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
+    "Baseline": ("tagged", "kind", {"start": ("object", {"kind": ("kind", None)}), "end": ("object", {"kind": ("kind", None)}), "middle": ("object", {"kind": ("kind", None)}), "wiggle": ("object", {"kind": ("kind", None)}), "at": ("object", {"kind": ("kind", None), "part": ("part", None), "point": ("point", None)})}),
     "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)})}),
 }
 
@@ -134,7 +137,7 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float | LengthValue] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, effect: Optional[dict | str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float | LengthValue] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
@@ -154,7 +157,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         key: Internal per-node key override.
         rx: Corner radius, x. Default: `ry`, or 0 when neither is given.
         ry: Corner radius, y. Default: `rx`, or 0 when neither is given.
@@ -179,7 +182,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("key", key),
         ("rx", rx),
         ("ry", ry),
@@ -190,7 +193,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
             _kw[_k] = _v
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, r: Optional[int | float | str] = None, area: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[int | float | str] = None, fill_opacity: Optional[float] = None) -> Mark:
+def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, r: Optional[int | float | str] = None, area: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[int | float | str] = None, fill_opacity: Optional[float] = None) -> Mark:
     """A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its size is set by at most one of r, area, w, or h and applies to both axes; with none, the circle fills the space it is given.
 
     Args:
@@ -206,7 +209,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         r: Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h.
         area: Area. A number is square pixels. A field name or an accessor is data, summed over the mark's rows, and the circle's area is proportional to it, so its radius grows with the square root. Pass at most one of r, area, w, and h.
         fill: Fill color, or a field name for a color scale.
@@ -229,7 +232,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
         ("h", _channel(h)),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("r", _channel(r)),
         ("area", _channel(area)),
         ("fill", _channel(fill)),
@@ -242,7 +245,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
             _kw[_k] = _v
     return Mark("circle", **_kw)
 
-def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
     """An ellipse. Box geometry via the shared dims channels; paint is `paint` plus fillOpacity.
 
     Args:
@@ -258,7 +261,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -280,7 +283,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
         ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
@@ -292,7 +295,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
             _kw[_k] = _v
     return Mark("ellipse", **_kw)
 
-def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
+def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
     """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
 
     Args:
@@ -308,7 +311,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -327,7 +330,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         ("h", _channel(h)),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
@@ -336,7 +339,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
             _kw[_k] = _v
     return Mark("petal", **_kw)
 
-def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[float | str] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
+def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[float | str] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
@@ -352,7 +355,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         key: Internal per-node key override.
         text: Text content (raw channel — a literal, field name, or accessor).
         fill: Fill color, or a field name for a color scale. Default "black".
@@ -380,7 +383,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         ("h", _channel(h)),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("key", key),
         ("text", _channel(text)),
         ("fill", _channel(fill)),
@@ -398,7 +401,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
             _kw[_k] = _v
     return Mark("text", **_kw)
 
-def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, href: str, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
+def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, key: Optional[str] = None, href: str, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
@@ -414,7 +417,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         key: Internal per-node key override.
         href: Image URL or data URI.
         opacity: Opacity, 0 to 1.
@@ -434,7 +437,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("key", key),
         ("href", href),
         ("opacity", opacity),
@@ -444,12 +447,12 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
             _kw[_k] = _v
     return Mark("image", **_kw)
 
-def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None, points: list | str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+def polygon(*, debug: Optional[bool] = None, effect: Optional[dict | str] = None, points: list | str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
     """A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
         fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
@@ -459,7 +462,7 @@ def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None
     _kw: Dict[str, Any] = {}
     for _k, _v in [
         ("debug", debug),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("points", points),
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),
@@ -494,8 +497,8 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
             _kw[_k] = _v
     return Mark("blank", **_kw)
 
-def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[dict | str] = None, inset: Optional[float] = None) -> Mark:
-    """Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
+def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, effect: Optional[dict | str] = None, inset: Optional[float] = None) -> Mark:
+    """Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Binning.hex, a cell of Binning.voronoi), and a rectangle otherwise.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -503,7 +506,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         inset: Pixels drawn in from each side of the cell it is in, on each axis where it is in a cell. Paint only: layout still reads the whole cell. A cell thinner than twice the inset draws nothing. Default 0.
     """
     _kw: Dict[str, Any] = {}
@@ -513,7 +516,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("inset", inset),
     ]:
         if _v is not None:
@@ -678,7 +681,7 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
@@ -688,6 +691,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
+        baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -703,6 +707,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
         ("y", _channel(y)),
@@ -715,16 +720,15 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
+def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Add the children's data amounts along `dir`: each part starts where the one before it ends, in one data space. Every part needs a data size along `dir`; parts sized in pixels or by their content are laid out with `spread({ spacing: 0 })` instead.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
-        glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
+        baseline: Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error. Default {"kind":"start"}.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -736,10 +740,9 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
-        ("glue", glue),
         ("alignment", alignment),
         ("reverse", reverse),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
         ("y", _channel(y)),
@@ -835,20 +838,20 @@ def _table_opts(*, by: dict, spacing: Optional[float | LengthValue | tuple] = No
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _tile_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tiling: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
-        x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
-        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
-        dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        x: Left edge of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it.
+        w: Width of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        dims: The box the operator tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
-        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
-        round: Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded. Default true.
-        tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell. Default {"kind":"squarify"}.
+        padding: Inset around the outer edge of the tiled box, in pixels. Default 0.
+        round: Round pixel positions and sizes. Applies to the rectangular tilings; Tiling.voronoi cells are not rounded. Default true.
+        tiling: The tiling strategy, made by a call in the Tiling family: Tiling.squarify({ ratio? }), Tiling.slice(), Tiling.dice(), Tiling.binary(), or Tiling.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tiling.voronoi tiles any convex region, so it can sit inside a Voronoi cell. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -864,7 +867,7 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
         ("spacing", spacing),
         ("padding", padding),
         ("round", round),
-        ("tile", _to_wire(("ref", "Tile"), tile, "tile")),
+        ("tiling", _to_wire(("ref", "Tiling"), tiling, "tiling")),
         ("sort", sort),
         ("size", _channel(size)),
         ("debug", debug),
@@ -898,11 +901,11 @@ def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: 
             opts[_k] = _v
     return opts
 
-def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _partition_opts(*, by: FieldAccessor | StructAccessor | DistAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
 
     Args:
-        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
+        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Binning.step(size), Binning.thresholds(countOrEdges), Binning.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Binning.hex({ radius })) or .bin(Binning.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, with p Binning.step, Binning.thresholds or Binning.quantiles: d.bin(p) with d a Dist family, or field(x).bin(p) where the column holds a distribution (after derive(kde(x))). Its cells are those of p over the interval its density is drawn over, Binning.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell (field(x).density(), d.density()). In a cell of a field's line, a ribbon or line through the rows over the field is the whole group's restricted to the cell too, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error.
         dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
         alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -919,20 +922,20 @@ def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = 
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
+def _tile_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tiling: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Low-level combinator form of `tile` (single level). Same fields as the operator form (OPERATORS.tile) plus `key`.
 
     Args:
-        x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
-        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
-        dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        x: Left edge of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it.
+        w: Width of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        dims: The box the operator tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
-        padding: Inset around the outer edge of the treemap, in pixels. Default 0.
-        round: Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded. Default true.
-        tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell. Default {"kind":"squarify"}.
+        padding: Inset around the outer edge of the tiled box, in pixels. Default 0.
+        round: Round pixel positions and sizes. Applies to the rectangular tilings; Tiling.voronoi cells are not rounded. Default true.
+        tiling: The tiling strategy, made by a call in the Tiling family: Tiling.squarify({ ratio? }), Tiling.slice(), Tiling.dice(), Tiling.binary(), or Tiling.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tiling.voronoi tiles any convex region, so it can sit inside a Voronoi cell. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
         key: Internal per-node key override.
@@ -949,7 +952,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
         ("spacing", spacing),
         ("padding", padding),
         ("round", round),
-        ("tile", _to_wire(("ref", "Tile"), tile, "tile")),
+        ("tiling", _to_wire(("ref", "Tiling"), tiling, "tiling")),
         ("sort", sort),
         ("size", _channel(size)),
         ("key", key),
@@ -959,7 +962,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
@@ -980,6 +983,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
+        baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1003,6 +1007,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("size", _channel(size)),
         ("key", key),
@@ -1012,7 +1017,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
@@ -1029,10 +1034,9 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
-        glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
+        baseline: Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error. Default {"kind":"start"}.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1052,10 +1056,9 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
-        ("glue", glue),
         ("alignment", alignment),
         ("reverse", reverse),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("size", _channel(size)),
         ("key", key),
@@ -1065,17 +1068,17 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
             opts[_k] = _v
     return opts
 
-def _label_opts(*, position: Optional[str | dict] = None, avoiding: Optional[Any] = None, halo: Optional[dict] = None, background: Optional[dict] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
+def _label_opts(*, placement: Optional[str | dict] = None, avoiding: Optional[Any] = None, halo: Optional[dict] = None, background: Optional[dict] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
     """Options of one .label(accessor, **options) call.
 
     Args:
-        position: Where the label goes: a position string, one spot by the mark's box ("center", "outset", "outset-top", "inset-bottom-start", ...), or a Place strategy, which reads the mark's outline and tries spots in order (Place.around(), Place.along({at}), Place.start(), Place.end(), Place.interior()). The labels of one .label() call that a Place strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Place.around() for a dot, Place.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Place.end() for an open path, Place.interior() for a filled region and Place.around() for one with no fill; and "outset" for anything else. In a polar or other curved coordinate space a Place strategy is an error, and the default is "outset".
-        avoiding: Nodes a Place label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it.
+        placement: Where the label goes: a position string, one spot by the mark's box ("center", "outset", "outset-top", "inset-bottom-start", ...), or a Placement strategy, which reads the mark's outline and tries spots in order (Placement.around(), Placement.along({at}), Placement.start(), Placement.end(), Placement.interior()). The labels of one .label() call that a Placement strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Placement.around() for a dot, Placement.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Placement.end() for an open path, Placement.interior() for a filled region and Placement.around() for one with no fill; and "outset" for anything else. In a polar or other curved coordinate space a Placement strategy is an error, and the default is "outset".
+        avoiding: Nodes a Placement label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it.
         halo: An outline drawn behind the glyphs, so a line under the label does not run through the text. An empty object draws the default halo.
-        background: A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot.
+        background: A filled box drawn behind the text. An empty object draws the default box. A Placement label counts the box as part of the label when it looks for a free spot.
         font_size: Font size in pixels.
         color: Label color. Omitted, it is chosen to contrast with the mark.
-        offset: Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end).
+        offset: Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Placement strategy's own `offset` overrides it; omitted in both, a Placement label is 3 pixels from the outline (4 for Placement.start and Placement.end).
         rotate: Rotation in degrees, clockwise on screen.
         font_family: Font family of the label's text node. Omitted, the elaborator's own font family.
         font_weight: Font weight, e.g. "bold" or a numeric weight.
@@ -1083,7 +1086,7 @@ def _label_opts(*, position: Optional[str | dict] = None, avoiding: Optional[Any
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("position", _to_wire(("ref", "Place"), position, "position")),
+        ("placement", _to_wire(("ref", "Placement"), placement, "placement")),
         ("avoiding", avoiding),
         ("halo", _to_wire(("object", {"color": ("color", None), "width": ("width", None)}), halo, "halo")),
         ("background", _to_wire(("object", {"fill": ("fill", None), "padding": ("padding", None)}), background, "background")),
@@ -1099,8 +1102,8 @@ def _label_opts(*, position: Optional[str | dict] = None, avoiding: Optional[Any
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """A path. Given `x` and `y`, the shape form: the mark owns its rows and draws one path per group through them, sorted by `x`. Without them, the connector form: the path between the centers of consecutive marks another flow placed, in bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
         fill: A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted.
@@ -1109,7 +1112,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         stroke_dasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
         opacity: Opacity, 0 to 1.
         blend_mode: How connectors mix where they overlap (CSS `mix-blend-mode`). Default "normal".
-        curve: Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().
+        curve: Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.
         dir: Connection axis.
         source: Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword.
         target: Anchor-mode end point; see `source`.
@@ -1120,6 +1123,8 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         em_y: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         w: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         h: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
+        x: Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The path runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `y`.
+        y: Shape form: each row's y, a position on the y axis. Needs `x`.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
@@ -1141,14 +1146,16 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         ("emY", em_y),
         ("w", _channel(w)),
         ("h", _channel(h)),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, inset: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """A filled band. Given `x` (with `h`) or `y` (with `w`), the shape form: the mark owns its rows and draws one band per group, from its baseline to `h` at each row's `x` (or to `w` at each row's `y`), sorted by it. Without them, the connector form: a band between the facing edges of consecutive marks another flow placed (sankey ribbons, bands between bars).
 
     Args:
         fill: Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects.
@@ -1157,12 +1164,15 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         opacity: Opacity, 0 to 1.
         blend_mode: How bands mix where they overlap (CSS `mix-blend-mode`). Default "normal".
         dir: Connection axis.
-        curve: Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.
+        curve: Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band. The shape form reads its curve over x (or y), so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.
         along: Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error.
         em_x: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
         em_y: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
-        w: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
-        h: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
+        w: Shape form with `y`: the band's width at each row, an amount from its baseline (negative values extend the other way). Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.
+        h: Shape form with `x`: the band's height at each row, an amount from its baseline (negative values extend below it), so a stack can place it. Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.
+        x: Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The band runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `h`.
+        y: Shape form: each row's y, for a band that runs up the y axis. Needs `w`.
+        inset: Shape form: pixels the band is drawn in by from each end of its parameter, so the bands in the cells of a partition are drawn apart. Its values are not drawn in: the band stays on the baseline its data gives it, as a bar's data height is never inset. It changes only what is drawn: the band's box is the same. Not allowed on the connector form.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
@@ -1181,6 +1191,9 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("emY", em_y),
         ("w", _channel(w)),
         ("h", _channel(h)),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("inset", inset),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -1192,7 +1205,7 @@ def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optiona
 
     Args:
         padding: Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or fillet, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is. Default 2.
-        shape: The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.
+        shape: The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a `tile`, a region), the outline is the space it is given: Shape.box() is that space (a `tile`'s Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.
         avoiding: Nodes the outline stays out of, whatever its shape: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. The outline is cut around each avoided node grown by `clearance`, never into the padded members, and a blob's or fillet's links route around them.
         clearance: Pixels kept between the outline and each avoided node, and between a piece of a blob with `separate` and the other pieces' padded members and links. Default: `padding`.
         fill: Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group).
@@ -1228,7 +1241,7 @@ def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optiona
             opts[_k] = _v
     return opts
 
-def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, padding: Optional[float] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
+def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, padding: Optional[float] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
@@ -1243,7 +1256,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        effect: A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         key: Internal per-node key override.
         coord: Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
         axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.
@@ -1264,7 +1277,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("effect", _to_wire(("ref", "Effect"), effect, "effect")),
         ("key", key),
         ("coord", coord),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
@@ -1301,7 +1314,7 @@ def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthVal
         dir: The axis to lay the refs out along.
         spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
         order: The order the refs are laid out in. Default "forward".
-        glue: Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis. Default false.
+        glue: Stack semantics: the refs are data amounts, added along `dir` in one data space, each placed where the one before it ends. Every ref needs a data size along `dir`. Default false.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -1352,7 +1365,7 @@ def _nest_constraint_opts(*, x: Optional[float] = None, y: Optional[float] = Non
             opts[_k] = _v
     return opts
 
-def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
+def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool | dict] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
     """Chart-level options for chart(data, **options).
 
     Args:
@@ -1361,7 +1374,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         coord: Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...
         color: Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
-        legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
+        legend: Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Omitted, the color entry is drawn, and a length entry is drawn along a dimension whose axes the chart draws (`axes`): it stands in for that dimension's axis. Turned off, the marks keep their colors and sizes and only the entry is dropped.
         padding: Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates. Default 30.
         schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
     """
@@ -1372,7 +1385,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         ("coord", coord),
         ("color", color),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("legend", legend),
+        ("legend", _to_wire(("ref", "LegendOptions"), legend, "legend")),
         ("padding", padding),
         ("schema", schema),
     ]:

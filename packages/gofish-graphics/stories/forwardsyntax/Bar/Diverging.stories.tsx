@@ -9,6 +9,7 @@ import {
   Unit,
   Domain,
   Trait,
+  Baseline,
   Color,
 } from "../../../src/lib";
 
@@ -86,6 +87,43 @@ export const Likert: StoryObj<Args> = {
       .flow(
         spread({ by: "question", dir: "y" }),
         stack({ by: "response", dir: "x" })
+      )
+      .mark(rect({ w: "count", fill: "response" }))
+      .render(container);
+    return container;
+  },
+};
+
+// The same survey with a gap between the answers of each row. A spread
+// keeps its parts apart, and its baseline puts each row's 0 at the middle of
+// its Neutral bar, so the parent lines the rows up there. A spread has no
+// data axis along itself, so the x axis is off.
+export const LikertWithGaps: StoryObj<Args> = {
+  args: { w: 640, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Diverging Likert Chart With Gaps",
+      description:
+        "Survey answers laid out with a small gap between each response, every row centered on the middle of its Neutral bar.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(survey, {
+      color: likertColors,
+      axes: { x: false, y: true },
+      w: args.w,
+      h: args.h,
+    })
+      .flow(
+        spread({ by: "question", dir: "y" }),
+        spread({
+          by: "response",
+          dir: "x",
+          spacing: 3,
+          baseline: Baseline.at("Neutral", 0.5),
+        })
       )
       .mark(rect({ w: "count", fill: "response" }))
       .render(container);

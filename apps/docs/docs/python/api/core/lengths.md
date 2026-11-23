@@ -9,17 +9,21 @@ room it is laid out in, or an `fr(k)` weight that takes k shares of the room
 its nearest scope divides.
 
 ```python
-from gofish import chart, fr, ribbon, spread, stack
+from gofish import chart, field, fr, rect, ribbon, spread, stack
 
 (
-    chart(seafood, w=500, h=200)
-    .flow(spread(by="lake", dir="x", spacing=fr(1)), stack(by="species", dir="y"))
-    .mark(ribbon(h="count", fill="species", opacity=0.8))
+    chart(seafood, w=560, h=240)
+    .flow(
+        spread(by="lake", dir="x", spacing=fr(1)),
+        stack(by=field("species").sort("count"), dir="y"),
+    )
+    .mark(rect(w=24, h="count", fill="species"))
+    .layer(ribbon(opacity=0.8))
     .render()
 )
 ```
 
-::: gofish example:area-chart-with-flexible-gaps hidden
+::: gofish example:ribbon-chart-with-flexible-gaps hidden
 :::
 
 ## Signature
@@ -48,7 +52,7 @@ from gofish import percent, fr
 | Option                                                   | Pixels | `percent(n)` of                  | `fr(k)` |
 | -------------------------------------------------------- | ------ | -------------------------------- | ------- |
 | `w`, `h` of `chart`, `layer`, `rect`, `ellipse`, `image` | yes    | the parent's room                | yes     |
-| `w`, `h` of `spread`, `stack`, `treemap`, `blank`        | yes    | the parent's room                | yes     |
+| `w`, `h` of `spread`, `stack`, `tile`, `blank`           | yes    | the parent's room                | yes     |
 | `spacing` of `spread` and `table`                        | yes    | the operator's room              | yes     |
 | `inset` of `rect`                                        | yes    | the rect's own box, on each side | no      |
 
@@ -123,11 +127,11 @@ layer([
 
 ## Limits
 
-- A percent `w` or `h` inside a facet panel, a table cell, a treemap tile or
+- A percent `w` or `h` inside a facet panel, a table cell, a `tile` cell or
   a coordinate transform raises an error.
 - A percent `padding` on `chart` or a coordinate transform raises an error
   ([#852](https://github.com/gofish-graphics/gofish-graphics/issues/852),
   [#1238](https://github.com/gofish-graphics/gofish-graphics/issues/1238)).
-- `treemap`'s `spacing` and `padding`, and `stack`'s `spacing`, take pixels
+- `tile`'s `spacing` and `padding`, and `stack`'s `spacing`, take pixels
   only.
 - A percent `inset` and its offset are each 0 or more.

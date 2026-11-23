@@ -15,8 +15,8 @@ import {
 import { titanic } from "../data/titanic";
 import { seafood } from "../data/catch";
 import { ellipse } from "../ast/shapes/ellipse";
-import { enclose } from "../lib";
-import { stackX, stackY } from "../lib";
+import { enclose, spreadX, spreadY } from "../lib";
+import {  } from "../lib";
 
 const data = [
   { origin: "Europe", cylinders: "4", count: 66 },
@@ -38,19 +38,19 @@ const classColor = {
 };
 
 export const testNestedWaffle = () =>
-  stackY(
-    { spacing: 8, alignment: "middle" },
+  spreadY(
+    { spacing: 0, alignment: "middle" },
     _(titanic)
       .groupBy("class")
       .map((cls) =>
-        stackX(
-          { spacing: 4 },
+        spreadX(
+          { spacing: 0},
           _(cls)
             .groupBy("sex")
             .map((sex) =>
               enclose({}, [
-                stackY(
-                  { spacing: 0.5, alignment: "end" },
+                spreadY(
+                  { spacing: 0, alignment: "end" },
                   _(sex) // Was missing this lodash chain before .reverse()
                     .reverse()
                     .flatMap((d) => Array(d.count).fill(d))

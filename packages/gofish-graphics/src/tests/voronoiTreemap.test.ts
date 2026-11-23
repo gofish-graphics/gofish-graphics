@@ -1,7 +1,7 @@
 /**
  * Voronoi treemaps (#1222): the tiling (`geometry/voronoiTiling.ts`), and
  * the shapes a parent hands its children at layout (`geometry/ring.ts`):
- * a treemap's cells, an enclosure's oval, and the errors for a shape a
+ * a `tile`'s cells, an enclosure's oval, and the errors for a shape a
  * child cannot fill.
  *
  * Run: `tsx src/tests/voronoiTreemap.test.ts` (wired as
@@ -30,8 +30,8 @@ import {
   Shape,
   spread,
   text,
-  Tile,
-  treemap,
+  Tiling,
+  tile,
 } from "../lib";
 import { check, items, report } from "./testHelpers";
 
@@ -181,10 +181,10 @@ const rows = [
   { g: "b", k: "s", v: 2 },
 ];
 
-console.log("# region() fills a treemap's cell");
+console.log("# region() fills a `tile` cell");
 {
   const dl = await chart(rows, { axes: false })
-    .flow(treemap({ by: "k", size: "v", tile: Tile.voronoi }))
+    .flow(tile({ by: "k", size: "v", tiling: Tiling.voronoi }))
     .mark(region({ fill: "#888" }))
     .toDisplayList({ w: 200, h: 100 });
   const paths = items(dl).filter((it) => it.kind === "path");
@@ -198,7 +198,7 @@ console.log("# region() fills a treemap's cell");
     areas
   );
   const rects = await chart(rows, { axes: false })
-    .flow(treemap({ by: "k", size: "v" }))
+    .flow(tile({ by: "k", size: "v" }))
     .mark(region({ fill: "#888" }))
     .toDisplayList({ w: 200, h: 100 });
   const filled = items(rects).filter((it) => it.kind === "path");
@@ -210,12 +210,12 @@ console.log("# region() fills a treemap's cell");
   );
 }
 
-console.log("# enclose hands its oval down to a treemap");
+console.log("# enclose hands its oval down to a `tile`");
 {
   const dl = await chart(rows, { axes: false })
     .flow(
       enclose({ shape: Shape.oval, padding: 0, fill: "none" }),
-      treemap({ by: "k", size: "v", tile: Tile.voronoi })
+      tile({ by: "k", size: "v", tiling: Tiling.voronoi })
     )
     .mark(region({ fill: "#888" }))
     .toDisplayList({ w: 200, h: 200 });
@@ -233,14 +233,14 @@ console.log("# enclose hands its oval down to a treemap");
   );
 }
 
-console.log("# a treemap's box is its whole region, its padding inside it");
-for (const tile of [Tile.squarify, Tile.voronoi]) {
-  // Two 200 x 100 treemaps side by side, nothing between them: the second
+console.log("# a `tile`'s box is its whole region, its padding inside it");
+for (const strategy of [Tiling.squarify, Tiling.voronoi]) {
+  // Two 200 x 100 tiles side by side, nothing between them: the second
   // starts where the first one's box ends.
   const dl = await chart(rows, { axes: false })
     .flow(
       spread({ by: "g", dir: "x", spacing: 0 }),
-      treemap({ by: "k", size: "v", padding: 10, w: 200, h: 100, tile })
+      tile({ by: "k", size: "v", padding: 10, w: 200, h: 100, tiling: strategy })
     )
     .mark(region({ fill: "#888" }))
     .toDisplayList({ w: 400, h: 100 });
@@ -255,7 +255,7 @@ for (const tile of [Tile.squarify, Tile.voronoi]) {
   const near = (got: number[], want: number[]) =>
     got.every((v, i) => Math.abs(v - want[i]) < 0.5);
   check(
-    `${tile.kind}: each box is its full 200 x 100 slot, its tiles 10 px inside`,
+    `${strategy.kind}: each box is its full 200 x 100 slot, its tiles 10 px inside`,
     near(first, [10, 190, 10, 90]) && near(second, [210, 390, 10, 90]),
     { first, second }
   );
@@ -266,24 +266,24 @@ console.log("# a rectangular tiling in a Voronoi cell is an error");
   const message = await errorOf(() =>
     chart(countryPopulations, { axes: false })
       .flow(
-        treemap({ by: "continent", size: "pop", tile: Tile.voronoi }),
-        treemap({ by: "region", size: "pop", tile: Tile.squarify })
+        tile({ by: "continent", size: "pop", tiling: Tiling.voronoi }),
+        tile({ by: "region", size: "pop", tiling: Tiling.squarify })
       )
       .mark(region({ fill: "continent" }))
       .toDisplayList({ w: 300, h: 300 })
   );
   check(
-    "it names the treemap, the tiling and the fix",
+    "it names the operator, the tiling and the fix",
     message.startsWith(
-      'treemap (by "region"): Tile.squarify needs a rectangular region'
-    ) && message.includes("Use Tile.voronoi here."),
+      'tile (by "region"): Tiling.squarify needs a rectangular region'
+    ) && message.includes("Use Tiling.voronoi here."),
     message
   );
   const fine = await errorOf(() =>
     chart(countryPopulations, { axes: false })
       .flow(
         enclose({ shape: Shape.box, fill: "none" }),
-        treemap({ by: "region", size: "pop", tile: Tile.squarify })
+        tile({ by: "region", size: "pop", tiling: Tiling.squarify })
       )
       .mark(rect({ fill: "continent" }))
       .toDisplayList({ w: 300, h: 300 })
@@ -299,13 +299,13 @@ console.log(
     chart(rows, { axes: false })
       .flow(
         enclose({ shape: Shape.fillet, fill: "none" }),
-        treemap({ by: "k", size: "v", tile: Tile.voronoi })
+        tile({ by: "k", size: "v", tiling: Tiling.voronoi })
       )
       .mark(region({ fill: "#888" }))
       .toDisplayList({ w: 200, h: 200 })
   );
   check(
-    "Shape.fillet around a treemap is an error naming the fix",
+    "Shape.fillet around a `tile` is an error naming the fix",
     message.startsWith("enclose({ shape }): Shape.fillet") &&
       message.includes("Use Shape.box or Shape.oval"),
     message
@@ -336,14 +336,14 @@ console.log("# a cell with no area holds an empty child, with no error");
   ];
   const rounded = await errorOf(() =>
     chart(tiny, { axes: false })
-      .flow(treemap({ by: "k", size: "v" }))
+      .flow(tile({ by: "k", size: "v" }))
       .mark(region({ fill: "#888", inset: 2 }))
       .toDisplayList({ w: 200, h: 100 })
   );
   check("an inset region in a tile rounded away", rounded === "", rounded);
   const eaten = await errorOf(() =>
     chart(tiny, { axes: false })
-      .flow(treemap({ by: "k", size: "v", spacing: 4, round: false }))
+      .flow(tile({ by: "k", size: "v", spacing: 4, round: false }))
       .mark(region({ fill: "#888", inset: 1 }))
       .toDisplayList({ w: 200, h: 100 })
   );
@@ -358,8 +358,8 @@ console.log("# a cell with no area holds an empty child, with no error");
       { axes: false }
     )
       .flow(
-        treemap({ by: "g", size: "v" }),
-        treemap({ by: "k", size: "v", padding: 1, tile: Tile.voronoi })
+        tile({ by: "g", size: "v" }),
+        tile({ by: "k", size: "v", padding: 1, tiling: Tiling.voronoi })
       )
       .mark(region({ fill: "#888" }))
       .toDisplayList({ w: 200, h: 100 })
@@ -381,7 +381,7 @@ console.log("# a child that does not fill its cell sits at its centroid");
     { k: "s", v: 2 },
     { k: "t", v: 1 },
   ];
-  const flow = treemap({ by: "k", size: "v", tile: Tile.voronoi });
+  const flow = tile({ by: "k", size: "v", tiling: Tiling.voronoi });
   const cellOf = new Map<string, Pt[]>(
     items(
       await chart(skew, { axes: false })

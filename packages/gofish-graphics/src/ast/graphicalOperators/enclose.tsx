@@ -25,7 +25,7 @@
  * The node's geometry is its outline, so a parent that reads geometry
  * (`pack`) lays out the outline, and an outer `enclose` hugs it.
  */
-import type { FilterOptions } from "../drawFilter";
+import type { WithEffect } from "../drawEffect";
 import { GoFishNode, outlineOverhang, placeUnplacedChild } from "../_node";
 
 import { Frontend, type DisplayList } from "gofish-ir";
@@ -79,7 +79,7 @@ import {
 import type { Size } from "../dims";
 import type { AxisScale } from "../domain";
 
-export type EncloseOptions = FilterOptions & {
+export type EncloseOptions = WithEffect & {
   /** Pixels between the members and the outline, or a field name or
    *  accessor read once per enclosed group (constant within it). Default 2. */
   padding?: number | string | ((d: any) => number);
@@ -196,7 +196,7 @@ function Enclose(
           if (children.slice(memberCount).some(avoids))
             throw new Error(
               `enclose({ avoiding }): this enclosure's member fills the space it is ` +
-                `given (such as a treemap), so it fills the outline, and an outline ` +
+                `given (such as a tile operator), so it fills the outline, and an outline ` +
                 `cut around avoided nodes cannot be filled. Give the member a size ` +
                 `of its own, or avoid nothing.`
             );
@@ -360,7 +360,7 @@ function Enclose(
 
 /** Whether every member fills the space it is given on both axes: it is
  *  fresh (not a `ref`), and the claim walk says it fills its room
- *  (`GoFishNode.fillsRoom`: a `treemap` or a `region` with no size of its
+ *  (`GoFishNode.fillsRoom`: a `tile` or a `region` with no size of its
  *  own does; a `pack` of sized circles does not). */
 const fillsItsSpace = (members: readonly GoFishAST[]): boolean =>
   members.length > 0 &&
@@ -373,7 +373,7 @@ const fillsItsSpace = (members: readonly GoFishAST[]): boolean =>
  * the outline is its space, and the members fill the outline, drawn in by
  * the padding, as their shape (see `Layout` in `_node.ts`). The outline is
  * the box it is laid out in for `Shape.box()`, or the shape it is handed
- * there (a treemap's cell), and the oval in that box for `Shape.oval()`,
+ * there (a `tile`'s cell), and the oval in that box for `Shape.oval()`,
  * cut to the shape it is handed. Only a convex outline can be a member's
  * shape, and `Shape.fillet()` and `Shape.blob()` hug members that have a
  * size of their own, so around members that fill their space they are an
@@ -392,7 +392,7 @@ function fillingLayout(
     throw new Error(
       `enclose({ shape }): Shape.${shape.kind} hugs members that have a ` +
         `size of their own, but this enclosure's member fills the space it ` +
-        `is given (such as a treemap), so it would fill the outline instead, ` +
+        `is given (such as a tile operator), so it would fill the outline instead, ` +
         `and only a convex outline can be filled. Use Shape.box or ` +
         `Shape.oval, or give the member a size of its own.`
     );

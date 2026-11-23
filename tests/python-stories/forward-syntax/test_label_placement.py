@@ -10,7 +10,6 @@ from datetime import datetime
 
 from gofish import (
     chart,
-    blank,
     circle,
     group,
     line,
@@ -21,10 +20,11 @@ from gofish import (
     select_all,
     spread,
     stack,
-    Place,
+    Baseline,
+    Placement,
     Unit,
 )
-from python_stories.data import SEAFOOD
+from python_stories.data import UNEMPLOYMENT
 from python_stories.vega_data_urls import read_csv, read_json
 
 
@@ -60,7 +60,7 @@ def _yearly_stocks():
     ]
 
 
-# ─── points: Place.around() ──────────────────────────────────────────────────
+# ─── points: Placement.around() ──────────────────────────────────────────────────
 
 def story_scatter_point_labels():
     return (
@@ -71,29 +71,31 @@ def story_scatter_point_labels():
     )
 
 
-# ─── lines: Place.end() ──────────────────────────────────────────────────────
+# ─── lines: Placement.end() ──────────────────────────────────────────────────────
 
 def story_line_end_labels():
     return (
         chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
-        .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+        .flow(group(by="symbol"))
         .mark(
-            line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end())
+            line(x="date", y="price", stroke="symbol", stroke_width=2).label(
+                "symbol", placement=Placement.end()
+            )
         ),
         {"axes": True, "legend": False},
     )
 
 
-# ─── lines: Place.along(orient="sloped") ─────────────────────────────────────
+# ─── lines: Placement.along(orient="sloped") ─────────────────────────────────────
 
 def story_inline_sloped_labels():
     return (
         chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
-        .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+        .flow(group(by="symbol"))
         .mark(
-            line(stroke="symbol", stroke_width=2).label(
+            line(x="date", y="price", stroke="symbol", stroke_width=2).label(
                 "symbol",
-                position=Place.along(at=0.6, orient="sloped"),
+                placement=Placement.along(at=0.6, orient="sloped"),
                 halo={},
                 font_weight=600,
             )
@@ -102,21 +104,29 @@ def story_inline_sloped_labels():
     )
 
 
-# ─── areas: Place.interior() ─────────────────────────────────────────────────
+# ─── areas: Placement.interior() ─────────────────────────────────────────────────
+
+# The four industries with the most unemployment, so every band is thick
+# enough somewhere to hold its name.
+LARGEST_INDUSTRIES = [
+    "Wholesale and Retail Trade",
+    "Manufacturing",
+    "Leisure and hospitality",
+    "Business services",
+]
+
 
 def story_streamgraph_interior_labels():
+    rows = [d for d in UNEMPLOYMENT if d["series"] in LARGEST_INDUSTRIES]
     return (
-        chart(SEAFOOD, h=360)
-        .flow(
-            spread(by="lake", dir="x", spacing=64, alignment="middle"),
-            stack(by="species", dir="y"),
-        )
-        .mark(ribbon(h="count", fill="species", opacity=0.8).label("species")),
-        {"legend": False},
+        chart(rows, w=560, h=360, schema={"date": Unit.time()})
+        .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
+        .mark(ribbon(x="date", h="count", fill="series").label("series")),
+        {"legend": {"color": False, "y": {"title": "unemployed (thousands)"}}},
     )
 
 
-# ─── regions: Place.interior() on non-convex polygons ────────────────────────
+# ─── regions: Placement.interior() on non-convex polygons ────────────────────────
 
 T = 1.4
 WINGS = [
@@ -154,7 +164,7 @@ def story_polygon_center_labels():
         .flow(group(by="name"))
         .mark(
             polygon(points="ring", fill="name", opacity=0.85).label(
-                "name", position="center"
+                "name", placement="center"
             )
         ),
         {"legend": False},
@@ -180,11 +190,11 @@ BUDGET = [
 def _budget_chart(side):
     return (
         chart(BUDGET, w=360, h=220)
-        .flow(group(by="series"), scatter(by="x", x="x", y="y"))
+        .flow(group(by="series"))
         .mark(
-            line(stroke="series", stroke_width=2).label(
+            line(x="x", y="y", stroke="series", stroke_width=2).label(
                 "series",
-                position=Place.along(at=0.5, side=side, orient="sloped"),
+                placement=Placement.along(at=0.5, side=side, orient="sloped"),
                 font_weight=600,
             )
         )
@@ -229,12 +239,10 @@ def _trend_scatter(countries):
     ]
     return (
         chart(ends, w=640, h=440)
-        .flow(scatter(by="fertility", x="fertility", y="life_expect"))
-        .mark(blank().name("ends"))
-        .layer(
-            chart(select_all("ends")).mark(
-                line(stroke="#9e9e9e", stroke_width=2).name("trend")
-            )
+        .mark(
+            line(
+                x="fertility", y="life_expect", stroke="#9e9e9e", stroke_width=2
+            ).name("trend")
         )
         .layer(
             chart(countries)
@@ -251,7 +259,7 @@ def story_avoiding_trend_line():
     )
 
 
-# ─── boxes: Place.around on bars ─────────────────────────────────────────────
+# ─── boxes: Placement.around on bars ─────────────────────────────────────────────
 
 SALES = [
     {"month": "Jan", "units": 42},
@@ -270,7 +278,7 @@ def story_bar_values_above_or_inside():
         .mark(
             rect(h="units", fill="#4e79a7").label(
                 "units",
-                position=Place.around(directions=["top"], side=["outset", "inset"]),
+                placement=Placement.around(directions=["top"], side=["outset", "inset"]),
             )
         ),
         {"axes": True},
@@ -286,7 +294,7 @@ def story_bar_end_part():
         .mark(
             rect(w="units", fill="#59a14f").label(
                 "units",
-                position=Place.along(at="x-max", side=["outset", "inset"]),
+                placement=Placement.along(at="x-max", side=["outset", "inset"]),
             )
         ),
         {"axes": True},
@@ -312,7 +320,7 @@ def story_bar_values_inside_or_above():
         .mark(
             rect(h="v", fill="#4e79a7").label(
                 "v",
-                position=Place.around(directions=["top"], side=["inset", "outset"]),
+                placement=Placement.around(directions=["top"], side=["inset", "outset"]),
             )
         ),
         {"axes": True},
@@ -326,7 +334,7 @@ def story_bar_values_inside_or_past_end():
         .mark(
             rect(w="v", fill="#59a14f").label(
                 "v",
-                position=Place.along(at="x-max", side=["inset", "outset"]),
+                placement=Placement.along(at="x-max", side=["inset", "outset"]),
             )
         ),
         {"axes": True},

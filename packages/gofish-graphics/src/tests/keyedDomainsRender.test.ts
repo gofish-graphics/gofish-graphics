@@ -10,7 +10,6 @@
 import { Rect as rect } from "../ast/shapes/rect";
 import { Text } from "../ast/shapes/text";
 import { layer } from "../ast/graphicalOperators/layer";
-import { stackX } from "../ast/graphicalOperators/stackX";
 import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { Constraint } from "../ast/constraints";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
@@ -118,10 +117,10 @@ async function main() {
   console.log("# a literal size reports a fixed pixel claim");
   {
     // A 100 px box of data beside a rect of 50 data units, in one 200 px
-    // stack: the box takes its 100 px, so σ solves 100 + 50σ = 200 and the
+    // row: the box takes its 100 px, so σ solves 100 + 50σ = 200 and the
     // rect is 100 px wide. Before, the box passed its content's σ claim up,
-    // so the stack solved (10 + 50)σ = 200 and the rect was 167 px wide.
-    const node = (stackX as any)({ spacing: 0, alignment: "start" }, [
+    // so the row solved (10 + 50)σ = 200 and the rect was 167 px wide.
+    const node = (spreadX as any)({ spacing: 0, alignment: "start" }, [
       (layer as any)({ w: 100, h: 20 }, [
         (rect as any)({ w: v(10), h: 20, fill: "red" }),
       ]),

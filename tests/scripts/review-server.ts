@@ -17,11 +17,11 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from "http";
-import { readFileSync, statSync } from "fs";
-import { join, normalize, extname, sep } from "path";
+import { join } from "path";
 import { exec } from "child_process";
 import { collectReviewDiffs, applyEntries, ROOT } from "./diff-utils.js";
 import { buildReviewSite } from "./build-review-site.js";
+import { siteFile, serveFile, respond } from "./static-server.js";
 import {
   getSnapshotBranchName,
   pullSnapshots,
@@ -53,6 +53,8 @@ await buildReviewSite(SITE_DIR, diffs, {
   branch: snapshotBranch.replace(/^snapshots\//, ""),
   sha: git("git rev-parse HEAD", { ignoreError: true }) || "unknown",
   runId: "",
+  liveNote:
+    "Live runs this working tree's stories and library, which may be newer than the capture in tmp/js/. Before is the static baseline.",
 });
 
 // ---------------------------------------------------------------------------
@@ -111,41 +113,12 @@ function handleCommit(body: string): { status: number; json: unknown } {
 // HTTP server: the built site, plus /api/commit
 // ---------------------------------------------------------------------------
 
-const CONTENT_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".json": "application/json",
-  ".png": "image/png",
-};
-
-function respond(
-  res: ServerResponse,
-  status: number,
-  contentType: string,
-  body: string | Buffer
-): void {
-  res.writeHead(status, { "Content-Type": contentType });
-  res.end(body);
-}
-
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve) => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => resolve(body));
   });
-}
-
-/** The site file a GET names, or null when it names none. */
-function siteFile(pathname: string): string | null {
-  const rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname);
-  const file = normalize(join(SITE_DIR, rel));
-  if (!file.startsWith(SITE_DIR + sep)) return null;
-  if (file.startsWith(join(SITE_DIR, "functions") + sep)) return null;
-  try {
-    return statSync(file).isFile() ? file : null;
-  } catch {
-    return null;
-  }
 }
 
 async function handleRequest(
@@ -157,14 +130,10 @@ async function handleRequest(
     const { status, json } = handleCommit(await readBody(req));
     return respond(res, status, "application/json", JSON.stringify(json));
   }
-  const file = req.method === "GET" ? siteFile(pathname) : null;
-  if (file === null) return respond(res, 404, "text/plain", "Not found");
-  respond(
+  // functions/ holds the Cloudflare Pages Functions, not site files.
+  serveFile(
     res,
-    200,
-    // DOM diffs and specs are HTML fragments named `<story>.html`.
-    CONTENT_TYPES[extname(file)] ?? "application/octet-stream",
-    readFileSync(file)
+    req.method === "GET" ? siteFile(SITE_DIR, pathname, ["functions"]) : null
   );
 }
 

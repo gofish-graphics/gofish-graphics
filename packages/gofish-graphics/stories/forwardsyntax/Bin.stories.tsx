@@ -10,7 +10,7 @@ import {
   partition,
   Unit,
   Calendar,
-  Bin,
+  Binning,
   table,
   Color,
 } from "../../src/lib";
@@ -55,7 +55,7 @@ export const RatingHistogram: StoryObj<Args> = {
     chart(movies, { axes: true, w: args.w, h: args.h })
       .flow(
         spread({
-          by: field("rating").bin(Bin.step(0.5)),
+          by: field("rating").bin(Binning.step(0.5)),
           dir: "x",
           spacing: 1,
         })
@@ -144,7 +144,7 @@ export const RatingHistogramContinuous: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(movies, { axes: true, w: args.w, h: args.h })
-      .flow(partition({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }))
+      .flow(partition({ by: field("rating").bin(Binning.step(0.5)), dir: "x" }))
       .mark(rect({ h: field("rating").count(), fill: "steelblue", inset: 0.5 }))
       .render(container);
     return container;

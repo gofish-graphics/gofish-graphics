@@ -1,6 +1,6 @@
 """Equivalent of Diverging.stories.tsx — Forward Syntax/Bar/Diverging."""
 
-from gofish import chart, spread, stack, rect, field, Unit, Domain, Trait, Color
+from gofish import chart, spread, stack, rect, field, Unit, Domain, Trait, Baseline, Color
 
 LEVELS = [
     "Strongly disagree",
@@ -89,6 +89,29 @@ def story_likert():
         .flow(
             spread(by="question", dir="y"),
             stack(by="response", dir="x"),
+        )
+        .mark(rect(w="count", fill="response")),
+        {},
+    )
+
+
+def story_likert_with_gaps():
+    return (
+        chart(
+            SURVEY,
+            color=LIKERT_COLORS,
+            axes={"x": False, "y": True},
+            w=640,
+            h=300,
+        )
+        .flow(
+            spread(by="question", dir="y"),
+            spread(
+                by="response",
+                dir="x",
+                spacing=3,
+                baseline=Baseline.at("Neutral", 0.5),
+            ),
         )
         .mark(rect(w="count", fill="response")),
         {},

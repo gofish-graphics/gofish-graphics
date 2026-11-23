@@ -58,10 +58,10 @@ import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
 import {
   distributeChildrenInPlacementOrder,
-  distributeOrigin,
+  resolveBaseline,
   distributeSpaceFold,
   type DistributeConstraint,
-  type StackOrigin,
+  type StackBaseline,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
 import {
@@ -206,7 +206,8 @@ type Seg = {
   glue: boolean;
   measure?: string;
   hasOrder?: boolean;
-  origin: StackOrigin<number>;
+  baseline: StackBaseline<number>;
+  hasMidpoint?: boolean;
   keys: (OrdinalKey | undefined)[];
   anonymous: boolean;
 };
@@ -296,7 +297,8 @@ export function planConstraintComposition(
       glue: d.glue,
       measure: d.measure,
       hasOrder: d.hasOrder,
-      origin: distributeOrigin(d, ordered, resolved.keyOf),
+      baseline: resolveBaseline(d, ordered, resolved.keyOf),
+      hasMidpoint: d.hasMidpoint,
       keys: idx.map(keyOf),
       anonymous: idx.length > 0 && idx.every(syntheticOf),
     });
@@ -354,7 +356,7 @@ export function planConstraintComposition(
 // type hook (`ResolveSharing` in `_node.ts`), and `GoFishNode.sharing()`
 // applies it. Two rows of the note's table are node-level rules rather than
 // constraints: a data-valued `w`/`h` (`layer.tsx`, which adds to this plan)
-// and `treemap` (`treemap.tsx`). A node with no rule shares every child.
+// and `tile` (`tile.tsx`). A node with no rule shares every child.
 // The plans are read by the layer's type hook (its own union is its own set),
 // by the keyed domain table (`keyedDomains.ts`), by the layer's placement
 // (which children its frame positions by data), and by the
@@ -371,7 +373,7 @@ export type SharingPlan = {
    *  placement, a spread slot, a grid cell). */
   nested: [Set<number>, Set<number>];
   /** Per axis: children the node gives a room of its own, from outside
-   *  their content (a region's cell, a treemap tile), which makes a child
+   *  their content (a region's cell, a `tile` cell), which makes a child
    *  with content a σ-scope of its own (`GoFishNode.isScope`). None when
    *  absent. */
   rooms?: [Set<number>, Set<number>];
@@ -390,7 +392,7 @@ export type SharingPlan = {
  *  - `nested`: in the parent's own set, with its own extent in a frame of
  *    its own (placed at a datum, or the content of a data-valued box);
  *  - `slot`: a set of its own in a frame of its own (a spread, grid or
- *    treemap slot, a facet panel);
+ *    `tile` slot, a facet panel);
  *  - `detached`: a set of its own, placed elsewhere (a literal position).
  */
 export type ChildRole = "shared" | "nested" | "slot" | "detached";
@@ -567,7 +569,8 @@ const foldOptions = (s: Seg) => ({
   measure: s.measure,
   hasOrder: s.hasOrder,
   anonymous: s.anonymous,
-  origin: s.origin,
+  baseline: s.baseline,
+  hasMidpoint: s.hasMidpoint,
 });
 
 /** The types of the operands of `axis`'s max-union (each distribute fold,
@@ -576,6 +579,7 @@ const foldOptions = (s: Seg) => ({
 function axisFragments(
   plan: ComposePlan,
   childSpaces: Size<UnderlyingSpace>[],
+  pixelSized: (i: number, axis: 0 | 1) => boolean,
   axis: 0 | 1
 ): UnderlyingSpace[] | undefined {
   const dists = plan.segments.filter((s) => s.dAxis === axis);
@@ -586,8 +590,13 @@ function axisFragments(
   const covered = new Set<number>(plan.spanCover[axis]);
   for (const s of dists) {
     s.idx.forEach((i) => covered.add(i));
+    // A part of content with a size of its own in pixels solves σ for that
+    // content in that size, so to a stack it is a box of pixels, whatever
+    // data it holds: no amount to add.
     const space = distributeSpaceFold(
-      s.idx.map((i) => childSpaces[i][axis]),
+      s.idx.map((i) =>
+        s.glue && pixelSized(i, axis) ? UNDEFINED : childSpaces[i][axis]
+      ),
       s.keys,
       foldOptions(s)
     );
@@ -614,14 +623,15 @@ function axisFragments(
  *  union in place (no distribute or align on that axis). */
 export function composePlanSpaces(
   plan: ComposePlan,
-  childSpaces: Size<UnderlyingSpace>[]
+  childSpaces: Size<UnderlyingSpace>[],
+  pixelSized: (i: number, axis: 0 | 1) => boolean
 ): [UnderlyingSpace | undefined, UnderlyingSpace | undefined] {
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
   ];
   for (const axis of [0, 1] as const) {
-    const axisFrags = axisFragments(plan, childSpaces, axis);
+    const axisFrags = axisFragments(plan, childSpaces, pixelSized, axis);
     if (axisFrags === undefined) continue; // keep default union
     // This axis is covered by an align/distribute, so the FOLD is authoritative
     // — set it even when UNDEFINED, to OVERRIDE (suppress) the layer's default

@@ -13,6 +13,7 @@ import sys
 import uuid
 
 from . import _nonfinite
+from .dist import DistAccessor
 from ._nonfinite import KEEP, encode_number
 
 T = TypeVar("T")
@@ -30,8 +31,35 @@ class Operator:
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
         # repeated calls append rather than overwrite. Mirrors JS
-        # createOperator.ts's `labelState` array.
+        # createOperator.ts's `groupModifiers` list.
         self._labels: List[dict] = []
+        # The layer name each group the operator makes is filed under
+        # (``.name()``), or None.
+        self._name: Optional[str] = None
+
+    def _copy(self) -> "Operator":
+        """A copy of this operator with the calls chained on it (its name,
+        labels and translate)."""
+        new_op = type(self)(self.op_type, **self.kwargs)
+        new_op._labels = list(self._labels)
+        new_op._translate = self._translate
+        new_op._name = self._name
+        return new_op
+
+    def name(self, name: str) -> "Operator":
+        """Name each group this operator makes (traversal form).
+
+        Mirrors JS ``spread({ by: "site", dir: "x" }).name("sites")``: every
+        node a split leaf produces is filed under ``name``, so
+        ``chart(select_all("sites"))`` gets one ref per group, and a ref's
+        ``datum`` is that group's rows.
+
+        Returns:
+            New Operator (same subclass as self) with the name set.
+        """
+        new_op = self._copy()
+        new_op._name = name
+        return new_op
 
     def translate(
         self,
@@ -45,8 +73,7 @@ class Operator:
         it offsets the arranged result without merging ``x`` / ``y`` into the
         operator's own channel grammar.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._labels = list(self._labels)
+        new_op = self._copy()
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
@@ -73,15 +100,14 @@ class Operator:
 
         Python has no function-accessor form; use one of the above.
 
-        `options` are the label options (``position``, ``font_size``,
+        `options` are the label options (``placement``, ``font_size``,
         ``color``, ...), the same as on :meth:`Mark.label`; see the generated
         ``_label_opts`` or the docs options table.
 
         Returns:
             New Operator (same subclass as self) with the label appended.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._translate = self._translate
+        new_op = self._copy()
         new_op._labels = [*self._labels, _label_spec(accessor, options)]
         return new_op
 
@@ -94,6 +120,8 @@ class Operator:
         }
         if self._translate:
             d["translate"] = self._translate
+        if self._name is not None:
+            d["name"] = self._name
         if self._labels:
             # A mark a label avoids (`avoiding=select_all(...)`) is its IR.
             d["label"] = [_marks_in_options(s, payload) for s in self._labels]
@@ -140,7 +168,15 @@ class DeriveOperator(Operator):
             "derive(fn) does not support .label() — it's a data transform, "
             "not a layout operator with per-group leaves to label. Chain "
             ".label() on the layout operator (stack/spread/group/scatter/"
-            "table/treemap) instead."
+            "table/tile) instead."
+        )
+
+    def name(self, *args, **kwargs) -> "DeriveOperator":
+        """`derive(fn)` makes no groups to name (see :meth:`label`)."""
+        raise NotImplementedError(
+            "derive(fn) does not support .name() — it's a data transform "
+            "that makes no groups. Name the layout operator "
+            "(stack/spread/group/scatter/table/tile), or the mark."
         )
 
     def to_dict(self, payload: "_Payload") -> dict:
@@ -258,6 +294,54 @@ class _PendingAccessor:
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
 
+    def reply(self) -> "_Reply":
+        """The callback the payload records for it: one value per row."""
+        return _accessor_reply(self.fn)
+
+
+class _PendingGroupStep(_PendingAccessor):
+    """A Python ``map`` or ``reduce`` in a ``field(...)`` pipeline. JS calls
+    it once with every group's values (a list of lists), and it answers one
+    result per group: the group's new values for a map, its result for a
+    reduce (``resolveGroupSteps`` in fieldExpr.ts)."""
+
+    def reply(self) -> "_Reply":
+        return _table_reply(self.fn)
+
+
+def _group_steps(field: Any) -> List[_PendingAccessor]:
+    """The Python maps and reduces of a ``field(...)`` pipeline."""
+    wire = field._wire if isinstance(field, _LiftedField) else field
+    return [
+        op["fn"]
+        for op in wire.get("ops", [])
+        if isinstance(op.get("fn"), _PendingAccessor)
+    ]
+
+
+def _wire_field(field: Any, payload: "_Payload") -> "FieldAccessor":
+    """A ``field(...)`` pipeline as the wire carries it: each Python map or
+    reduce becomes its ``{"__gofish_lambda": id}`` sentinel, and ``payload``
+    records its callback."""
+    wire = field._wire if isinstance(field, _LiftedField) else field
+    if not _group_steps(wire):
+        return wire
+    out = FieldAccessor(wire)
+    out["ops"] = [
+        {
+            **op,
+            "fn": {
+                "__gofish_lambda": payload.callback(
+                    op["fn"].lambda_id, op["fn"].reply()
+                )
+            },
+        }
+        if isinstance(op.get("fn"), _PendingAccessor)
+        else op
+        for op in wire["ops"]
+    ]
+    return out
+
 
 def _is_function(v: Any) -> bool:
     """A Python function the user wrote: callable, and not a GoFish value. A
@@ -281,7 +365,7 @@ def _holds_node(v: Any) -> bool:
 def _is_tagged(v: Any) -> bool:
     """A `field(...)` or `datum(...)` value: a dict subclass that already holds
     wire data, so the option walks treat it as a leaf."""
-    return isinstance(v, (FieldAccessor, DatumValue))
+    return isinstance(v, (FieldAccessor, _LiftedField, DatumValue))
 
 
 def _channel(v: Any) -> Any:
@@ -323,6 +407,9 @@ def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_P
             if isinstance(x, _PendingAccessor):
                 accessors.append(x)
                 return x
+            if isinstance(x, (FieldAccessor, _LiftedField)):
+                accessors.extend(_group_steps(x))
+                return x
             if _is_tagged(x):
                 return x
             if _is_function(x):
@@ -346,10 +433,10 @@ def _wire_accessors(value: Any, payload: "_Payload") -> Any:
     sentinel back into an accessor that calls into Python."""
     return _nonfinite.walk(
         value,
-        lambda x: {
-            "__gofish_lambda": payload.callback(x.lambda_id, _accessor_reply(x.fn))
-        }
+        lambda x: {"__gofish_lambda": payload.callback(x.lambda_id, x.reply())}
         if isinstance(x, _PendingAccessor)
+        else _wire_field(x, payload)
+        if isinstance(x, (FieldAccessor, _LiftedField))
         else x
         if _is_tagged(x)
         else KEEP,
@@ -531,12 +618,14 @@ class Mark(_Root):
         # Set by `.hidden()`: laid out, paints nothing. Mirrors JS
         # `node._hidden` (`.hidden(value)`).
         self._hidden: Any = None
+        # Set by `.tooltip()`: True, or the list of fields the box shows.
+        self._tooltip: Union[None, bool, List[str]] = None
         self._translate: Optional[dict] = None
 
     def _write_meta(self, d: dict, payload: "_Payload") -> dict:
         """Write the modifiers every mark IR carries into ``d``: its
         ``name``, ``zOrder`` and ``hidden`` (a function crosses as an
-        accessor) and ``translate``. The JS side applies them after building the mark
+        accessor), ``tooltip`` and ``translate``. The JS side applies them after building the mark
         (``withMarkMeta`` in fromJSON.ts). Parallel to ``_copy_meta``."""
         if self._name is not None:
             d["name"] = (
@@ -546,6 +635,8 @@ class Mark(_Root):
             d["zOrder"] = _wire_accessors(self._z_order, payload)
         if self._hidden is not None:
             d["hidden"] = _wire_accessors(self._hidden, payload)
+        if self._tooltip is not None:
+            d["tooltip"] = self._tooltip
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -560,6 +651,7 @@ class Mark(_Root):
         target._key = self._key
         target._z_order = self._z_order
         target._hidden = self._hidden
+        target._tooltip = self._tooltip
         target._translate = self._translate
         return target
 
@@ -666,6 +758,35 @@ class Mark(_Root):
         new_mark._hidden = _PendingAccessor(value) if _is_function(value) else value
         return new_mark
 
+    def tooltip(self, fields: Optional[List[str]] = None) -> "Mark":
+        """Show a box that describes the mark under the pointer. Mirrors JS
+        ``mark.tooltip(fields)``.
+
+        With no ``fields``, the box shows every field with one value on the
+        mark, and a size or position channel's field with the value it
+        draws. With ``fields``, it shows exactly those, in order::
+
+            rect(w="share").tooltip(["path", "n", "share"])
+
+        Returns:
+            New Mark (same subclass as self) with the tooltip set.
+
+        Raises:
+            TypeError: ``fields`` is a ``str``, which would read as a list of
+                its letters; one field is a list of one, ``["lake"]``.
+        """
+        if isinstance(fields, str):
+            raise TypeError(
+                f".tooltip() takes a list of field names, not a str: "
+                f'write .tooltip(["{fields}"]) for one field.'
+            )
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._tooltip = True if fields is None else list(fields)
+        return new_mark
+
     def translate(
         self,
         *,
@@ -711,7 +832,7 @@ class Mark(_Root):
                 true by construction for a `by` field; raises otherwise), or
                 a `field(...)` aggregate (`field("count").sum()`, etc.)
                 folding the group's rows to one value.
-            **options: Label options (``position``, ``font_size``, ``color``,
+            **options: Label options (``placement``, ``font_size``, ``color``,
                 ...): see the generated ``_label_opts`` or the docs options
                 table. An unknown option raises TypeError.
 
@@ -779,7 +900,7 @@ class Mark(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """
@@ -802,7 +923,7 @@ class Mark(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """Save this mark's render to ``path`` (see ``ChartBuilder.save``)."""
@@ -831,6 +952,10 @@ _REF_HAS_NO_Z_ORDER = (
 _REF_HAS_NO_HIDDEN = (
     "A ref names a node that another mark drew, so it cannot hide it: call "
     ".hidden() on the mark that draws the node."
+)
+_REF_HAS_NO_TOOLTIP = (
+    "A ref names a node that another mark drew: call .tooltip() on the mark "
+    "that draws the node."
 )
 
 
@@ -889,6 +1014,9 @@ class _InputRef(Mark):
     def hidden(self, value: Any = True) -> "Mark":
         raise TypeError(_REF_HAS_NO_HIDDEN)
 
+    def tooltip(self, fields: Any = None) -> "Mark":
+        raise TypeError(_REF_HAS_NO_TOOLTIP)
+
     def to_dict(self, payload: "_Payload") -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
         if self._name is not None:
@@ -928,8 +1056,8 @@ from ._generated import (  # noqa: E402
     _scatter_opts,
     _group_opts,
     _table_opts,
-    _treemap_opts,
-    _treemap_combinator_opts,
+    _tile_opts,
+    _tile_combinator_opts,
     _spread_combinator_opts,
     _stack_combinator_opts,
     _pack_opts,
@@ -1629,7 +1757,7 @@ class ChartBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """
@@ -1642,7 +1770,9 @@ class ChartBuilder(_Root):
             h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the chart's own ``axes`` option.
-            legend: Draw the color legend (the JS render option ``legend``).
+            legend: Which legend entries to draw (the JS render option
+                ``legend``): ``True``, ``False``, or a dict such as
+                ``{"color": False, "y": {"title": "fish"}}``.
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
             debug: Whether to enable debug mode
@@ -1671,7 +1801,7 @@ class ChartBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """Save the rendered chart to ``path`` (format inferred from the
@@ -1871,6 +2001,9 @@ class _RefProxy(Mark):
     def hidden(self, value: Any = True) -> "Mark":
         raise TypeError(_REF_HAS_NO_HIDDEN)
 
+    def tooltip(self, fields: Any = None) -> "Mark":
+        raise TypeError(_REF_HAS_NO_TOOLTIP)
+
     def to_dict(self, payload: "_Payload") -> dict:
         # `select_all(...)` is a plural chart-data selector, so it has no
         # meaning in a mark position. As chart data it is written by
@@ -1942,7 +2075,10 @@ def stack(
     **options: Any,
 ) -> Union[Operator, "Mark"]:
     """
-    Stack — polymorphic. Like spread with no spacing between children.
+    Stack — polymorphic. Adds the children's data amounts along an axis:
+    each part starts where the one before it ends. Every part needs a data
+    size along ``dir``; parts that only touch are
+    ``spread(..., spacing=0)``.
 
     Operator form (no positional arg): partitions data by `by` (or iterates
     per-item when omitted) and stacks children along an axis. Used inside
@@ -2038,7 +2174,9 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
 
 def partition(
     *,
-    by: Union["FieldAccessor", Dict[str, "FieldAccessor"], "StructAccessor"],
+    by: Union[
+        "FieldAccessor", Dict[str, "FieldAccessor"], "StructAccessor", DistAccessor
+    ],
     dir: Optional[str] = None,
     **options: Any,
 ) -> Union[Operator, Composed]:
@@ -2060,17 +2198,17 @@ def partition(
 
         chart(movies).flow(
             partition(by={
-                "x": field("IMDB Rating").bin(Bin.step(0.5)),
-                "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+                "x": field("IMDB Rating").bin(Binning.step(0.5)),
+                "y": field("Rotten Tomatoes Rating").bin(Binning.step(5)),
             })
         ).mark(region(fill=field("IMDB Rating").count()))
 
     With two fields binned together, ``struct(x=..., y=...).bin(...)``, it
-    divides the plane into the polygon cells of a ``Bin`` call, hexagons or
+    divides the plane into the polygon cells of a ``Binning`` call, hexagons or
     Voronoi cells:
 
         chart(airports).flow(
-            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+            partition(by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=1)))
         ).mark(region(fill=field("longitude").count()))
 
     Args:
@@ -2097,19 +2235,31 @@ def partition(
             raise ValueError(
                 f"partition: `by` must be a key that has a region, such as "
                 f'field("{name}").bin(Calendar.month) or '
-                f'field("{name}").bin(Bin.step(1)). Each group is placed in its '
+                f'field("{name}").bin(Binning.step(1)). Each group is placed in its '
                 f"cell, so the key must say what the cells are. To give each "
                 f"value an equal slot instead, use spread(by=..., dir=...)."
             )
 
-    if isinstance(by, StructAccessor):
+    if isinstance(by, DistAccessor):
+        if [op.get("op") for op in by.get("ops", [])] != ["bin"]:
+            raise ValueError(
+                f"partition: `by` must be a key that has a region: bin the "
+                f"distribution, Dist.{by['family']}(...).bin(Binning.quantiles(5)), "
+                f"so each group is placed in its cell."
+            )
+        if dir is None:
+            raise ValueError(
+                'partition: `dir` names the axis to divide, e.g. '
+                'partition(by=d.bin(Binning.quantiles(5)), dir="x").'
+            )
+    elif isinstance(by, StructAccessor):
         if not by.get("ops"):
             fields = by["fields"]
             raise ValueError(
                 f"partition: `by` must be a key that has a region, and "
                 f'struct(x="{fields["x"]}", y="{fields["y"]}") has none until '
-                f"it is binned: add .bin(Bin.hex(radius=...)) or "
-                f".bin(Bin.voronoi(seeds=...)), so each group is placed in its "
+                f"it is binned: add .bin(Binning.hex(radius=...)) or "
+                f".bin(Binning.voronoi(seeds=...)), so each group is placed in its "
                 f"cell."
             )
         if dir is not None or "alignment" in options:
@@ -2249,26 +2399,26 @@ def scatter(
     return Operator("scatter", **_scatter_opts(**options))
 
 
-def treemap(
+def tile(
     children: Optional[List["Mark"]] = None,
     *,
     by: Optional[Union[str, "FieldAccessor"]] = None,
     **options: Any,
 ) -> Union[Operator, "Mark"]:
     """
-    Treemap — polymorphic. Lays out children in weight-proportional rectangles.
+    Tile — polymorphic. Lays out children in weight-proportional rectangles.
 
     Operator form (no positional arg): partitions data by `by` (or iterates
     per-item when omitted). Used inside `.flow(...)`.
 
-        treemap(by="genre", size="gross")
+        tile(by="genre", size="gross")
 
     Combinator form (positional list of marks): returns a low-level Mark that
     lays out the given pre-data-bound child marks (typically
     `rect(...)(d, key)`) by the per-leaf weight given as `size`, one
     value per child, in child order.
 
-        treemap(
+        tile(
             [rect(fill=datum(genre))({"worldwideGross": gross}, genre)
              for genre, gross in groups],
             size=[gross for genre, gross in groups],
@@ -2282,17 +2432,17 @@ def treemap(
             ``spread``/``group``), or a ``field(...)`` accessor carrying domain
             ops (``field("site").sort("yield")``, ``field("genre").drop_nulls()``).
             Without ``by``, one leaf is emitted per row.
-        **options: The generated ``_treemap_opts`` core's options (the
-            combinator form's: ``_treemap_combinator_opts``); see the docs
+        **options: The generated ``_tile_opts`` core's options (the
+            combinator form's: ``_tile_combinator_opts``); see the docs
             options table. ``size`` sizes each leaf's tile area, one value
-            per split entry. ``tile`` takes a strategy from the ``Tile``
-            family: ``Tile.squarify()`` (the default), ``Tile.slice()``,
-            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.voronoi()``.
+            per split entry. ``tiling`` takes a strategy from the ``Tiling``
+            family: ``Tiling.squarify()`` (the default), ``Tiling.slice()``,
+            ``Tiling.dice()``, ``Tiling.binary()``, or ``Tiling.voronoi()``.
 
     The largest tile (under the default sort) lands at the top left.
 
-    Mirrors JS ``treemap({ by, size, tile, sort, spacing, ... })`` in
-    ``.flow()`` and ``treemap({ size, ... }, marks)`` as a combinator.
+    Mirrors JS ``tile({ by, size, tiling, sort, spacing, ... })`` in
+    ``.flow()`` and ``tile({ size, ... }, marks)`` as a combinator.
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -2300,17 +2450,17 @@ def treemap(
     if children is not None:
         if by is not None:
             raise ValueError(
-                "treemap() combinator form (with children) does not accept "
+                "tile() combinator form (with children) does not accept "
                 "`by` — the layout is over the explicit child list, not data."
             )
         return Mark(
-            "treemap",
+            "tile",
             _children=list(children),
-            **_treemap_combinator_opts(**options),
+            **_tile_combinator_opts(**options),
         )
     if by is not None:
         options["by"] = by
-    return Operator("treemap", **_treemap_opts(**options))
+    return Operator("tile", **_tile_opts(**options))
 
 
 def pack(
@@ -3189,10 +3339,10 @@ class FieldAccessor(dict):
           ``.bin([Calendar.year, Calendar.month])``, one cell where one cell
           of each level meet, each level a part of the one before it (the
           June of 2015, labeled "Jun 2015").
-        - cells of one width (``.bin(Bin.step(0.5))``),
-          ``Bin.thresholds(...)``, a cell count or a list of edges
-          (``.bin(Bin.thresholds(20))``), or ``Bin.quantiles(...)``, a cell
-          count or a list of probabilities (``.bin(Bin.quantiles(10))``).
+        - cells of one width (``.bin(Binning.step(0.5))``),
+          ``Binning.thresholds(...)``, a cell count or a list of edges
+          (``.bin(Binning.thresholds(20))``), or ``Binning.quantiles(...)``, a cell
+          count or a list of probabilities (``.bin(Binning.quantiles(10))``).
           About 10 cells when none is given.
 
         A second ``.bin(...)`` splits each cell of the first, a chain:
@@ -3263,6 +3413,85 @@ class FieldAccessor(dict):
         field. Valid only in a value (size/pos) slot."""
         return self._with_op({"op": "distinct"})
 
+    def map(
+        self, fn: Callable[..., Any], *, unit: Any = None
+    ) -> "FieldAccessor":
+        """Map each value of the group to a new one, ``fn(x, i, xs)``, with
+        ``xs`` all the values. ``fn`` may take fewer arguments
+        (``lambda x: x * 2``), as in JS. ``unit`` is the new values' unit;
+        without one their unit is unknown, and they cannot be summed or
+        stacked. Mirrors JS ``field(name).map(fn, { unit })``.
+
+        JS calls ``fn`` across the bridge once per spec, with every group's
+        values."""
+        where = f'field("{self["name"]}").map(...)'
+        call = _positional_call(fn, where)
+
+        def all_groups(groups: List[List[Any]]) -> List[List[Any]]:
+            return [
+                [_check_step_value(call(x, i, xs), where) for i, x in enumerate(xs)]
+                for xs in groups
+            ]
+
+        return self._with_op(_step_op("map", all_groups, unit, where))
+
+    def reduce(self, fn: Callable[[List[Any]], Any], *, unit: Any = None) -> Any:
+        """Fold the group's values into one result, ``fn(xs)``, once per
+        group. The result is lifted by its shape: a number is one value, and
+        a dict an object with one method per key, read with ``s.lo()``. A
+        list is an error, and nothing chains after a value. ``unit`` is one
+        unit for every number of the result, or a dict that mirrors its
+        shape; a number whose unit is not declared cannot be summed or
+        stacked. Mirrors JS ``field(name).reduce(fn, { unit })``.
+
+        A Python reduce cannot return a function of t (``fun``): layout
+        reads a function synchronously, and the bridge is asynchronous."""
+        where = f'field("{self["name"]}").reduce(...)'
+
+        def all_groups(groups: List[List[Any]]) -> List[Any]:
+            return [_check_step_value(fn(xs), where) for xs in groups]
+
+        return _LiftedField(self._with_op(_step_op("reduce", all_groups, unit, where)))
+
+    def _dist_member(self, name: str, args: Optional[List[Any]] = None) -> "FieldAccessor":
+        """The member ``name`` of the distribution the column holds."""
+        op: dict = {"op": "member", "name": name}
+        if args:
+            op["args"] = list(args)
+        return self._with_op(op)
+
+    def density(self) -> "FieldAccessor":
+        """The density of the distribution the column holds: for a kernel
+        density (``derive(kde("x"))``), the values' count per unit of the
+        column, so the densities of several groups add up. Valid only in a
+        channel of ``ribbon`` or ``line``, and only on a column that holds a
+        distribution. Mirrors JS ``field(name).density()``."""
+        return self._dist_member("density")
+
+    def domain(self) -> "FieldAccessor":
+        """``t`` over the interval :meth:`density` is drawn over: the
+        position channel that reads the density at the mark's parameter. In
+        the column's unit. Only on a column that holds a distribution."""
+        return self._dist_member("domain")
+
+    def cdf(self) -> "FieldAccessor":
+        """The share of the distribution's mass at or below t, the integral
+        of its density over its mass. A ratio. Valid only in a channel of
+        ``ribbon`` or ``line``, and only on a column that holds a
+        distribution."""
+        return self._dist_member("cdf")
+
+    def quantile(self, p: float) -> "FieldAccessor":
+        """The value with the share ``p`` of the distribution's mass at or
+        below it, the inverse of its cdf: ``quantile(0.5)`` is ``median()``.
+        In the column's unit. Only on a column that holds a distribution."""
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 <= p <= 1:
+            raise ValueError(
+                f'field("{self["name"]}").quantile(p): p must be a number in '
+                f"[0, 1], got {p!r}."
+            )
+        return self._dist_member("quantile", [p])
+
     def between(
         self, lo: float, hi: float, *, closed: Optional[str] = None
     ) -> "FieldPredicate":
@@ -3289,6 +3518,101 @@ class FieldAccessor(dict):
         if closed is not None:
             pred["closed"] = closed
         return pred
+
+
+def _positional_call(fn: Callable[..., Any], where: str) -> Callable[..., Any]:
+    """``fn`` called with as many of its arguments as it takes. JS calls a
+    function with every argument and drops the ones it does not take;
+    Python raises, so a ``lambda x: ...`` is called with ``x`` alone."""
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return fn
+    if any(p.kind == p.VAR_POSITIONAL for p in params):
+        return fn
+    n = sum(
+        1 for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    )
+    if n == 0:
+        raise TypeError(f"{where}: the function takes no arguments; it takes x.")
+    return lambda *args: fn(*args[:n])
+
+
+def _check_step_value(value: Any, where: str) -> Any:
+    """A map's or a reduce's result, checked as it crosses to JS: a
+    function cannot cross (see ``fun``), and a list is not one result."""
+    if callable(value):
+        raise TypeError(
+            f"{where} returned a function. A function of t is read during "
+            "layout, which is synchronous, but a Python function can only be "
+            "called across the bridge, which is asynchronous, so a Python "
+            "reduce cannot give one yet. Return its values at sample points "
+            "as rows instead, or write the reduce in JS."
+        )
+    if isinstance(value, (list, tuple)):
+        raise TypeError(
+            f"{where} returned a list. A reduce returns a number or a dict "
+            "of them; for several values, return a dict ({'lo': ..., 'hi': "
+            "...}) and read its members (s.lo())."
+        )
+    if isinstance(value, dict):
+        for v in value.values():
+            _check_step_value(v, where)
+    return value
+
+
+def _unit_spec(unit: Any, where: str) -> Any:
+    """The ``unit`` option of ``map`` or ``reduce`` as the wire writes it:
+    a unit's traits, a unit's name, or a dict that mirrors the result."""
+    if isinstance(unit, Unit):
+        return copy.deepcopy(unit._type)
+    if isinstance(unit, str):
+        return unit
+    if isinstance(unit, dict):
+        return {k: _unit_spec(v, f"{where}[{k!r}]") for k, v in unit.items()}
+    raise TypeError(
+        f"{where}: unit must be a Unit, a unit's name, or a dict of them, "
+        f"got {unit!r}."
+    )
+
+
+def _step_op(kind: str, fn: Callable, unit: Any, where: str) -> dict:
+    """The wire op of a Python ``map`` or ``reduce``."""
+    op: dict = {"op": kind, "fn": _PendingGroupStep(fn)}
+    if unit is not None:
+        op["unit"] = _unit_spec(unit, f"{where} unit")
+    return op
+
+
+class _LiftedField:
+    """What ``field(name).reduce(fn)`` gives: the expression, whose every
+    attribute is a member of the reduce's result, a method that reads it
+    (``s.lo()``). The shape of the result is known only when the reduce
+    runs in JS, so a member is checked there: a member of a number is an
+    error. Mirrors the proxy ``lifted`` in JS ``fieldExpr.ts``."""
+
+    __slots__ = ("_wire",)
+
+    def __init__(self, wire: "FieldAccessor"):
+        object.__setattr__(self, "_wire", wire)
+
+    def __getattr__(self, name: str) -> Callable[..., "_LiftedField"]:
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        def member(*args: Any) -> "_LiftedField":
+            op: dict = {"op": "member", "name": name}
+            if args:
+                op["args"] = list(args)
+            return _LiftedField(self._wire._with_op(op))
+
+        return member
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        raise AttributeError("a reduce's result is immutable.")
+
+    def __repr__(self) -> str:
+        return f"<field({self._wire['name']!r}).reduce(...)>"
 
 
 class FieldPredicate(dict):
@@ -3347,6 +3671,32 @@ def field(name: str) -> FieldAccessor:
     return FieldAccessor({"type": "field", "name": name})
 
 
+def fun(at: Any, *, domain: Any, knots: Any = None) -> Any:
+    """
+    A function value: a function of t over ``domain``, ``(min, max)``,
+    which the shape form of ``ribbon`` and ``line`` reads at one parameter t.
+    Mirrors JS ``fun(at, { domain })`` (``src/ast/groupExpr.ts``).
+
+    Not supported from Python yet: it always raises.
+
+    Raises:
+        NotImplementedError: always.
+    """
+    # TODO(#1369): a Python function value needs the bridge to read
+    # it at t. Layout and drawing read a function value synchronously, many
+    # times (to find its extent, and to draw it to half a pixel), but the
+    # bridge to the Python kernel is asynchronous, so there is no call that
+    # can answer `at(t)` in the middle of layout. A function built in JS
+    # (`field(...).reduce` returning `fun(...)` in a JS spec) works.
+    raise NotImplementedError(
+        "fun(at, domain=...): a function value is read at t during layout, "
+        "which is synchronous, but a Python function can only be called "
+        "across the bridge, which is asynchronous. Python cannot give a "
+        "function value yet; give the function's values at sample points as "
+        "rows instead: ribbon(x='t', h='value')."
+    )
+
+
 class ChunkKey(dict):
     """The ``{type: "chunk", size}`` wire shape of a ``chunk(size)`` grouping
     key. It is data, so a ``by=chunk(size)`` crosses to JS with no
@@ -3374,41 +3724,41 @@ def chunk(size: int) -> ChunkKey:
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     """The cells a key is binned into, in their wire form, on the key that
     takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
-    value, ``Bin.step``, ``Bin.thresholds`` and ``Bin.quantiles``, and
+    value, ``Binning.step``, ``Binning.thresholds`` and ``Binning.quantiles``, and
     ``"struct"`` for
-    ``struct(x=..., y=...).bin(...)``, which takes ``Bin.hex`` and
-    ``Bin.voronoi``. A kind of the other key is a TypeError naming the key
+    ``struct(x=..., y=...).bin(...)``, which takes ``Binning.hex`` and
+    ``Binning.voronoi``. A kind of the other key is a TypeError naming the key
     that takes it. The kinds of each key are the ``Partition`` and
-    ``StructBin`` option types, each one tagged union (gofish-ir
-    ``BIN_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
-    ``Frontend.checkStructBin``."""
+    ``StructBinning`` option types, each one tagged union (gofish-ir
+    ``BINNING_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
+    ``Frontend.checkStructBinning``."""
     from ._generated import _OPTION_TYPES, _to_wire
 
-    own, other = ("Partition", "StructBin") if key == "field" else ("StructBin", "Partition")
+    own, other = ("Partition", "StructBinning") if key == "field" else ("StructBinning", "Partition")
     kind = value.get("kind") if isinstance(value, dict) else None
     # A Calendar value bins one field only: on a struct it is no other
     # key's kind, just not one of the struct's.
     if kind in _OPTION_TYPES[other][2] and kind not in _OPTION_TYPES["Calendar"][2]:
         if key == "field":
             raise TypeError(
-                f"{where}: Bin.{kind} bins two fields together into cells of "
-                f"the plane. Bin them with struct(x=..., y=...).bin(Bin.{kind}(...)); "
-                "field(x).bin takes Bin.step(size), Bin.thresholds(count_or_edges), "
-                "Bin.quantiles(count_or_probabilities), or a Calendar value."
+                f"{where}: Binning.{kind} bins two fields together into cells of "
+                f"the plane. Bin them with struct(x=..., y=...).bin(Binning.{kind}(...)); "
+                "field(x).bin takes Binning.step(size), Binning.thresholds(count_or_edges), "
+                "Binning.quantiles(count_or_probabilities), or a Calendar value."
             )
         raise TypeError(
-            f"{where}: Bin.{kind} bins one field. Bin each field with "
-            f"field(x).bin(Bin.{kind}(...)); struct(x=..., y=...).bin takes "
-            "Bin.hex(radius=...) or Bin.voronoi(seeds=...)."
+            f"{where}: Binning.{kind} bins one field. Bin each field with "
+            f"field(x).bin(Binning.{kind}(...)); struct(x=..., y=...).bin takes "
+            "Binning.hex(radius=...) or Binning.voronoi(seeds=...)."
         )
     if kind not in _OPTION_TYPES[own][2]:
         expected = (
-            "a Calendar value (Calendar.month, ...), Bin.step(size), "
-            "Bin.thresholds(count_or_edges), or "
-            "Bin.quantiles(count_or_probabilities)"
+            "a Calendar value (Calendar.month, ...), Binning.step(size), "
+            "Binning.thresholds(count_or_edges), or "
+            "Binning.quantiles(count_or_probabilities)"
             if key == "field"
-            else "a call in the Bin family, Bin.hex(radius=...) or "
-            "Bin.voronoi(seeds=...)"
+            else "a call in the Binning family, Binning.hex(radius=...) or "
+            "Binning.voronoi(seeds=...)"
         )
         raise TypeError(f"{where}: expected {expected}, got {value!r}")
     return _to_wire(_OPTION_TYPES[own], value, where)
@@ -3419,13 +3769,13 @@ class StructAccessor(dict):
     The ``{type: "struct", fields: {x, y}, ops?}`` wire shape: a key that
     reads two fields at once, built by :func:`struct`. Mirrors JS's
     ``StructExpr`` (``ast/structExpr.ts``). Its one op is ``bin``, which takes
-    a call in the ``Bin`` family; the JS side bins the rows.
+    a call in the ``Binning`` family; the JS side bins the rows.
     """
 
     def bin(self, cells: Dict[str, Any]) -> "StructAccessor":
         """Map each row's point ``(x, y)`` to its cell in ``cells``, a call
-        in the ``Bin`` family: ``Bin.hex(radius=...)`` or
-        ``Bin.voronoi(seeds=...)``. The groups are the cells over the two
+        in the ``Binning`` family: ``Binning.hex(radius=...)`` or
+        ``Binning.voronoi(seeds=...)``. The groups are the cells over the two
         columns' domain in the chart's data, so every group of a split sees
         the same cells, and empty cells are kept. Emits the wire op
         ``{"op": "bin", "partition": ...}``."""
@@ -3456,11 +3806,11 @@ def struct(*, x: str, y: str) -> StructAccessor:
     """
     A key that reads two fields at once, named after polars' ``pl.struct``:
     ``struct(x="lon", y="lat")``. ``x`` and ``y`` name the column read on each
-    axis. Bin it with ``.bin(...)``, a call in the ``Bin`` family, to give
+    axis. Bin it with ``.bin(...)``, a call in the ``Binning`` family, to give
     each group its cell of the plane:
 
         chart(airports).flow(
-            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+            partition(by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=1)))
         ).mark(region(fill=field("longitude").count()))
 
     Mirrors JS ``struct({ x, y })``. A struct is a key only once it is binned.
@@ -3511,76 +3861,56 @@ def repeat(row: dict, field: str) -> List[dict]:
     return [row] * n
 
 
-def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dict]:
+def kde(
+    column: str, *, bandwidth: Optional[float] = None
+) -> Callable[[List[dict]], List[dict]]:
     """
-    ``n`` rows at the quantiles of the density that ``rows`` sample, one at
-    each probability ``(i + 0.5) / n``, so ``Bin.quantiles`` and
-    ``field(x).median()`` over them read the curve, not the grid. Mirrors JS
-    ``quantileRows``.
+    A derive helper, ``derive(kde("x"))``: the rows going in are a sample of
+    the column ``column``, and the one row coming out holds, in that column,
+    the sample smoothed by a normal kernel, a distribution. ``field(column)``'s
+    members read it: ``density()``, ``domain()``, ``cdf()``, ``quantile(p)``,
+    ``median()``, ``mean()``, and ``.bin(Binning.quantiles(n))`` cuts it at its
+    own quantiles. Mirrors JS ``kde(column, { bandwidth })``.
 
-    The rows are a grid of one curve, one row per position, in any order. The density is taken to
-    be linear between grid points, integrated by the trapezoid rule, and each
-    quantile is read off the result by linear interpolation. Each row made
-    holds ``x`` and every other column whose value is the same in all rows
-    (a group's ``month``); columns that vary are dropped.
+    The row also holds every other column whose value is the same in all the
+    rows (a group's species, after a split by it), and nothing else. In a
+    flow after a split, ``derive`` runs once per group, so each group's column
+    holds its own distribution. No rows give no row. Missing values are left
+    out of the sample.
 
-    A shortcut until first-class distributions (#980) replace it.
+    The distribution is data, ``{"type": "dist", "family": "kde", "params":
+    {"values": [...], "bandwidth": ...}}``, and JS computes it.
 
     Args:
-        rows: The grid rows, each a dict with ``x`` and ``density``.
-        x: The column of the grid's positions.
-        density: The column of the density, finite and 0 or more. It need
-            not integrate to 1.
-        n: How many rows to make, a whole number, 1 or more.
+        column: The column of the sample's values.
+        bandwidth: The standard deviation of each value's kernel, in the
+            column's unit. Silverman's rule (R's ``bw.nrd0``) when omitted.
     """
-    where = "quantile_rows(...)"
-    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
-        raise ValueError(f"{where}: n must be a whole number, 1 or more, got {n!r}.")
-    grid = []
-    for r in rows:
-        at, d = r.get(x), r.get(density)
-        if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at):
-            raise ValueError(f'{where}: the column "{x}" must hold finite numbers, got {at!r}.')
-        if isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d) or d < 0:
-            raise ValueError(
-                f'{where}: the column "{density}" must hold finite numbers, 0 or more, got {d!r}.'
-            )
-        grid.append((float(at), float(d)))
-    grid.sort(key=lambda p: p[0])
-    # A grid has one density at each position: two rows at one position are
-    # two curves mixed together.
-    for i in range(1, len(grid)):
-        if grid[i][0] == grid[i - 1][0]:
-            raise ValueError(
-                f'{where}: two rows have "{x}" {grid[i][0]:g}, so these rows hold '
-                f"more than one curve. Call quantile_rows on each curve's rows: "
-                f"inside derive, after the flow splits the curves apart."
-            )
-    cdf = [0.0]
-    for i in range(1, len(grid)):
-        cdf.append(cdf[-1] + (grid[i][0] - grid[i - 1][0]) * (grid[i][1] + grid[i - 1][1]) / 2)
-    total = cdf[-1]
-    if not total > 0:
-        raise ValueError(
-            f'{where}: the density "{density}" has no area over "{x}", so it has '
-            f"no quantiles. It needs two or more grid points with some density."
-        )
-    first = rows[0]
-    constant = {
-        k: v
-        for k, v in first.items()
-        if k not in (x, density) and all(k in r and r[k] == v for r in rows)
-    }
-    out = []
-    j = 0
-    for i in range(n):
-        target = (i + 0.5) / n * total
-        while cdf[j + 1] < target:
-            j += 1
-        span = cdf[j + 1] - cdf[j]
-        t = (target - cdf[j]) / span if span > 0 else 0.0
-        out.append({**constant, x: grid[j][0] + t * (grid[j + 1][0] - grid[j][0])})
-    return out
+    if bandwidth is not None and (
+        isinstance(bandwidth, bool)
+        or not isinstance(bandwidth, (int, float))
+        or not math.isfinite(bandwidth)
+        or not bandwidth > 0
+    ):
+        raise ValueError(f"kde: bandwidth must be a positive number, got {bandwidth!r}.")
+
+    def smooth(rows: List[dict]) -> List[dict]:
+        if not rows:
+            return []
+        first = rows[0]
+        same = {
+            k: v
+            for k, v in first.items()
+            if k != column and all(k in r and r[k] == v for r in rows)
+        }
+        params: Dict[str, Any] = {
+            "values": [r.get(column) for r in rows if r.get(column) is not None]
+        }
+        if bandwidth is not None:
+            params["bandwidth"] = bandwidth
+        return [{**same, column: {"type": "dist", "family": "kde", "params": params}}]
+
+    return smooth
 
 
 # Mark factory functions
@@ -3595,9 +3925,13 @@ def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dic
 
 
 def line(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
-    """Line mark — a center-mode connector (the path between mark centers).
+    """Line mark: a path.
 
-    Three forms:
+    Given ``x`` and ``y``, the shape form: ``line(x="date", y="price")``
+    draws one path per group through its rows, sorted by ``x``.
+
+    Without them, a center-mode connector (the path between mark centers),
+    in three forms:
       - combinator form ``line([ref(a), ref(b)], dir="x")`` — the low-level
         connector over explicitly listed children (the drop-in for the removed
         ``connect``). ``source``/``target`` pin each endpoint to a normalized
@@ -3630,10 +3964,15 @@ def line(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
 
 
 def ribbon(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
-    """Ribbon mark — an edge-mode connector: a filled band between the facing
-    edges of consecutive marks (areas, streamgraphs, sankey ribbons).
+    """Ribbon mark: a filled band.
 
-    Three forms, like :func:`line`: combinator form
+    Given ``x`` (with ``h``) or ``y`` (with ``w``), the shape form:
+    ``ribbon(x="date", h="count")`` draws one band per group from 0 to ``h``
+    at each row's ``x``, sorted by ``x``.
+
+    Without them, an edge-mode connector: a filled band between the facing
+    edges of consecutive marks (streamgraphs, sankey ribbons), in three forms
+    like :func:`line`: combinator form
     ``ribbon([ref(a), ref(b)], dir="x")`` (the low-level connector over listed
     children — drop-in for the removed ``connect``), bag form fused over the
     chart's own flow (split inferred, or pinned with ``along="year"`` — see
@@ -4116,7 +4455,7 @@ def _render_widget(
     w: int,
     h: int,
     axes: Optional[Any],
-    legend: Optional[bool],
+    legend: Optional[Any],
     debug: bool,
 ):
     """Render ``root`` as a notebook widget: its document and the callbacks
@@ -4174,7 +4513,7 @@ class LayerBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """
@@ -4187,7 +4526,9 @@ class LayerBuilder(_Root):
             h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the root tier's own ``axes`` option.
-            legend: Draw the color legend (the JS render option ``legend``).
+            legend: Which legend entries to draw (the JS render option
+                ``legend``): ``True``, ``False``, or a dict such as
+                ``{"color": False, "y": {"title": "fish"}}``.
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
             debug: Whether to enable debug mode
@@ -4205,7 +4546,7 @@ class LayerBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """Save the chain's render to ``path`` (see ``ChartBuilder.save``)."""

@@ -32,7 +32,7 @@ interface WidgetModel {
   get(key: "width"): number;
   get(key: "height"): number;
   get(key: "axes"): Serialize.RenderIROptions["axes"] | null;
-  get(key: "legend"): boolean | null;
+  get(key: "legend"): Serialize.RenderIROptions["legend"] | null;
   get(key: "debug"): boolean;
   get(key: "container_id"): string;
   get(key: "call_response"): {

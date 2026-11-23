@@ -6,7 +6,6 @@ import { d as $d } from "../components/data"; */
 import { value } from "../ast/data";
 import { gofish } from "../ast/gofish";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
@@ -15,9 +14,8 @@ import { ref } from "../ast/shapes/ref";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { clock } from "../ast/coordinateTransforms/clock";
-import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { ribbon } from "../lib";
+import { ribbon, spreadX } from "../lib";
 // import { fishData } from "../data/fish";
 
 const fishColors = {
@@ -195,16 +193,16 @@ export const testFishPolarRibbonChartTextured = (
     container,
     { w: size.width, h: size.height, transform: { x: 500, y: 500 }, defs },
     layer({ coord: clock() }, [
-      stackX(
+      spreadX(
         {
           y: 50,
           x: (-3 * Math.PI) / 6,
-          spacing: (2 * Math.PI) / 6,
+          spacing: 0,
           alignment: "start",
         },
         Object.entries(_.groupBy(seafood, "lake")).map(([lake, items]) =>
           stackY(
-            { spacing: 8, reverse: true },
+            { reverse: true },
             _(items)
               /* TODO: changing this to asc gives the correct order but the wrong colors */
               .orderBy("count", "desc")
@@ -217,7 +215,7 @@ export const testFishPolarRibbonChartTextured = (
                   fill: fishColors[d.species as keyof typeof fishColors],
                   stroke: "black",
                   strokeWidth: 3,
-                  filter: "url(#filter-drop-shadow)",
+                  effect: "url(#filter-drop-shadow)",
                 })
               )
               .value()

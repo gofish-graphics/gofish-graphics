@@ -10,7 +10,8 @@
     "build:widget": "node build-widget.mjs",
     "gen": "pnpm --dir ../gofish-ir run build && tsx scripts/generate.ts",
     "test": "uv run pytest",
-    "test:arrow-transport": "tsx widget-src/arrowTransport.test.ts"
+    "test:arrow-transport": "tsx widget-src/arrowTransport.test.ts",
+    "test:widget-tooltip": "node build-widget.mjs && tsx widget-src/widgetTooltip.test.ts"
   },
   "dependencies": {
     "apache-arrow": "^15.0.2",

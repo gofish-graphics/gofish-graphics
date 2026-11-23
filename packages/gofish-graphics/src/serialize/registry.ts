@@ -53,7 +53,7 @@ import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
 import { position } from "../ast/graphicalOperators/position";
-import { treemap } from "../ast/graphicalOperators/treemap";
+import { tile } from "../ast/graphicalOperators/tile";
 import { pack } from "../ast/graphicalOperators/pack";
 import { partition } from "../ast/graphicalOperators/partition";
 // `cut` (the pure slice primitive, returns an array of slice node promises)
@@ -283,7 +283,7 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   scatter,
   group,
   table,
-  treemap,
+  tile,
   pack,
   // Operator-only: its children come from the cells of its key.
   partition,

@@ -11,6 +11,7 @@
 
 import {
   COMBINATOR_MARK_TYPES,
+  DIST_FAMILIES,
   LEAF_MARK_TYPES,
   OPERATOR_TYPES,
   type ChannelValue,
@@ -37,7 +38,7 @@ import {
 } from "./nonFinite.js";
 import {
   AUTHORED_REFS,
-  BIN_KINDS,
+  BINNING_KINDS,
   CONSTRAINTS,
   DESCRIPTOR_TABLES,
   optionsRequired,
@@ -502,7 +503,7 @@ function walkOrThrow(
  * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
  * only that kind's params, each of its declared type. Throws the first
  * problem, naming `where` the strategy was written
- * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
+ * (`"tile({ tiling })"`). This is the one check a strategy gets on the JS
  * side, wherever it came from (a family member, a hand-written object, or
  * Python IR; a kind used bare is read as its value where the option
  * entered); the validator runs the same walk over a whole document.
@@ -535,35 +536,35 @@ export function checkOption(
 }
 
 /**
- * Check the `Bin` strategy of `struct({ x, y }).bin(b)`, which takes the
- * kinds that divide a plane (`Bin.hex`, `Bin.voronoi`). A kind that cuts one
- * field's line (`Bin.step`) throws, naming `field(x).bin`; anything else is
+ * Check the `Binning` strategy of `struct({ x, y }).bin(b)`, which takes the
+ * kinds that divide a plane (`Binning.hex`, `Binning.voronoi`). A kind that cuts one
+ * field's line (`Binning.step`) throws, naming `field(x).bin`; anything else is
  * checked as {@link checkStrategy} checks it.
  */
-export function checkStructBin(v: unknown, where: string): void {
+export function checkStructBinning(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
-  if ((BIN_KINDS.field as readonly unknown[]).includes(kind))
+  if ((BINNING_KINDS.field as readonly unknown[]).includes(kind))
     throw new Error(
-      `[gofish] ${where}: Bin.${kind} bins one field. Bin each field with ` +
-        `field(x).bin(Bin.${kind}(...)); struct({ x, y }).bin takes ` +
-        `Bin.hex({ radius }) or Bin.voronoi({ seeds }).`
+      `[gofish] ${where}: Binning.${kind} bins one field. Bin each field with ` +
+        `field(x).bin(Binning.${kind}(...)); struct({ x, y }).bin takes ` +
+        `Binning.hex({ radius }) or Binning.voronoi({ seeds }).`
     );
-  checkStrategy("Bin", v, where);
+  checkStrategy("Binning", v, where);
 }
 
 /**
- * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Bin` kind
- * that cuts one field's line (`OPTION_TYPES.Partition`). A `Bin` kind that
- * divides a plane (`Bin.hex`) throws, naming `struct({ x, y }).bin`.
+ * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Binning` kind
+ * that cuts one field's line (`OPTION_TYPES.Partition`). A `Binning` kind that
+ * divides a plane (`Binning.hex`) throws, naming `struct({ x, y }).bin`.
  */
 export function checkPartition(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
-  if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
+  if ((BINNING_KINDS.struct as readonly unknown[]).includes(kind))
     throw new Error(
-      `[gofish] ${where}: Bin.${kind} bins two fields together into cells ` +
-        `of the plane. Bin them with struct({ x, y }).bin(Bin.${kind}(...)); ` +
-        `field(x).bin takes Bin.step(size), Bin.thresholds(countOrEdges), ` +
-        `Bin.quantiles(countOrProbabilities), ` +
+      `[gofish] ${where}: Binning.${kind} bins two fields together into cells ` +
+        `of the plane. Bin them with struct({ x, y }).bin(Binning.${kind}(...)); ` +
+        `field(x).bin takes Binning.step(size), Binning.thresholds(countOrEdges), ` +
+        `Binning.quantiles(countOrProbabilities), ` +
         `or a Calendar value.`
     );
   walkOrThrow(
@@ -571,8 +572,8 @@ export function checkPartition(v: unknown, where: string): void {
     v,
     where,
     `Make one with a Calendar value (Calendar.month, ` +
-      `Calendar.hour({ every: 6 }), ...), Bin.step(size), ` +
-      `Bin.thresholds(countOrEdges), or Bin.quantiles(countOrProbabilities).`
+      `Calendar.hour({ every: 6 }), ...), Binning.step(size), ` +
+      `Binning.thresholds(countOrEdges), or Binning.quantiles(countOrProbabilities).`
   );
 }
 
@@ -659,6 +660,16 @@ function walkRefType(
       return;
     case "StructAccessor":
       walkStructAccessor(value, path, ctx);
+      return;
+    case "DistAccessor":
+      if (!isObject(value) || value.type !== "dist") {
+        ctx.errors.push({
+          path,
+          message: `expected a distribution (Dist.normal(...).bin(p)), got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      walkDistAccessor(value, path, ctx);
       return;
     case "DatumValue":
       if (!isObject(value) || value.type !== "datum") {
@@ -873,6 +884,10 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     walkFieldAccessor(obj, path, ctx);
     return;
   }
+  if (obj.type === "dist") {
+    walkDistAccessor(obj, path, ctx);
+    return;
+  }
   if (obj.type === "literal") {
     if (!("value" in obj)) {
       ctx.errors.push({
@@ -917,10 +932,62 @@ function walkFieldAccessor(
 }
 
 /**
+ * A distribution (`Dist.normal({ mean, sd })`): `{ type: "dist", family,
+ * params, ops? }`, one parameter per name the family takes
+ * (`DIST_FAMILIES`), each a number, a column name or a field expression,
+ * and `ops` its members (and, as a `by` key, its `bin`).
+ */
+function walkDistAccessor(
+  obj: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  rejectUnknown(obj, ["type", "family", "params", "ops"], path, ctx);
+  const family = obj.family;
+  if (typeof family !== "string" || !Object.hasOwn(DIST_FAMILIES, family)) {
+    ctx.errors.push({
+      path: `${path}.family`,
+      message: `dist "family" must be one of ${Object.keys(DIST_FAMILIES).join(", ")}, got ${JSON.stringify(family)}`,
+    });
+    return;
+  }
+  const names = DIST_FAMILIES[family as keyof typeof DIST_FAMILIES];
+  const params = obj.params;
+  if (!isObject(params)) {
+    ctx.errors.push({
+      path: `${path}.params`,
+      message: `dist "params" must be an object of ${names.join(", ")}`,
+    });
+  } else {
+    rejectUnknown(params, [...names], `${path}.params`, ctx);
+    for (const k of names) {
+      const v = params[k];
+      const at = `${path}.params.${k}`;
+      if (v === undefined)
+        ctx.errors.push({ path: at, message: `Dist.${family} needs "${k}"` });
+      else if (isObject(v) && v.type === "field") walkFieldAccessor(v, at, ctx);
+      else if (typeof v !== "string" && !isIRNumber(v))
+        ctx.errors.push({
+          path: at,
+          message: `a dist parameter is a number, a column name or a field expression, got ${typeNameOf(v)}`,
+        });
+    }
+  }
+  if (obj.ops !== undefined) {
+    if (!Array.isArray(obj.ops))
+      ctx.errors.push({
+        path: `${path}.ops`,
+        message: 'dist "ops" must be an array when present',
+      });
+    else obj.ops.forEach((op, i) => walkFieldOp(op, `${path}.ops[${i}]`, ctx));
+  }
+}
+
+/**
  * A key built from two fields (`struct({ x, y })`), with the cells it is
  * binned into: `{ type: "struct", fields: { x, y }, ops?: [{ op: "bin",
- * partition }] }`, the partition a `Bin` kind that bins two fields
- * (`OPTION_TYPES.StructBin`).
+ * partition }] }`, the partition a `Binning` kind that bins two fields
+ * (`OPTION_TYPES.StructBinning`).
  */
 function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
   const fail = (message: string, at = path) =>
@@ -960,7 +1027,7 @@ function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
         }
         rejectUnknown(op, ["op", "partition"], at, ctx);
         walkFieldType(
-          OPTION_TYPES.StructBin.type,
+          OPTION_TYPES.StructBinning.type,
           op.partition,
           `${at}.partition`,
           ctx
@@ -984,7 +1051,26 @@ const FIELD_OP_NAMES = [
   "median",
   "count",
   "distinct",
+  "map",
+  "reduce",
+  "member",
 ] as const;
+
+/** The `unit` option of `map` or `reduce`: a unit's name, a unit's wire
+ *  traits (`{ HasUnit }`), or a record that mirrors the result's shape. */
+function walkUnitSpec(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "string") return;
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `unit must be a unit's name, a unit, or a record of units, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  if ("HasUnit" in value) return;
+  for (const [k, v] of Object.entries(value))
+    walkUnitSpec(v, `${path}.${k}`, ctx);
+}
 
 /** One op in a `field(...)` pipeline. Rejects an unrecognized op name
  *  consistently with this validator's other enum-style checks. */
@@ -1039,13 +1125,37 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       if (value.partition !== undefined)
         walkPartition(value.partition, `${path}.partition`, ctx);
       return;
+    case "map":
+    case "reduce":
+      rejectUnknown(value, ["op", "fn", "unit"], path, ctx);
+      if (!isObject(value.fn) || typeof value.fn.__gofish_lambda !== "string")
+        ctx.errors.push({
+          path: `${path}.fn`,
+          message: `${value.op} "fn" must be a Python function's bridge handle ({ __gofish_lambda })`,
+        });
+      if (value.unit !== undefined)
+        walkUnitSpec(value.unit, `${path}.unit`, ctx);
+      return;
+    case "member":
+      rejectUnknown(value, ["op", "name", "args"], path, ctx);
+      if (typeof value.name !== "string")
+        ctx.errors.push({
+          path: `${path}.name`,
+          message: `member "name" must be a string`,
+        });
+      if (value.args !== undefined && !Array.isArray(value.args))
+        ctx.errors.push({
+          path: `${path}.args`,
+          message: `member "args" must be an array when present`,
+        });
+      return;
     default:
       // reverse/dropNulls/normalize/sum/mean/median/count/distinct carry no extra fields.
       return;
   }
 }
 
-/** A `bin` op's partition: a Calendar value or a `Bin` kind that bins one
+/** A `bin` op's partition: a Calendar value or a `Binning` kind that bins one
  *  field (`OPTION_TYPES.Partition`, one tagged union), or a product of
  *  Calendar values (a list of two or more). Which levels a product may
  *  combine is the renderer's check (`checkBinStep` in gofish-graphics'

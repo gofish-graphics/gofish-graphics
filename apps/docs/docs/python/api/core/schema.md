@@ -222,7 +222,7 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
 **`CanSum`.**
 
 - A `size` channel (`w`, `h`, ...), a [`stack`](/python/api/operators/stack), a
-  [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
+  [`tile`](/python/api/operators/tile) `size`, `field(x).sum()` and
   `field(x).normalize()` add up their values. Adding up values in a declared
   unit needs `CanSum`: without it, it is an error that names the column and
   the unit, and says to declare the unit with `Unit(name, traits=[Trait.summable()])`, or,
@@ -299,9 +299,9 @@ A column of date strings is a time in `Unit.time()`:
 :::
 
 ```python
-chart(prices, schema={"date": Unit.time()}, axes=True).flow(
-    scatter(by="date", x="date", y="price")
-).mark(line(stroke="steelblue", stroke_width=2))
+chart(prices, schema={"date": Unit.time()}, axes=True).mark(
+    line(x="date", y="price", stroke="steelblue", stroke_width=2)
+)
 ```
 
 Five summary columns of one quantity title their axis once:

@@ -6,13 +6,13 @@ import { d as $d } from "../components/data"; */
 import { value } from "../ast/data";
 import { gofish } from "../ast/gofish";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6, gray, neutral } from "../color";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { linear } from "../ast/coordinateTransforms/linear";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
+import { spread } from "../ast/graphicalOperators/spread";
 
 const data = [
   { category: "A", group: "x", value: 0.1 },
@@ -28,15 +28,15 @@ const data = [
 
 export const testPolarCenterStackedBar = () =>
   layer({ coord: polar_DEPRECATED() }, [
-    stack(
+    spread(
       {
         x: 2,
         dir: 1,
-        spacing: (2 * Math.PI) / 3,
+        spacing: 0,
         alignment: "start",
       },
       Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
-        stack({ dir: 0,
+        spread({ dir: 0,
             spacing: 0,
             alignment: "middle",
           },

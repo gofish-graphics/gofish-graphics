@@ -102,12 +102,16 @@ export const MARK_CHANNELS = {
     stroke: "color",
     w: "size",
     h: "size",
+    x: "pos",
+    y: "pos",
   },
   ribbon: {
     fill: "color",
     stroke: "color",
     w: "size",
     h: "size",
+    x: "pos",
+    y: "pos",
   },
   enclose: {
     padding: "raw",

@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import data from "vega-datasets";
-import { seafood } from "../../src/data/catch";
+import { unemployment } from "../../src/data/unemployment";
 import {
   arrow,
-  blank,
+  Baseline,
   chart,
   circle,
   Constraint,
@@ -12,7 +12,7 @@ import {
   group,
   layer,
   line,
-  Place,
+  Placement,
   polygon,
   rect,
   ref,
@@ -30,8 +30,8 @@ const meta: Meta = {
 };
 export default meta;
 
-// ─── points: Place.around() ──────────────────────────────────────────────────
-// A dot's label goes around it by default (`Place.around()`): the first of
+// ─── points: Placement.around() ──────────────────────────────────────────────────
+// A dot's label goes around it by default (`Placement.around()`): the first of
 // eight compass spots, upper right first, that covers no other dot or label.
 // Rows are sorted by population, so a big country's label wins a tie.
 export const ScatterPointLabels: StoryObj = {
@@ -61,8 +61,8 @@ export const ScatterPointLabels: StoryObj = {
   },
 };
 
-// ─── lines: Place.end() ──────────────────────────────────────────────────────
-// A line's label goes past its last point by default (`Place.end()`); labels
+// ─── lines: Placement.end() ──────────────────────────────────────────────────────
+// A line's label goes past its last point by default (`Placement.end()`); labels
 // that would cover each other slide apart vertically. The prices are yearly
 // averages of vega-datasets' monthly stocks.
 const yearlyStocks = async () => {
@@ -103,14 +103,20 @@ export const LineEndLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
-      .flow(
-        group({ by: "symbol" }),
-        scatter({ by: "date", x: "date", y: "price" })
-      )
+    chart(context.loaded.stocks, {
+      schema: { date: Unit.time() },
+      w: 560,
+      h: 320,
+    })
+      .flow(group({ by: "symbol" }))
       .mark(
-        line({ stroke: "symbol", strokeWidth: 2 }).label("symbol", {
-          position: Place.end(),
+        line({
+          x: "date",
+          y: "price",
+          stroke: "symbol",
+          strokeWidth: 2,
+        }).label("symbol", {
+          placement: Placement.end(),
         })
       )
       .render(container, { axes: true, legend: false });
@@ -118,7 +124,7 @@ export const LineEndLabels: StoryObj = {
   },
 };
 
-// ─── lines: Place.along({ orient: "sloped" }) ────────────────────────────────
+// ─── lines: Placement.along({ orient: "sloped" }) ────────────────────────────────
 // Inline labels sit on the line 60% of the way along it, turned to the line,
 // with a halo so the line does not run through the text. A label that would
 // cover another line slides along its own.
@@ -134,14 +140,20 @@ export const InlineSlopedLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
-      .flow(
-        group({ by: "symbol" }),
-        scatter({ by: "date", x: "date", y: "price" })
-      )
+    chart(context.loaded.stocks, {
+      schema: { date: Unit.time() },
+      w: 560,
+      h: 320,
+    })
+      .flow(group({ by: "symbol" }))
       .mark(
-        line({ stroke: "symbol", strokeWidth: 2 }).label("symbol", {
-          position: Place.along({ at: 0.6, orient: "sloped" }),
+        line({
+          x: "date",
+          y: "price",
+          stroke: "symbol",
+          strokeWidth: 2,
+        }).label("symbol", {
+          placement: Placement.along({ at: 0.6, orient: "sloped" }),
           halo: {},
           fontWeight: 600,
         })
@@ -151,36 +163,45 @@ export const InlineSlopedLabels: StoryObj = {
   },
 };
 
-// ─── areas: Place.interior() ─────────────────────────────────────────────────
-// A band's label goes inside it by default (`Place.interior()`), where the
+// ─── areas: Placement.interior() ─────────────────────────────────────────────────
+// A band's label goes inside it by default (`Placement.interior()`), where the
 // label's own box can grow largest: the thick middle of each stream.
+// The four industries with the most unemployment, so every band is thick
+// enough somewhere to hold its name.
+const largestIndustries = [
+  "Wholesale and Retail Trade",
+  "Manufacturing",
+  "Leisure and hospitality",
+  "Business services",
+];
+
 export const StreamgraphInteriorLabels: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
       title: "Streamgraph with Band Labels",
       description:
-        "Fish catch by species across six lakes as a streamgraph, each species named inside its band where the band is thick enough to hold the name.",
+        "Unemployment in the four largest US industries from 2000 to 2010 as a streamgraph, each industry named inside its band where the band is thickest.",
     },
   },
   render: () => {
     const container = initializeContainer();
-    chart(seafood, { h: 360 })
-      .flow(
-        spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
-        stack({ by: "species", dir: "y" })
-      )
-      .mark(
-        ribbon({ h: "count", fill: "species", opacity: 0.8 }).label("species")
-      )
-      .render(container, { legend: false });
+    const rows = unemployment.filter((d) =>
+      largestIndustries.includes(d.series)
+    );
+    chart(rows, { w: 560, h: 360, schema: { date: Unit.time() } })
+      .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
+      .mark(ribbon({ x: "date", h: "count", fill: "series" }).label("series"))
+      .render(container, {
+        legend: { color: false, y: { title: "unemployed (thousands)" } },
+      });
     return container;
   },
 };
 
-// ─── regions: Place.interior() on non-convex polygons ────────────────────────
+// ─── regions: Placement.interior() on non-convex polygons ────────────────────────
 // Four wings of a floor plan, each a non-convex polygon. A polygon's label
-// goes inside it by default (`Place.interior()`), in the middle of its
+// goes inside it by default (`Placement.interior()`), in the middle of its
 // widest arm.
 const T = 1.4;
 const wings = [
@@ -257,7 +278,7 @@ export const PolygonCenterLabels: StoryObj = {
       .flow(group({ by: "name" }))
       .mark(
         polygon({ points: "ring", fill: "name", opacity: 0.85 }).label("name", {
-          position: "center",
+          placement: "center",
         })
       )
       .render(container, { legend: false });
@@ -323,7 +344,7 @@ const stateDiagram = (side: "left" | "above" | "on") => {
         },
         [ref(names[e.from]), ref(names[e.to])]
       ).label(() => e.label, {
-        position: Place.along({ side, orient: "sloped" }),
+        placement: Placement.along({ side, orient: "sloped" }),
         color: "#546e7a",
         background: side === "on" ? {} : undefined,
       })
@@ -379,12 +400,15 @@ const budget = [
 ];
 const budgetChart = (side: "above" | ("above" | "below")[]) =>
   chart(budget, { w: 360, h: 220 })
-    .flow(group({ by: "series" }), scatter({ by: "x", x: "x", y: "y" }))
+    .flow(group({ by: "series" }))
     .mark(
-      line({ stroke: "series", strokeWidth: 2 }).label("series", {
-        position: Place.along({ at: 0.5, side, orient: "sloped" }),
-        fontWeight: 600,
-      })
+      line({ x: "x", y: "y", stroke: "series", strokeWidth: 2 }).label(
+        "series",
+        {
+          placement: Placement.along({ at: 0.5, side, orient: "sloped" }),
+          fontWeight: 600,
+        }
+      )
     );
 
 export const SideAbove: StoryObj = {
@@ -430,12 +454,13 @@ const trendScatter = (countries: any[]) => {
   // The trend line is drawn first, so it is placed when the labels look
   // for it.
   return chart(ends, { w: 640, h: 440 })
-    .flow(scatter({ by: "fertility", x: "fertility", y: "life_expect" }))
-    .mark(blank().name("ends"))
-    .layer(
-      chart(selectAll("ends")).mark(
-        line({ stroke: "#9e9e9e", strokeWidth: 2 }).name("trend")
-      )
+    .mark(
+      line({
+        x: "fertility",
+        y: "life_expect",
+        stroke: "#9e9e9e",
+        strokeWidth: 2,
+      }).name("trend")
     )
     .layer(
       chart(countries)
@@ -470,7 +495,7 @@ export const AvoidingTrendLine: StoryObj = {
   },
 };
 
-// ─── boxes: Place.around on bars ─────────────────────────────────────────────
+// ─── boxes: Placement.around on bars ─────────────────────────────────────────────
 // Each bar's value goes above it, or just inside its top when there is no
 // room above (the tallest bar reaches the top of the plot).
 const sales = [
@@ -489,7 +514,7 @@ export const BarValuesAboveOrInside: StoryObj = {
       .flow(spread({ by: "month", dir: "x" }))
       .mark(
         rect({ h: "units", fill: "#4e79a7" }).label("units", {
-          position: Place.around({
+          placement: Placement.around({
             directions: ["top"],
             side: ["outset", "inset"],
           }),
@@ -511,7 +536,7 @@ export const BarEndPart: StoryObj = {
       .flow(spread({ by: "month", dir: "y" }))
       .mark(
         rect({ w: "units", fill: "#59a14f" }).label("units", {
-          position: Place.along({ at: "x-max", side: ["outset", "inset"] }),
+          placement: Placement.along({ at: "x-max", side: ["outset", "inset"] }),
         })
       )
       .render(container, { axes: true });
@@ -538,7 +563,7 @@ export const BarValuesInsideOrAbove: StoryObj = {
       .flow(spread({ by: "k", dir: "x" }))
       .mark(
         rect({ h: "v", fill: "#4e79a7" }).label("v", {
-          position: Place.around({
+          placement: Placement.around({
             directions: ["top"],
             side: ["inset", "outset"],
           }),
@@ -558,7 +583,7 @@ export const BarValuesInsideOrPastEnd: StoryObj = {
       .flow(spread({ by: "k", dir: "y" }))
       .mark(
         rect({ w: "v", fill: "#59a14f" }).label("v", {
-          position: Place.along({ at: "x-max", side: ["inset", "outset"] }),
+          placement: Placement.along({ at: "x-max", side: ["inset", "outset"] }),
         })
       )
       .render(container, { axes: true });

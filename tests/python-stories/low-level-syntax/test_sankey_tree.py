@@ -6,7 +6,7 @@ hierarchical tokens, and `connect` ribbons link each source to its target by
 `ref`. The bar tiers and the ribbons all live in one `layer`.
 """
 
-from gofish import layer, spread, stack, ribbon, rect, ref, Curve
+from gofish import layer, spread, ribbon, rect, ref, Curve
 from python_stories.data import TITANIC, COLORS
 from python_stories._lowlevel_helpers import group_by, sum_by
 
@@ -35,8 +35,8 @@ def story_default():
     def _survival_node(cls, sex, items):
         return spread(
             [
-                # source: a single stacked column of survival bars
-                stack(
+                # source: a single column of touching survival bars
+                spread(
                     [
                         rect(
                             w=40,
@@ -74,8 +74,8 @@ def story_default():
     def _class_node(cls, items):
         return spread(
             [
-                # source: a single stacked column of sex bars
-                stack(
+                # source: a single column of touching sex bars
+                spread(
                     [
                         rect(
                             w=40,
@@ -110,7 +110,7 @@ def story_default():
     bars = spread(
         [
             # root: one bar per class
-            stack(
+            spread(
                 [
                     rect(
                         w=40, h=sum_by(items, "count") / 10, fill=_NEUTRAL

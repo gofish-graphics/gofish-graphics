@@ -78,7 +78,7 @@ gf.chart(seafood)
     gf.pack({ spacing: 2 })
   )
   .mark(gf.circle({ r: 12, fill: "species" }))
-  .render(root, { w: 420, h: 420 });
+  .render(root);
 ```
 
 :::
@@ -118,23 +118,23 @@ of nodes or refs, or one `selectAll(name)`. The outline is cut so that it
 stays `clearance` (by default, the `padding`) from each of them. A box that
 avoids nodes is drawn as its cut outline, not as a rectangle.
 
-A fresh member with no size of its own, such as a `treemap` or a `region`,
+A fresh member with no size of its own, such as a `tile` or a `region`,
 fills the space it is given, so there is nothing to hug. Then `enclose` works
 the other way round: the outline is the space itself (`Shape.box()`) or the
 oval inscribed in it (`Shape.oval()`), and it hands the outline, drawn in by
 `padding`, down to the member as the shape to fill. Inside a Voronoi cell of
-a [`treemap`](/js/api/operators/treemap), the space is that cell, so
+a [`tile`](/js/api/operators/tile), the space is that cell, so
 `Shape.box()` draws the cell and `Shape.oval()` the part of the oval inside
 it. `Shape.fillet()` and `Shape.blob()` hug the members, so around a member
 with no size they are an error that names `Shape.box()` and `Shape.oval()`.
 
 ```ts
-// A Voronoi treemap in a circle: the treemap fills the oval.
+// A Voronoi treemap in a circle: the `tile` fills the oval.
 chart(countryPopulations, { axes: false, w: 480, h: 480 })
   .flow(
     enclose({ shape: Shape.oval, fill: "none" }),
-    treemap({ by: "continent", size: "pop", spacing: 5, tile: Tile.voronoi }),
-    treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+    tile({ by: "continent", size: "pop", spacing: 5, tiling: Tiling.voronoi }),
+    tile({ size: "pop", spacing: 1, tiling: Tiling.voronoi })
   )
   .mark(region({ fill: "continent" }));
 ```

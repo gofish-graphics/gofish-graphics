@@ -19,14 +19,20 @@
  */
 
 import {
+  COMBINATOR_MARKS,
   CONSTRAINTS,
   DESCRIPTOR_TABLES,
   acceptedFields,
   LABEL_OPTIONS,
+  LEAF_MARKS,
+  MARK_BASE_FIELDS,
+  OPERATOR_BASE_FIELDS,
+  COMBINATOR_OPTIONS_BASE_FIELDS,
   OPERATORS,
   OPTION_TYPES,
   STRATEGIES,
   resolveFields,
+  type FieldGroup,
   type FieldType,
 } from "../frontend/descriptors.js";
 import type {
@@ -35,17 +41,18 @@ import type {
   FieldPredicateIR,
   AxisOptions,
   AxisLabelOptions,
-  BinIR,
+  BinningIR,
   CalendarPartitionIR,
   CurveIR,
   ShapeIR,
-  PlaceIR,
+  PlacementIR,
   SpacingIR,
   ConstraintIR,
   LabelSpecIR,
   OverlapIR,
-  TileIR,
-  FilterIR,
+  TilingIR,
+  BaselineIR,
+  EffectIR,
 } from "../frontend/schema.js";
 
 declare const process: { exit(code: number): never };
@@ -87,6 +94,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "alignment",
     "reverse",
     "glue",
+    "baseline",
     "axes",
     "x",
     "y",
@@ -97,10 +105,9 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   stack: [
     "by",
     "dir",
-    "spacing",
-    "glue",
     "alignment",
     "reverse",
+    "baseline",
     "axes",
     "x",
     "y",
@@ -126,7 +133,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   ],
   table: ["by", "spacing", "numCols"],
   log: ["prefix"],
-  treemap: [
+  tile: [
     "x",
     "y",
     "w",
@@ -136,7 +143,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "spacing",
     "padding",
     "round",
-    "tile",
+    "tiling",
     "sort",
     "size",
   ],
@@ -238,7 +245,7 @@ for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
 console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
 {
   const schemaKeys = Object.keys({
-    position: true,
+    placement: true,
     avoiding: true,
     halo: true,
     background: true,
@@ -273,17 +280,17 @@ const SCHEMA_STRATEGY_KEYS: Record<
   keyof typeof STRATEGIES,
   Record<string, Record<string, true>>
 > = {
-  Filter: {
+  Effect: {
     grayscale: { amount: true },
     luminanceToAlpha: {},
-  } satisfies StrategyKeys<FilterIR>,
-  Tile: {
+  } satisfies StrategyKeys<EffectIR>,
+  Tiling: {
     squarify: { ratio: true },
     slice: {},
     dice: {},
     binary: {},
     voronoi: { seed: true },
-  } satisfies StrategyKeys<TileIR>,
+  } satisfies StrategyKeys<TilingIR>,
   Overlap: {
     separate: { padding: true },
     noise: { randomness: true, smoothing: true, padding: true, seed: true },
@@ -308,13 +315,13 @@ const SCHEMA_STRATEGY_KEYS: Record<
       straights: true,
     },
   } satisfies StrategyKeys<CurveIR>,
-  Bin: {
+  Binning: {
     step: { size: true },
     thresholds: { thresholds: true },
     quantiles: { quantiles: true },
     hex: { radius: true },
     voronoi: { seeds: true },
-  } satisfies StrategyKeys<BinIR>,
+  } satisfies StrategyKeys<BinningIR>,
   Calendar: {
     second: { every: true },
     minute: { every: true },
@@ -338,13 +345,20 @@ const SCHEMA_STRATEGY_KEYS: Record<
       separate: true,
     },
   } satisfies StrategyKeys<ShapeIR>,
-  Place: {
+  Placement: {
     around: { directions: true, side: true, offset: true },
     along: { at: true, side: true, orient: true, offset: true },
     start: { offset: true },
     end: { offset: true },
     interior: {},
-  } satisfies StrategyKeys<PlaceIR>,
+  } satisfies StrategyKeys<PlacementIR>,
+  Baseline: {
+    start: {},
+    end: {},
+    middle: {},
+    wiggle: {},
+    at: { part: true, point: true },
+  } satisfies StrategyKeys<BaselineIR>,
   Spacing: {
     box: { gap: true },
     pitch: { distance: true, at: true },
@@ -352,7 +366,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts FilterIR / TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR / PlaceIR / SpacingIR"
+  "\n# STRATEGIES agree with schema.ts EffectIR / TilingIR / OverlapIR / CurveIR / BinningIR / CalendarPartitionIR / ShapeIR / PlacementIR / BaselineIR / SpacingIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<
@@ -395,6 +409,183 @@ for (const [family, spec] of Object.entries(STRATEGIES)) {
         Object.keys(preset.values).every((k) => k in kinds[preset.kind].params)
     );
   }
+}
+
+/**
+ * The naming rule for strategy families, as `apps/docs/docs/internals/
+ * design/api-design.md` states it ("Strategy families are uppercase
+ * namespaces", #1355). The test walks every construct's fields, the field
+ * groups no construct includes, and the objects of `OPTION_TYPES`, into
+ * nested objects, and allows the role-named slots in `ROLE_NAMED_SLOTS`.
+ */
+console.log("\n# Strategy families follow the naming rule");
+const CONSTRUCT_TABLES = { OPERATORS, LEAF_MARKS, COMBINATOR_MARKS };
+for (const family of Object.keys(STRATEGIES)) {
+  const lower = family.toLowerCase();
+  for (const [table, entries] of Object.entries(CONSTRUCT_TABLES)) {
+    check(
+      `${family}: "${lower}" is not a key of ${table}`,
+      !Object.hasOwn(entries, lower)
+    );
+  }
+}
+
+/** Option slots that take a family's value but name the role it plays, not
+ *  the family, by their full location: the construct or option type, then
+ *  the field. Only that one slot is exempt. */
+const ROLE_NAMED_SLOTS: Readonly<Record<string, string>> = {
+  // A list of Calendar units, one per level of the axis: its entries are
+  // levels, and a `true`/`false` entry keeps or hides one.
+  "OPTION_TYPES.AxisOptions.levels": "Calendar",
+};
+const roleNamedSlotsSeen = new Set<string>();
+
+/** The branches of each family's own type (`OPTION_TYPES[family]`), one per
+ *  kind, as JSON, to tell which family a branch of another type comes
+ *  from. */
+const FAMILY_BRANCHES = new Map(
+  Object.keys(STRATEGIES).map((family) => {
+    const type = OPTION_TYPES[family].type;
+    const branches = type.kind === "union" ? type.options : [type];
+    return [family, new Set(branches.map((b) => JSON.stringify(b)))];
+  })
+);
+
+/** The families a named option type is made of, when it is a union whose
+ *  every branch is a member of a family (`Partition`, the Calendar kinds and
+ *  the Binning kinds of one field; `StructBinning`, the Binning kinds of the
+ *  plane). Undefined for any other type. A branch that is a member of two
+ *  families names both. */
+function familiesBuilding(type: FieldType): string[] | undefined {
+  const branches = type.kind === "union" ? type.options : [type];
+  const families = branches.map((b) =>
+    [...FAMILY_BRANCHES].flatMap(([family, own]) =>
+      own.has(JSON.stringify(b)) ? [family] : []
+    )
+  );
+  return families.every((f) => f.length > 0)
+    ? [...new Set(families.flat())]
+    : undefined;
+}
+
+/** The strategy families a field's type takes: its refs to a family, and its
+ *  refs to a named option type that takes a family or is made of family
+ *  members, through unions, arrays, records and tuples. A field that takes
+ *  such a type takes those families, so the rule applies to its key. */
+function familiesOf(type: FieldType, seen = new Set<string>()): string[] {
+  switch (type.kind) {
+    case "ref": {
+      if (Object.hasOwn(STRATEGIES, type.name)) return [type.name];
+      const named = OPTION_TYPES[type.name];
+      if (named === undefined || seen.has(type.name)) return [];
+      seen.add(type.name);
+      return familiesBuilding(named.type) ?? familiesOf(named.type, seen);
+    }
+    case "union":
+      return type.options.flatMap((o) => familiesOf(o, seen));
+    case "array":
+      return familiesOf(type.items, seen);
+    case "record":
+      return familiesOf(type.valueType, seen);
+    case "tuple":
+      return type.items.flatMap((i) => familiesOf(i, seen));
+    default:
+      return [];
+  }
+}
+
+// The two named types made of family members, and the families they take.
+// No descriptor field refs them today, so the walk below never meets them
+// at a key. They are read only where a key is binned: the `partition` of the
+// `bin` op of a field or struct key (`field(x).bin(p)`, `struct({ x, y
+// }).bin(b)`), which validate.ts checks against `OPTION_TYPES.Partition` and
+// `OPTION_TYPES.StructBinning`. Those keys are hand-authored shapes
+// (`AUTHORED_REFS`), not field groups, so they are out of this walk's reach,
+// and the rule does not apply to them: the strategy is the only argument of
+// the `.bin` method, which takes it bare (api-design.md), and the op's wire
+// key `partition` is not a key a user writes. `partition`'s `by` takes the
+// key, not the strategy: it is the one splitting key every operator shares
+// (api-design.md, "One key across a family"), and the binning is the argument of the key's
+// own `.bin`. A field that ever refs either type is checked like any other.
+check(
+  "OPTION_TYPES.Partition is made of Calendar and Binning",
+  JSON.stringify(familiesBuilding(OPTION_TYPES.Partition.type)) ===
+    JSON.stringify(["Calendar", "Binning"])
+);
+check(
+  "OPTION_TYPES.StructBinning is made of Binning",
+  JSON.stringify(familiesBuilding(OPTION_TYPES.StructBinning.type)) ===
+    JSON.stringify(["Binning"])
+);
+
+/** The object types reachable from `type` through unions, arrays, records
+ *  and tuples: the field groups nested in it. */
+function objectsIn(type: FieldType): Readonly<FieldGroup>[] {
+  switch (type.kind) {
+    case "object":
+      return [type.fields];
+    case "union":
+      return type.options.flatMap(objectsIn);
+    case "array":
+      return objectsIn(type.items);
+    case "record":
+      return objectsIn(type.valueType);
+    case "tuple":
+      return type.items.flatMap(objectsIn);
+    default:
+      return [];
+  }
+}
+
+function checkFamilyKeys(where: string, fields: Readonly<FieldGroup>): void {
+  for (const [key, spec] of Object.entries(fields)) {
+    const slot = `${where}.${key}`;
+    // The key a user writes and, where it differs, the one on the wire: both
+    // are the option's name.
+    const names = [...new Set([key, spec.wire ?? key])];
+    for (const family of new Set(familiesOf(spec.type))) {
+      const roleNamed = ROLE_NAMED_SLOTS[slot] === family;
+      if (roleNamed) roleNamedSlotsSeen.add(slot);
+      for (const name of names) {
+        check(
+          roleNamed
+            ? `${slot} takes ${family}, and names its role`
+            : `${where}.${name} takes ${family}, so is named ${family.toLowerCase()}`,
+          roleNamed || name === family.toLowerCase()
+        );
+      }
+    }
+    for (const nested of objectsIn(spec.type)) {
+      checkFamilyKeys(slot, nested);
+    }
+  }
+}
+
+for (const [kind, entries] of Object.entries(DESCRIPTOR_TABLES)) {
+  for (const [name, descriptor] of Object.entries(entries)) {
+    checkFamilyKeys(`${kind} ${name}`, resolveFields(descriptor));
+  }
+}
+// The groups `resolveFields` does not merge: the base groups `acceptedFields`
+// adds per node kind, and `LABEL_OPTIONS`, which only the opaque `LabelIR`
+// ref reaches. Included groups (`withEffect`, ...) are covered above.
+checkFamilyKeys("LABEL_OPTIONS", LABEL_OPTIONS);
+checkFamilyKeys("MARK_BASE_FIELDS", MARK_BASE_FIELDS);
+checkFamilyKeys("OPERATOR_BASE_FIELDS", OPERATOR_BASE_FIELDS);
+checkFamilyKeys(
+  "COMBINATOR_OPTIONS_BASE_FIELDS",
+  COMBINATOR_OPTIONS_BASE_FIELDS
+);
+for (const [name, spec] of Object.entries(OPTION_TYPES)) {
+  for (const fields of objectsIn(spec.type)) {
+    checkFamilyKeys(`OPTION_TYPES.${name}`, fields);
+  }
+}
+for (const slot of Object.keys(ROLE_NAMED_SLOTS)) {
+  check(
+    `ROLE_NAMED_SLOTS: ${slot} is a slot that takes its family`,
+    roleNamedSlotsSeen.has(slot)
+  );
 }
 
 /** The options keys of `ConstraintIR`, per constraint type. Typed so that a

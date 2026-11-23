@@ -30,7 +30,7 @@ from gofish import (
     Trait,
     Unit,
     Calendar,
-    Bin,
+    Binning,
     datum,
     scatter,
     arrow,
@@ -145,10 +145,10 @@ class TestOperators:
     def test_between_rejects_pipeline_ops(self):
         """A predicate is not a value slot: ops on the field are an error."""
         with pytest.raises(ValueError, match="does not apply the expression"):
-            field("x").bin(Bin.step(10)).between(0, 1)
+            field("x").bin(Binning.step(10)).between(0, 1)
 
     def test_bin_partitions_wire(self):
-        """`.bin` takes a Calendar value, Bin.step or Bin.thresholds, and
+        """`.bin` takes a Calendar value, Binning.step or Binning.thresholds, and
         writes the partition's wire form (camelCase keys, as JS reads them)."""
         assert field("d").bin(Calendar.month(every=3))["ops"] == [
             {"op": "bin", "partition": {"kind": "month", "every": 3}}
@@ -156,16 +156,16 @@ class TestOperators:
         assert field("d").bin(Calendar.week(start="sunday"))["ops"] == [
             {"op": "bin", "partition": {"kind": "week", "start": "sunday"}}
         ]
-        assert field("x").bin(Bin.step(0.5))["ops"] == [
+        assert field("x").bin(Binning.step(0.5))["ops"] == [
             {"op": "bin", "partition": {"kind": "step", "size": 0.5}}
         ]
-        assert field("x").bin(Bin.thresholds([1, 2, 5]))["ops"] == [
+        assert field("x").bin(Binning.thresholds([1, 2, 5]))["ops"] == [
             {"op": "bin", "partition": {"kind": "thresholds", "thresholds": [1, 2, 5]}}
         ]
-        assert field("x").bin(Bin.quantiles(10))["ops"] == [
+        assert field("x").bin(Binning.quantiles(10))["ops"] == [
             {"op": "bin", "partition": {"kind": "quantiles", "quantiles": 10}}
         ]
-        assert field("x").bin(Bin.quantiles([0.25, 0.75]))["ops"] == [
+        assert field("x").bin(Binning.quantiles([0.25, 0.75]))["ops"] == [
             {"op": "bin", "partition": {"kind": "quantiles", "quantiles": [0.25, 0.75]}}
         ]
         assert field("x").bin()["ops"] == [{"op": "bin"}]
@@ -174,34 +174,27 @@ class TestOperators:
         """`.median()` is a fold, written as its op, as `.mean()` is."""
         assert field("y").median()["ops"] == [{"op": "median"}]
 
-    def test_quantile_rows(self):
-        """`quantile_rows` turns a density grid into rows at its quantiles,
-        keeping the columns that are constant, as JS `quantileRows` does."""
-        from statistics import NormalDist
+    def test_kde(self):
+        """`kde` makes one row whose column holds the sample as a kernel
+        density's data form, keeping the columns that are constant, as JS
+        `kde` does."""
+        from gofish import kde
 
-        from gofish import quantile_rows
-
-        nd = NormalDist()
-        grid = [
-            {"month": "Jan", "x": -6 + i * 0.02, "pdf": nd.pdf(-6 + i * 0.02)}
-            for i in range(601)
-        ][::-1]
-        rows = quantile_rows(grid, x="x", density="pdf", n=1000)
-        assert len(rows) == 1000
-        worst = max(abs(r["x"] - nd.inv_cdf((i + 0.5) / 1000)) for i, r in enumerate(rows))
-        assert worst < 0.005
-        assert all(r["month"] == "Jan" and "pdf" not in r for r in rows)
-        flat = quantile_rows([{"x": 0, "d": 2}, {"x": 10, "d": 2}], x="x", density="d", n=4)
-        assert [r["x"] for r in flat] == [1.25, 3.75, 6.25, 8.75]
-        with pytest.raises(ValueError, match="no area"):
-            quantile_rows([{"x": 0, "d": 1}], x="x", density="d", n=3)
-        with pytest.raises(ValueError, match="whole number"):
-            quantile_rows(grid, x="x", density="pdf", n=0)
-        # Two curves mixed together (called before the split by month): two
-        # rows at one position.
-        two_months = grid + [{**r, "month": "Feb"} for r in grid]
-        with pytest.raises(ValueError, match='"x" .*more than one curve.*inside derive'):
-            quantile_rows(two_months, x="x", density="pdf", n=10)
+        rows = [
+            {"month": "Jan", "t": 3.0, "day": 1},
+            {"month": "Jan", "t": None, "day": 2},
+            {"month": "Jan", "t": 5.0, "day": 3},
+        ]
+        assert kde("t")(rows) == [
+            {
+                "month": "Jan",
+                "t": {"type": "dist", "family": "kde", "params": {"values": [3.0, 5.0]}},
+            }
+        ]
+        assert kde("t", bandwidth=0.5)(rows)[0]["t"]["params"]["bandwidth"] == 0.5
+        assert kde("t")([]) == []
+        with pytest.raises(ValueError, match="bandwidth must be a positive number"):
+            kde("t", bandwidth=0)
 
     def test_bin_product_and_chain_wire(self):
         """A product is a list partition on one bin op; a chain is one bin op
@@ -222,23 +215,23 @@ class TestOperators:
         with pytest.raises(TypeError, match="two or more"):
             field("d").bin([Calendar.month])
         with pytest.raises(TypeError, match="two or more"):
-            field("d").bin([Calendar.year, Bin.step(1)])
+            field("d").bin([Calendar.year, Binning.step(1)])
 
     def test_bin_rejects_other_partitions(self):
-        """The untagged forms and the removed kwargs are gone, and a Bin kind
+        """The untagged forms and the removed kwargs are gone, and a Binning kind
         of two fields names the key that takes it."""
         with pytest.raises(TypeError, match="Calendar value"):
             field("x").bin({"step": 1})
         with pytest.raises(TypeError):
             field("x").bin(step=1)
-        with pytest.raises(TypeError, match=r"struct\(x=\.\.\., y=\.\.\.\)\.bin\(Bin\.hex"):
-            field("x").bin(Bin.hex(radius=1))
+        with pytest.raises(TypeError, match=r"struct\(x=\.\.\., y=\.\.\.\)\.bin\(Binning\.hex"):
+            field("x").bin(Binning.hex(radius=1))
         with pytest.raises(ValueError, match="must be > 0"):
-            Bin.step(0)
+            Binning.step(0)
         with pytest.raises(ValueError, match=">= 1"):
-            Bin.thresholds(0)
+            Binning.thresholds(0)
         with pytest.raises(TypeError):
-            Bin.step(size=1)
+            Binning.step(size=1)
 
     def test_filter_callable_is_derive(self):
         """A Python function predicate runs through the derive bridge."""
@@ -333,6 +326,56 @@ class TestMarkZOrder:
         assert call(m, lambda_id, [[BridgeRef(0), BridgeRef(1)]], refs) == [1]
 
 
+class TestMarkTooltip:
+    """`.tooltip(fields=None)`: `True`, or the list of fields, on the mark's IR
+    (#1395)."""
+
+    def test_no_fields(self):
+        assert ir(rect(w="share").tooltip())["tooltip"] is True
+
+    def test_fields_in_order(self):
+        m = rect(w="share").tooltip(["share", "path"])
+        assert ir(m)["tooltip"] == ["share", "path"]
+
+    def test_absent_by_default(self):
+        assert "tooltip" not in ir(rect(w="share"))
+
+    def test_kept_through_other_modifiers(self):
+        m = rect(w="share").tooltip(["n"]).name("bars").z_order(1)
+        node = ir(m)
+        assert node["tooltip"] == ["n"] and node["name"] == "bars"
+
+    def test_a_bare_string_is_an_error(self):
+        # A str is a sequence of letters, not the list of one field.
+        with pytest.raises(TypeError, match=r'\["lake"\]'):
+            rect(w="share").tooltip("lake")
+
+    def test_translate_in_either_order(self):
+        # The IR carries both, whichever comes first; the JS side chains
+        # them in one order and `.translate()` keeps the tooltip on the mark.
+        a = ir(line(x="year", y="v").translate(y=5).tooltip(["year"]))
+        b = ir(line(x="year", y="v").tooltip(["year"]).translate(y=5))
+        assert a == b
+        assert a["tooltip"] == ["year"] and a["translate"] == {"y": 5}
+
+    def test_in_a_chart(self):
+        from gofish import chart, spread
+
+        doc = (
+            chart([{"path": "a", "share": 0.1}])
+            .flow(spread(by="path", dir="y"))
+            .mark(rect(w="share").tooltip())
+            .to_ir()
+        )
+        assert doc["root"]["mark"]["tooltip"] is True
+
+    def test_a_ref_has_no_tooltip(self):
+        from gofish import ref
+
+        with pytest.raises(TypeError, match="tooltip"):
+            ref("bars").tooltip()
+
+
 class TestMarkName:
     """Test Mark.name() method."""
 
@@ -357,6 +400,43 @@ class TestMarkName:
         m = rect(h="value")
         d = ir(m)
         assert "name" not in d
+
+
+class TestOperatorName:
+    """`.name()` on an operator names each group it makes (#802)."""
+
+    def test_name_in_ir(self):
+        d = ir(spread(by="site", dir="x").name("sites"))
+        assert d["name"] == "sites"
+        assert d["type"] == "spread"
+        assert d["by"] == "site"
+
+    def test_no_name_not_in_ir(self):
+        assert "name" not in ir(spread(by="site", dir="x"))
+
+    def test_name_returns_new_operator(self):
+        op = spread(by="site", dir="x")
+        named = op.name("sites")
+        assert named is not op
+        assert op._name is None
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            spread(by="site", dir="x").name("sites").label("site"),
+            spread(by="site", dir="x").label("site").name("sites"),
+            spread(by="site", dir="x").name("sites").translate(y=5),
+            spread(by="site", dir="x").translate(y=5).name("sites"),
+        ],
+    )
+    def test_name_survives_chained_calls(self, op):
+        d = ir(op)
+        assert d["name"] == "sites"
+        assert "label" in d or "translate" in d
+
+    def test_derive_has_no_name(self):
+        with pytest.raises(NotImplementedError):
+            derive(lambda rows: rows).name("x")
 
 
 class TestRefData:

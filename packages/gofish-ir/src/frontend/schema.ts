@@ -186,7 +186,7 @@ export type OperatorIR =
   | ScatterOperator
   | TableOperator
   | LogOperator
-  | TreemapOperator
+  | TileOperator
   | PackOperator
   | PartitionOperator
   | FlowStepMarkIR;
@@ -286,7 +286,7 @@ export interface FieldPredicateIR {
  *  descriptors.ts). */
 interface OperatorBoxIR {
   /** Position of this operator's box in the parent's space (pixels): the JS
-   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+   *  `Spread` spreads its `FancyDims` into the box, as `tile`'s does. */
   x?: ChannelValue;
   y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
@@ -307,6 +307,10 @@ export interface SpreadOperator
    *  subdata. String accessors round-trip; function accessors don't (see
    *  `LabelIR`/`labelIRField` in createOperator.ts). */
   label?: LabelIR;
+  /** From `.name("...")` on the operator: each group node it makes is
+   *  filed under this layer name, so `selectAll(name)` yields one ref per
+   *  group, whose `datum` is the group's rows. */
+  name?: string;
   by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
@@ -318,6 +322,9 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
+  /** Where the result puts its own 0 (`Baseline`). Not taken yet without
+   *  `glue`. */
+  baseline?: BaselineIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -333,19 +340,17 @@ export interface StackOperator
     OperatorFlagsIR,
     OperatorBoxIR {
   type: "stack";
-  /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
+  /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   by?: string | FieldAccessor | ChunkKeyIR;
   /** See `SpreadOperator.dir`. */
   dir?: string;
-  /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
-   *  true})`, so producers may put spread's options on the wire. Glue
-   *  semantics force the effective gap to 0. */
-  spacing?: number;
-  /** Spread-parity passthrough; stack always glues regardless. */
-  glue?: boolean;
   alignment?: string;
   reverse?: boolean;
+  /** Where the stack puts its own 0 (`Baseline`). */
+  baseline?: BaselineIR;
   /** Per-entry size — see `SpreadOperator`. */
   size?: ChannelValue;
   axes?: AxesOptions;
@@ -359,6 +364,8 @@ export interface GroupOperator
   type: "group";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   by: string | FieldAccessor | ChunkKeyIR;
 }
 
@@ -369,6 +376,8 @@ export interface ScatterOperator
   type: "scatter";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   by?: string | FieldAccessor | ChunkKeyIR;
   x?: ChannelValue;
   y?: ChannelValue;
@@ -446,6 +455,8 @@ export interface TableOperator
   type: "table";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** The column and row keys, each what `SpreadOperator.by` takes. */
   by: {
     x: string | FieldAccessor | ChunkKeyIR;
@@ -468,35 +479,37 @@ export interface LogOperator
 }
 
 /**
- * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
+ * `tile({...})` — d3-hierarchy treemap layout over the flow's rows,
  * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
  * `group`/`table`: also usable as a low-level combinator mark
- * (`CombinatorMarkType`'s `"treemap"`, disambiguated by `__combinator`).
- * Mirrors JS's `TreemapProps`/`TreemapOptions` (`graphicalOperators/treemap.tsx`)
+ * (`CombinatorMarkType`'s `"tile"`, disambiguated by `__combinator`).
+ * Mirrors JS's `TileProps`/`TileOptions` (`graphicalOperators/tile.tsx`)
  * minus `key`.
  */
-export interface TreemapOperator
+export interface TileOperator
   extends BaseIRNode,
     TranslatableIR,
     OperatorFlagsIR {
-  type: "treemap";
+  type: "tile";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** Field to partition rows by; also accepts a field(...) accessor carrying
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
   by?: string | FieldAccessor | ChunkKeyIR;
   /** Gap between sibling tiles, in pixels. Default 0. */
   spacing?: number;
-  /** Inset around the outer edge of the treemap, in pixels. Default 0. */
+  /** Inset around the outer edge of the tiled box, in pixels. Default 0. */
   padding?: number;
   round?: boolean;
   /** The tiling strategy. Default `{ kind: "squarify" }`. */
-  tile?: TileIR;
+  tiling?: TilingIR;
   sort?: "asc" | "desc" | "none";
   /** Per-leaf weight driving tile area (entry-flagged per split entry). */
   size?: ChannelValue;
-  /** Position of the box the treemap tiles into, in the parent's space. Both
+  /** Position of the box the operator tiles into, in the parent's space. Both
    *  forms spread `FancyDims` into `elaborateDims`, so the box's position is as
    *  real an option as its size — unlike `w`/`h` these carry no channel
    *  annotation, so they are pixel literals. */
@@ -511,7 +524,7 @@ export interface TreemapOperator
 
 /**
  * `pack({...})` — circle packing: children are placed so their enclosing
- * circles touch without overlapping. Dual-form like `treemap`: also a
+ * circles touch without overlapping. Dual-form like `tile`: also a
  * low-level combinator mark (`CombinatorMarkType`'s `"pack"`). Mirrors JS's
  * `PackOptions` (`graphicalOperators/pack.tsx`).
  */
@@ -522,6 +535,8 @@ export interface PackOperator
   type: "pack";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor | ChunkKeyIR;
   /** Gap between sibling circles, in pixels. Default 0. */
@@ -543,7 +558,7 @@ export type FlowStepMarkIR = LeafMarkIR & { type: "enclose" };
  * continuous scale. `partition({ by: { x, y } })` divides both axes: it is
  * the partition on x, then the partition on y. `partition({ by:
  * struct({ x, y }).bin(cells) })` divides the plane into the polygon cells
- * of a `Bin` strategy (hexagons, Voronoi cells). Operator-only: its children
+ * of a `Binning` strategy (hexagons, Voronoi cells). Operator-only: its children
  * are the groups of its key. Mirrors JS's `PartitionOptions`
  * (`graphicalOperators/partition.tsx`).
  */
@@ -554,9 +569,15 @@ export interface PartitionOperator
   type: "partition";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** A key that has a region: a binned field accessor, one per axis, or a
    *  binned struct of two fields. */
-  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor } | StructAccessor;
+  by:
+    | FieldAccessor
+    | { x: FieldAccessor; y: FieldAccessor }
+    | StructAccessor
+    | DistAccessor;
   /** The axis to divide. Required with a single key; not allowed with a
    *  key per axis. */
   dir?: string;
@@ -574,10 +595,10 @@ export interface PartitionOperator
 // type, e.g. `Curve.Curve`) and on the wire. descriptors.test.ts checks that
 // these kinds and params agree with the table.
 
-/** How `treemap` tiles its region, made by a call in the `Tile` family
- *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
- *  `Tile.voronoi()`). */
-export type TileIR =
+/** How `tile` tiles its region, made by a call in the `Tiling` family
+ *  (`Tiling.squarify()`, `Tiling.slice()`, `Tiling.dice()`, `Tiling.binary()`,
+ *  `Tiling.voronoi()`). */
+export type TilingIR =
   | { kind: "squarify"; ratio?: number }
   | { kind: "slice" }
   | { kind: "dice" }
@@ -585,9 +606,9 @@ export type TileIR =
   | { kind: "voronoi"; seed?: number };
 
 /** How a mark's or a layer's drawing is filtered, made by a call in the
- *  `Filter` family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`). The
- *  `filter` option also takes a raw CSS filter string. */
-export type FilterIR =
+ *  `Effect` family (`Effect.grayscale()`, `Effect.luminanceToAlpha()`). The
+ *  `effect` option also takes a raw CSS filter string. */
+export type EffectIR =
   | { kind: "grayscale"; amount?: number }
   | { kind: "luminanceToAlpha" };
 
@@ -618,6 +639,22 @@ export type OverlapIR =
       padding?: number;
       seed?: number;
     };
+
+/** A point on one part of a stack: a fraction of the way from the part's
+ *  tail to its head, or one of its anchors (`"baseline"` is its tail). */
+export type BaselinePointIR = number | "start" | "middle" | "end" | "baseline";
+
+/** Where a stack puts its own 0, made by a call in the `Baseline` family
+ *  (`Baseline.start()`, `Baseline.end()`, `Baseline.middle()`,
+ *  `Baseline.wiggle()`, `Baseline.at(part, point)`). The `part` of `at` is a
+ *  value of the `by` column in a flow, and a child index in the combinator
+ *  form. */
+export type BaselineIR =
+  | { kind: "start" }
+  | { kind: "end" }
+  | { kind: "middle" }
+  | { kind: "wiggle" }
+  | { kind: "at"; part: string | number; point: BaselinePointIR };
 
 /** How far apart a chain's neighbors are, spread's and distribute's
  *  `spacing`: a bare amount, which is `Spacing.box(amount)`, or a strategy. */
@@ -657,22 +694,22 @@ export type CurveIR =
       straights?: boolean;
     };
 
-/** The cells a key is binned into, made by a call in the `Bin` family.
- *  `Bin.step(size)`, `Bin.thresholds(countOrEdges)` and
- *  `Bin.quantiles(countOrProbabilities)` bin one field
- *  (`field(x).bin(...)`, {@link FieldBinIR}); `Bin.hex({ radius })` and
- *  `Bin.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
- *  {@link StructBinIR}). */
-export type BinIR = FieldBinIR | StructBinIR;
+/** The cells a key is binned into, made by a call in the `Binning` family.
+ *  `Binning.step(size)`, `Binning.thresholds(countOrEdges)` and
+ *  `Binning.quantiles(countOrProbabilities)` bin one field
+ *  (`field(x).bin(...)`, {@link FieldBinningIR}); `Binning.hex({ radius })` and
+ *  `Binning.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
+ *  {@link StructBinningIR}). */
+export type BinningIR = FieldBinningIR | StructBinningIR;
 
-/** The `Bin` kinds that cut the line of one field into intervals. */
-export type FieldBinIR =
+/** The `Binning` kinds that cut the line of one field into intervals. */
+export type FieldBinningIR =
   | { kind: "step"; size: number }
   | { kind: "thresholds"; thresholds: number | number[] }
   | { kind: "quantiles"; quantiles: number | number[] };
 
-/** The `Bin` kinds that divide the plane of two fields into polygons. */
-export type StructBinIR =
+/** The `Binning` kinds that divide the plane of two fields into polygons. */
+export type StructBinningIR =
   | { kind: "hex"; radius: number | { x: number; y: number } }
   | { kind: "voronoi"; seeds: Record<string, unknown>[] };
 
@@ -707,8 +744,8 @@ export type ShapeIR =
       separate?: boolean;
     };
 
-/** A screen direction from a mark, for `Place.around`. */
-export type PlaceDirectionIR =
+/** A screen direction from a mark, for `Placement.around`. */
+export type PlacementDirectionIR =
   | "top-right"
   | "top-left"
   | "bottom-right"
@@ -718,8 +755,8 @@ export type PlaceDirectionIR =
   | "top"
   | "bottom";
 
-/** A side of an outline, for `Place.along`. */
-export type PlaceSideIR =
+/** A side of an outline, for `Placement.along`. */
+export type PlacementSideIR =
   | "on"
   | "above"
   | "below"
@@ -728,12 +765,12 @@ export type PlaceSideIR =
   | "inset"
   | "outset";
 
-/** Where a label goes on the mark it labels, made by a call in the `Place`
- *  family: a value of a label's `position` beside the position strings. */
-export type PlaceIR =
+/** Where a label goes on the mark it labels, made by a call in the `Placement`
+ *  family: a value of a label's `placement` beside the position strings. */
+export type PlacementIR =
   | {
       kind: "around";
-      directions?: PlaceDirectionIR[];
+      directions?: PlacementDirectionIR[];
       side?: "outset" | "inset" | ("outset" | "inset")[];
       offset?: number;
     }
@@ -748,7 +785,7 @@ export type PlaceIR =
         | "x-max"
         | "y-min"
         | "y-max";
-      side?: PlaceSideIR | PlaceSideIR[];
+      side?: PlacementSideIR | PlacementSideIR[];
       orient?: "horizontal" | "sloped";
       offset?: number;
     }
@@ -812,7 +849,7 @@ export type CombinatorMarkType =
   // `__combinator` flag disambiguates.
   | "line"
   | "ribbon"
-  | "treemap"
+  | "tile"
   | "pack"
   | "union"
   | "intersect"
@@ -845,6 +882,8 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   hidden?: boolean | BridgeLambdaSentinel;
+  /** `.tooltip()` (`true`) or `.tooltip(fields)`. */
+  tooltip?: true | string[];
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -864,6 +903,8 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   hidden?: boolean | BridgeLambdaSentinel;
+  /** `.tooltip()` (`true`) or `.tooltip(fields)`. */
+  tooltip?: true | string[];
   translate?: TranslateIR;
 }
 
@@ -944,8 +985,34 @@ export type ChannelValue =
   | boolean
   | null
   | FieldAccessor
+  | DistAccessor
   | DatumValue
   | BridgeLambdaSentinel;
+
+/** The parameters of each distribution family, by name, as
+ *  `Dist.normal({ mean, sd })` takes them. gofish-graphics' `ast/dist.ts`
+ *  reads this table. */
+export const DIST_FAMILIES = {
+  normal: ["mean", "sd"],
+  lognormal: ["meanlog", "sdlog"],
+  uniform: ["min", "max"],
+  exponential: ["rate"],
+} as const;
+
+/** A distribution family's name. */
+export type DistFamilyIR = keyof typeof DIST_FAMILIES;
+
+/** A distribution as a channel holds it, emitted by `Dist.normal({ mean,
+ *  sd })` and the other families: each parameter is a number, a column
+ *  name, or a value expression, read over each group's rows. `ops` are the
+ *  members it is read through (`d.density()` is one `member` op), as for a
+ *  reduce's result. gofish-graphics' `ast/distExpr.ts` mirrors it. */
+export interface DistAccessor {
+  type: "dist";
+  family: DistFamilyIR;
+  params: Record<string, number | string | FieldAccessor>;
+  ops?: FieldOpIR[];
+}
 
 /**
  * A length (#1176 step 6), as `percent(n)` and `fr(k)` build it: `percent`
@@ -986,11 +1053,11 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  aggregate ops (`sum`/`mean`/`median`/`count`/`distinct`) and, only on an
  *  operator's entry-flagged `size` channel, `normalize`. */
 /** A partition's wire form (`field(x).bin(p)`): a Calendar value, or a
- *  `Bin` kind that bins one field (`Bin.step(size)`,
- *  `Bin.thresholds(countOrEdges)`, `Bin.quantiles(countOrProbabilities)`).
+ *  `Binning` kind that bins one field (`Binning.step(size)`,
+ *  `Binning.thresholds(countOrEdges)`, `Binning.quantiles(countOrProbabilities)`).
  *  One tagged union, told apart by `kind`
  *  (`OPTION_TYPES.Partition`). */
-export type PartitionIR = CalendarPartitionIR | FieldBinIR;
+export type PartitionIR = CalendarPartitionIR | FieldBinningIR;
 
 export interface FieldAccessor {
   type: "field";
@@ -1001,7 +1068,7 @@ export interface FieldAccessor {
 /** A key built from two fields at once, emitted by `struct({ x, y })`
  *  (after polars' `pl.struct`), with the cells it is binned into. `fields`
  *  names the column read on each axis. Its one op is `bin`, which takes a
- *  `Bin` strategy; a struct is a key only once it is binned (a
+ *  `Binning` strategy; a struct is a key only once it is binned (a
  *  `partition`'s `by`). Mirrors gofish-graphics' `StructExpr`
  *  (`ast/structExpr.ts`). */
 export interface StructAccessor {
@@ -1011,7 +1078,7 @@ export interface StructAccessor {
 }
 
 /** One op in a `struct(...)` pipeline: the cells it is binned into. */
-export type StructOpIR = { op: "bin"; partition: StructBinIR };
+export type StructOpIR = { op: "bin"; partition: StructBinningIR };
 
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
@@ -1029,8 +1096,8 @@ export type FieldOpIR =
   | {
       op: "bin";
       /** The partition each value is binned into: a Calendar value,
-       *  `Bin.step(size)`, `Bin.thresholds(countOrEdges)` or
-       *  `Bin.quantiles(countOrProbabilities)`, or a product of
+       *  `Binning.step(size)`, `Binning.thresholds(countOrEdges)` or
+       *  `Binning.quantiles(countOrProbabilities)`, or a product of
        *  Calendar values (`[year, month]`: one cell where they meet).
        *  Absent: about 10 cells. A second `bin` op splits the cells of the
        *  one before it (`.bin(Calendar.year).bin(Calendar.month)`). */
@@ -1042,7 +1109,23 @@ export type FieldOpIR =
   | { op: "mean" }
   | { op: "median" }
   | { op: "count" }
-  | { op: "distinct" };
+  | { op: "distinct" }
+  /** `map(fn, unit=...)`: each value to a new one, `fn(x, i, xs)`. Only a
+   *  Python function has a wire form, a bridge handle. */
+  | { op: "map"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
+  /** `reduce(fn, unit=...)`: all of a group's values to one result,
+   *  `fn(xs)`, a number or a record of numbers. */
+  | { op: "reduce"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
+  /** A member of a reduce's result, or of the distribution the column
+   *  holds, read with `args` (`s.lo()`, `field("x").quantile(0.9)`). */
+  | { op: "member"; name: string; args?: unknown[] };
+
+/** The `unit` option of `map` or `reduce`: a unit's name, a unit's wire
+ *  traits (`{ HasUnit }`), or a record that mirrors the result's shape. */
+export type UnitSpecIR =
+  | string
+  | { HasUnit: unknown; [trait: string]: unknown }
+  | { [member: string]: UnitSpecIR };
 
 /** A post-scale color transform carried by a datum value, applied AFTER the
  *  datum maps through its color scale — the color analog of {@link
@@ -1084,9 +1167,9 @@ export interface BridgeLambdaSentinel {
  */
 export interface LabelSpecIR {
   accessor: string | FieldAccessor;
-  /** A position string (`"outset-top"`), or a `Place` strategy. */
-  position?: string | PlaceIR;
-  /** Nodes a `Place` label keeps off. */
+  /** A position string (`"outset-top"`), or a `Placement` strategy. */
+  placement?: string | PlacementIR;
+  /** Nodes a `Placement` label keeps off. */
   avoiding?: NodeSelectionIR;
   /** An outline behind the glyphs. */
   halo?: { color?: string; width?: number };
@@ -1256,16 +1339,16 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
 }
 
 /**
- * The set of operator type discriminators recognized in v0. `treemap` is
- * dual-form (also a combinator mark, `COMBINATOR_MARK_TYPES`'s `"treemap"`)
+ * The set of operator type discriminators recognized in v0. `tile` is
+ * dual-form (also a combinator mark, `COMBINATOR_MARK_TYPES`'s `"tile"`)
  * exactly like `spread`/`stack`/`scatter`/`group`/`table` — confirmed by a
- * real Python story (`atom/titanic-unit-dots`) that uses `treemap(...)` as a
- * `.flow()` operator, producing `{ type: "treemap", ... }` at the top level
- * of `operators`. Originally this list's inclusion of `treemap` looked like
+ * real Python story (`atom/titanic-unit-dots`) that uses `tile(...)` as a
+ * `.flow()` operator, producing `{ type: "tile", ... }` at the top level
+ * of `operators`. Originally this list's inclusion of `tile` looked like
  * drift against `OperatorIR`/the JSON Schema enum (both omitted it) — but
  * the story corpus proved the OTHER two were the ones missing it, not this
  * list; `OperatorIR` and the generated JSON Schema now include
- * `TreemapOperator` too (see `descriptors.ts`'s `OPERATORS.treemap`).
+ * `TileOperator` too (see `descriptors.ts`'s `OPERATORS.tile`).
  */
 export const OPERATOR_TYPES = [
   "derive",
@@ -1278,7 +1361,7 @@ export const OPERATOR_TYPES = [
   "scatter",
   "table",
   "log",
-  "treemap",
+  "tile",
   "pack",
   "partition",
 ] as const;
@@ -1313,7 +1396,7 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "arrow",
   "line",
   "ribbon",
-  "treemap",
+  "tile",
   "pack",
   "union",
   "intersect",

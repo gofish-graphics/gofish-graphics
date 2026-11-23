@@ -44,7 +44,7 @@ gf.spread({ dir: "y", spacing: 8, alignment: "end" }, [
   slot({ variable: "x", value: "5" }),
   slot({ variable: "y", value: "8" }),
   slot({ variable: "z", value: "3" }),
-]).render(root, { w: 120, h: 160 });
+]).render(root);
 ```
 
 :::
@@ -172,7 +172,7 @@ gf.layer([
     gf.ref(first).value,
     gf.ref(second).value,
   ]),
-]).render(root, { w: 160, h: 160 });
+]).render(root);
 ```
 
 :::

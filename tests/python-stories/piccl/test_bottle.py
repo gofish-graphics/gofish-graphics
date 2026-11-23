@@ -16,7 +16,7 @@ import os
 
 from gofish import (
     Constraint,
-    Filter,
+    Effect,
     atop,
     chart,
     datum,
@@ -52,7 +52,7 @@ def story_default():
                 atop(
                     [
                         image(
-                            href=BOTTLE_PNG, h=datum(100), filter=Filter.grayscale
+                            href=BOTTLE_PNG, h=datum(100), effect=Effect.grayscale
                         ),
                         rect(h="amount", w=175, fill="#00ff00"),
                     ],

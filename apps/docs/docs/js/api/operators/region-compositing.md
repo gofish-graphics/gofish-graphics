@@ -26,7 +26,7 @@ the child itself.
 gf.atop([
   gf.rect({ x: 0, y: 0, w: 120, h: 120, fill: gf.color.blue[3] }),
   gf.rect({ x: 40, y: 40, w: 120, h: 120, fill: gf.color.red[3] }),
-]).render(root, { w: 160, h: 160 });
+]).render(root);
 ```
 
 :::
@@ -53,7 +53,7 @@ children give their regions only. `atop` takes no `fill`.
 gf.intersect({ fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 }, [
   gf.circle({ cx: 90, cy: 90, r: 70 }),
   gf.rect({ x: 80, y: 30, w: 120, h: 120 }),
-]).render(root, { w: 220, h: 180 });
+]).render(root);
 ```
 
 :::
@@ -80,7 +80,7 @@ density curve with each cell of a partition, drawn in by
 ## Masks
 
 A hidden child clips the others to its region. A
-[`Filter.luminanceToAlpha()`](/js/api/filter) child gives its
+[`Effect.luminanceToAlpha()`](/js/api/effect) child gives its
 luminance as its region, so a hidden one is a luminance mask.
 
 ::: gofish
@@ -89,7 +89,7 @@ luminance as its region, so a hidden one is a luminance mask.
 gf.intersect([
   gf.ellipse({ cx: 80, cy: 60, w: 160, h: 120, fill: "white" }).hidden(),
   gf.rect({ x: 0, y: 0, w: 160, h: 120, fill: gf.color.blue[3] }),
-]).render(root, { w: 160, h: 120 });
+]).render(root);
 ```
 
 :::

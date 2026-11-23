@@ -45,7 +45,7 @@ const DEFAULT_SIZE = 16;
 export type RegionProps = {
   key?: string;
   /** Pixels drawn in from each side of the cell: each side of the cell's
-   *  outline (a hexagon, a treemap's cell), or, for a cell with no outline,
+   *  outline (a hexagon, a `tile`'s cell), or, for a cell with no outline,
    *  each side on an axis where it is in a cell (the two ends of a 1D
    *  partition's cell). Paint only: its box, which layout reads, stays the
    *  cell. A cell thinner than twice the inset draws nothing. */
@@ -58,7 +58,7 @@ export type RegionProps = {
 
 /**
  * `region()`'s node (#1059, #1222): it draws the cell it is in, such as a
- * `partition`'s cell or a `treemap`'s, and has no size or position of its
+ * `partition`'s cell or a `tile`'s, and has no size or position of its
  * own.
  *
  * A partition's cell is in data (`enclosingCell`). On each axis where the
@@ -74,7 +74,7 @@ export type RegionProps = {
  * It draws the shape it is laid out in (see `Layout` in `_node.ts`) when its
  * parent hands it one: the outline of a partition's cell of the plane (a
  * hexagon, a Voronoi cell, from a `partition` over `struct({ x, y }).bin(b)`),
- * a treemap's cell, or the shape of an `enclose` around it. Otherwise it
+ * a `tile`'s cell, or the shape of an `enclose` around it. Otherwise it
  * draws its box. Either is drawn in by `inset`. Under a nonlinear coordinate
  * space either one is resampled, so a cell of a polar partition draws as the
  * wedge it is. Its outline is what it draws.
@@ -173,7 +173,7 @@ export const Region = ({
         ];
         // The shape it is laid out in (#1222), in its local frame, whose box
         // is its own: the outline of a partition's cell of the plane, or a
-        // treemap's or an enclosure's cell. None is its box.
+        // `tile`'s or an enclosure's cell. None is its box.
         outline =
           shape === undefined || inset === 0
             ? shape
