@@ -71,7 +71,7 @@ When the recursion reaches a **leaf** or a **bake boundary**, it emits one draw
 entry for the node at the accumulated transform. A boundary is a node that lowers its
 own subtree (`GoFishNode.isBakeBoundary()`, described under the root bake below): a
 relational node (`connect`, `tween`), a `box`, a compositor, an `enclose`, an `arrow`,
-an `offset`, a nested `coord`, or a node with a `filter`. Other internal nodes recurse
+an `offset`, a nested `coord`, or a node with an `effect`. Other internal nodes recurse
 over their children, so the whole tree bottoms out into a single flat array.
 
 The recursion does **not** visit children in raw array order — it orders them first
@@ -211,8 +211,8 @@ exported `bakeChildren(node, translate, scale)`, which runs `bakeSubtree(child,
 translate, scale)` on each child in paint order. `coord` bakes its children with it,
 and a compositor bakes each of its operands with `bakeSubtree` alone. Both flatten through every node that only places
 its children, so a node whose lowering does more is a boundary
-(`GoFishNode.isBakeBoundary()`: a type in `BAKE_BOUNDARY_TYPES`, or a node with a
-`filter`): an `offset`, whose pixel shift is no translate, lowers its
+(`GoFishNode.isBakeBoundary()`: a type in `BAKE_BOUNDARY_TYPES`, or a node with an
+`effect`): an `offset`, whose pixel shift is no translate, lowers its
 child itself, or a `cut` slice's source would lose its shift. Both stop at a
 hidden node no compositor reads (`.hidden()`): it draws nothing, so its subtree
 makes no entries. The root bake never reaches into a compositor, so there a

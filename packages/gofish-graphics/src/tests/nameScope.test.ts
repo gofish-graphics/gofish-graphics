@@ -1175,7 +1175,7 @@ async function main() {
             gf
               .rect({ x: 0, y: 0, w: 20, h: 40, fill: "#1a1" })
               .name("bar")
-              .label(() => "a long label", { position: "outset-right" }),
+              .label(() => "a long label", { placement: "outset-right" }),
             gf.rect({ x: 200, y: 10, w: 20, h: 20, fill: "#777" }).name("dot"),
           ])
           .relate(() => [

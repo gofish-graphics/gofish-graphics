@@ -21,14 +21,14 @@ import { bareKind, given } from "../ast/strategyKind";
 export type Overlap = Frontend.OverlapIR;
 
 /** `separate()`: dots kept apart. See {@link separate}. */
-export type SeparateStrategy = Extract<Overlap, { kind: "separate" }>;
+export type SeparateOverlap = Extract<Overlap, { kind: "separate" }>;
 
 /** `noise()`: dots spread inside a density outline. See {@link noise}.
  *  `sina()` and `jitter()` make this same object with other params preset. */
-export type NoiseStrategy = Extract<Overlap, { kind: "noise" }>;
+export type NoiseOverlap = Extract<Overlap, { kind: "noise" }>;
 
 /** The options `noise()`, `sina()` and `jitter()` share. */
-export type NoiseOptions = Omit<NoiseStrategy, "kind">;
+export type NoiseOptions = Omit<NoiseOverlap, "kind">;
 
 /** How `noise()` draws each dot's offset inside the outline. */
 export type NoiseRandomness = NonNullable<NoiseOptions["randomness"]>;
@@ -49,7 +49,7 @@ export type NoiseRandomness = NonNullable<NoiseOptions["randomness"]>;
  */
 export const separate = bareKind(
   "Overlap.separate",
-  (opts: Omit<SeparateStrategy, "kind"> = {}): SeparateStrategy => ({
+  (opts: Omit<SeparateOverlap, "kind"> = {}): SeparateOverlap => ({
     kind: "separate",
     ...given(opts),
   })
@@ -83,7 +83,7 @@ export const separate = bareKind(
  */
 export const noise = bareKind(
   "Overlap.noise",
-  (opts: NoiseOptions = {}): NoiseStrategy => ({
+  (opts: NoiseOptions = {}): NoiseOverlap => ({
     kind: "noise",
     ...given(opts),
   })
@@ -98,7 +98,7 @@ export const noise = bareKind(
  */
 export const sina = bareKind(
   "Overlap.sina",
-  (opts: NoiseOptions = {}): NoiseStrategy => ({
+  (opts: NoiseOptions = {}): NoiseOverlap => ({
     kind: "noise",
     smoothing: "silverman",
     ...given(opts),
@@ -112,7 +112,7 @@ export const sina = bareKind(
  */
 export const jitter = bareKind(
   "Overlap.jitter",
-  (opts: NoiseOptions = {}): NoiseStrategy => ({
+  (opts: NoiseOptions = {}): NoiseOverlap => ({
     kind: "noise",
     randomness: "uniform",
     smoothing: Infinity,

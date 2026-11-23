@@ -2,7 +2,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { applyFilter, displayFilter, type FilterOptions } from "./drawFilter";
+import { applyFilter, displayFilter, type WithEffect } from "./drawEffect";
 import { Frontend } from "gofish-ir";
 import { checkLengths } from "./length";
 
@@ -433,12 +433,12 @@ export type NameableMark<T> = Mark<T> & {
  */
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild
-): (props: P & FilterOptions) => NameableMark<P>;
+): (props: P & WithEffect) => NameableMark<P>;
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild,
   channels: undefined,
   serialize: string
-): (props: P & FilterOptions) => NameableMark<P>;
+): (props: P & WithEffect) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
@@ -455,7 +455,7 @@ export function createMark<
   serialize?: string,
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
-  opts: DeriveMarkProps<ShapeProps, C, T> & FilterOptions
+  opts: DeriveMarkProps<ShapeProps, C, T> & WithEffect
 ) => NameableMark<T[]>;
 export function createMark(
   shapeFn: any,
@@ -506,10 +506,10 @@ function buildCreatedMark(
       serialize,
       markOpts
     );
-  // `filter` is no channel: it filters the built node's whole drawing
-  // (`drawFilter.ts`), whatever the mark draws. It is checked once, here.
-  const { filter: filterOpt, ...channelOpts } = markOpts;
-  const filter = displayFilter(filterOpt, `${serialize ?? "mark"}({ filter })`);
+  // `effect` is no channel: it filters the built node's whole drawing
+  // (`drawEffect.ts`), whatever the mark draws. It is checked once, here.
+  const { effect, ...channelOpts } = markOpts;
+  const filter = displayFilter(effect, `${serialize ?? "mark"}({ effect })`);
   const baseMark: Mark<any> = async (
     d: unknown[],
     key?: string | number,

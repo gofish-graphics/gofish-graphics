@@ -9,11 +9,11 @@
  * A parent proposes each child a size, `[w, h]`, the box the child is laid
  * out in. It may also hand it a SHAPE: a convex ring inside that box, in
  * the child's local frame and axis order, with the box at `[0, w] × [0, h]`.
- * No shape means the box itself. A child that fills its space (a `treemap`,
+ * No shape means the box itself. A child that fills its space (a `tile`,
  * a `region`) fills the shape; any other child reads only the box.
  *
- * Three parents make a shape: a `treemap` hands each child its cell (a
- * polygon under `Tile.voronoi`, its box under a rectangular tiling), a
+ * Three parents make a shape: a `tile` hands each child its cell (a
+ * polygon under `Tiling.voronoi`, its box under a rectangular tiling), a
  * `partition` of the plane hands each child its cell's outline
  * (`buildChildSpans`), and an `enclose` around a child that fills its space
  * hands it its own shape. A `layer` hands its shape on to each child it

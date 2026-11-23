@@ -40,7 +40,7 @@ def story_center():
         )
         .mark(
             rect(h="count", fill="species").label(
-                "count", position="center", font_size=10
+                "count", placement="center", font_size=10
             )
         ),
         {},
@@ -53,7 +53,7 @@ def story_above():
     return (
         chart(SEAFOOD, w=400, h=300)
         .flow(spread(by="lake", dir="x"))
-        .mark(rect(h="count").label(field("count").sum(), position="outset")),
+        .mark(rect(h="count").label(field("count").sum(), placement="outset")),
         {},
     )
 
@@ -69,7 +69,7 @@ def story_below():
         )
         .mark(
             rect(w="count", fill="species").label(
-                "count", position="outset-bottom", font_size=9
+                "count", placement="outset-bottom", font_size=9
             )
         ),
         {},
@@ -88,7 +88,7 @@ def story_left():
         .mark(
             rect(w="count", fill="species").label(
                 "count",
-                position="outset-left",
+                placement="outset-left",
                 font_size=9,
                 offset=13,
             )
@@ -105,7 +105,7 @@ def story_right():
         .flow(spread(by="lake", dir="y"))
         .mark(
             rect(w="count").label(
-                field("count").sum(), position="outset-right", offset=15
+                field("count").sum(), placement="outset-right", offset=15
             )
         ),
         {},
@@ -123,7 +123,7 @@ def story_above_start():
         )
         .mark(
             rect(h="count", fill="species").label(
-                "count", position="outset-top-start", font_size=9
+                "count", placement="outset-top-start", font_size=9
             )
         ),
         {},
@@ -141,7 +141,7 @@ def story_above_end():
         )
         .mark(
             rect(h="count", fill="species").label(
-                "count", position="outset-top-end", font_size=9
+                "count", placement="outset-top-end", font_size=9
             )
         ),
         {},
@@ -194,7 +194,7 @@ def story_all_positions():
                 .flow(spread(by="lake", dir="x"))
                 .mark(
                     rect(h="count").label(
-                        field("count").sum(), position=position, font_size=9
+                        field("count").sum(), placement=position, font_size=9
                     )
                 ),
                 # 132 px above the bottom of the chart: 32 px above its 100 px
@@ -229,7 +229,7 @@ def story_label_on_spread():
         chart(SEAFOOD, axes=False, w=500, h=300)
         .flow(
             spread(by="lake", dir="x", spacing=50).label(
-                "lake", position="outset-top-start", font_size=13, rotate=60
+                "lake", placement="outset-top-start", font_size=13, rotate=60
             )
         )
         .mark(
@@ -259,7 +259,7 @@ def story_heatmap_with_labels():
         .flow(table(by={"x": "hour", "y": "day"}, spacing=4))
         .mark(
             rect(fill="value").label(
-                "value", position="center", font_size=11
+                "value", placement="center", font_size=11
             )
         ),
         {},
@@ -279,7 +279,7 @@ def story_rotated():
                     .flow(spread(by="lake", dir="x"))
                     .mark(
                         rect(h="count").label(
-                            field("count").sum(), position="outset-top", rotate=rotate
+                            field("count").sum(), placement="outset-top", rotate=rotate
                         )
                     ),
                 )
@@ -303,7 +303,7 @@ def story_label_on_stack_operator():
         chart(titanic_passengers, axes=False, h=300)
         .flow(
             stack(by="pclass", dir="y").label(
-                "pclass", position="center", font_size=14, color="white"
+                "pclass", placement="center", font_size=14, color="white"
             )
         )
         .mark(rect(w=120, h=field("survived").count())),
@@ -322,7 +322,7 @@ def story_label_on_stack_aggregate():
         .flow(
             stack(by="pclass", dir="y").label(
                 field("survived").count(),
-                position="center",
+                placement="center",
                 font_size=14,
                 color="white",
             )
@@ -345,11 +345,11 @@ def story_two_labels_per_bar():
             rect(h=field("count").sum())
             .label(
                 field("count").sum(),
-                position="center",
+                placement="center",
                 color="white",
                 font_weight="bold",
             )
-            .label("lake", position="outset-top", font_size=9)
+            .label("lake", placement="outset-top", font_size=9)
         ),
         {},
     )
@@ -389,7 +389,7 @@ def story_normalized_stacked_bar_with_labels():
             ),
         )
         .mark(
-            rect(fill="sex").label("people", position="center", color="white")
+            rect(fill="sex").label("people", placement="center", color="white")
         ),
         # Keep the continuous proportion x-axis at the bottom (y-end).
         {},
@@ -433,7 +433,7 @@ def story_position_showcase():
     for position in SHOWCASE_LABELS:
         mark = mark.label(
             position,
-            position=position,
+            placement=position,
             font_size=11,
             font_family="monospace",
             color="#92400e" if position.startswith("outset") else "#1d4ed8",

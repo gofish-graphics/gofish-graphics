@@ -76,9 +76,9 @@ import type { BlendMode } from "../blendMode";
 import {
   applyFilter,
   displayFilter,
-  type FilterOption,
-  type FilterOptions,
-} from "../drawFilter";
+  type EffectValue,
+  type WithEffect,
+} from "../drawEffect";
 import {
   encloseNode,
   type EncloseOptions,
@@ -282,7 +282,7 @@ export type KdeOptions = {
  * (`{ type: "dist", family: "kde", params: { values, bandwidth? } }`, see
  * `DistData` in dist.ts). `field(column)`'s members read it: `density()`,
  * `domain()`, `cdf()`, `quantile(p)`, `median()`, `mean()`, and
- * `.bin(Bin.quantiles(n))` cuts it at its own quantiles.
+ * `.bin(Binning.quantiles(n))` cuts it at its own quantiles.
  *
  * The row also holds every other column whose value is the same in all
  * the rows (a group's species, after a split by it), and nothing else. In a
@@ -856,10 +856,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // A strategy kind used bare is read as its value from here on.
     const opts = withKindValues((options ?? {}) as O);
     const liveChannels = liveChannelsOf(opts);
-    // Its `filter` filters each connector's whole drawing; checked once.
+    // Its `effect` filters each connector's whole drawing; checked once.
     const filter = displayFilter(
-      opts.filter as FilterOption | undefined,
-      `${type}({ filter })`
+      opts.effect as EffectValue | undefined,
+      `${type}({ effect })`
     );
     /** The cell `ChartBuilder` writes the computed split / travel direction /
      *  time tier into — see `tagRelationalFusable`'s doc comment. Declared
@@ -1072,7 +1072,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
   return relational;
 }
 
-export type LineOptions = FilterOptions & {
+export type LineOptions = WithEffect & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
@@ -1181,8 +1181,8 @@ function shapeForm(
     );
   const closed = type === "ribbon";
   const filter = displayFilter(
-    opts.filter as FilterOption | undefined,
-    `${type}({ filter })`
+    opts.effect as EffectValue | undefined,
+    `${type}({ effect })`
   );
   const liveChannels = liveChannelsOf(opts);
   const channels = (MARK_CHANNELS as Record<string, Record<string, string>>)[
@@ -1311,7 +1311,7 @@ export function line(
   return shapeForm("line", options, 0, "x", "y");
 }
 
-export type RibbonOptions = FilterOptions & {
+export type RibbonOptions = WithEffect & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;

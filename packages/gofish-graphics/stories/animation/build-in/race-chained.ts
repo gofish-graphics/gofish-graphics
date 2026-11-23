@@ -24,7 +24,7 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
     )
     .mark(
       rect({ w: "value", fill: "category" })
-        .label("name", { position: "outset-right" })
+        .label("name", { placement: "outset-right" })
         .transition({
           enter: Animation.fadeIn(),
           update: Animation.tween({ curve: Curve.linear() }),

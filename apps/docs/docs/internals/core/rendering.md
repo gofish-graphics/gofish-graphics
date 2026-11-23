@@ -154,7 +154,7 @@ point of a line's focused row.
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` draws only its children, which `bake` lowers directly, so it reaches
 `INTERNAL_lower` only when it has none: then it draws nothing (an operator over a
-group with no rows, such as an empty cell's `pack` or `treemap`). A node with
+group with no rows, such as an empty cell's `pack` or `tile`). A node with
 children and no `_lower` throws: the migration is complete, so every shipping shape
 and every bake boundary supplies one.
 
@@ -206,7 +206,7 @@ Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
 rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
 A compositor lowers each of its operands as a subtree (`lowerSubtree`, over
 `bakeSubtree` in `bake.ts`, the one-child walk `bakeChildren` runs per child), so an
-operand that only places its children, a `pack` or a `treemap`, lowers its leaves.
+operand that only places its children, a `pack` or a `tile`, lowers its leaves.
 It paints one result from its operands, so it has no
 order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
 it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).
@@ -240,16 +240,17 @@ marks, writes none. The last two carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
-  list can't fold away, and the group a node with a `filter` option draws its whole
-  drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
-  (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
+  list can't fold away, and the group a node with an `effect` option draws its whole
+  drawing in (`drawEffect.ts`). Its `filter` is a CSS filter value
+  (`{ kind: "css", value: "grayscale(1)" }`, which `Effect.grayscale` lowers to) or
   `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
   SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
   render that uses it (`usesLuminanceToAlpha`), from `LUMINANCE_TO_ALPHA_FILTER`
   (`composite.ts`), which both backends write from. Its id is the render's own,
   drawn from the counter the composite ids come from (`paintDocument` in
   `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
-  share it. A
+  share it. Both backends take the group's `filter` attribute from
+  `filterAttribute` (`composite.ts`): the CSS value, or `url(#id)` of that def. A
   filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its

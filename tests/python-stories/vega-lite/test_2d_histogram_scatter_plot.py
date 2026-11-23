@@ -1,6 +1,6 @@
 """Equivalent of 2DHistogramScatterPlot.stories.tsx — Vega-Lite/2D Histogram Scatter Plot."""
 
-from gofish import Bin, chart, circle, field, partition
+from gofish import Binning, chart, circle, field, partition
 from python_stories.vega_data_urls import read_json
 
 
@@ -20,8 +20,8 @@ def story_default():
         .flow(
             partition(
                 by={
-                    "x": field("IMDB Rating").bin(Bin.step(1)),
-                    "y": field("Rotten Tomatoes Rating").bin(Bin.step(10)),
+                    "x": field("IMDB Rating").bin(Binning.step(1)),
+                    "y": field("Rotten Tomatoes Rating").bin(Binning.step(10)),
                 }
             )
         )

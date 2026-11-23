@@ -2,11 +2,11 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import bottlePng from "../assets/wilsonblanco.png";
 import {
-  Bin,
+  Binning,
   chart,
   circle,
   field,
-  Filter,
+  Effect,
   atop,
   image,
   intersect,
@@ -60,7 +60,7 @@ const buildChildren = (args: Args): [MarkChild, MarkChild] => {
       y: 0,
       w: args.w,
       h: args.h,
-      filter: Filter.grayscale,
+      effect: Effect.grayscale,
     }),
     rect({ x: 0, y: splitY, w: args.w, h: splitH, fill: args.bgColor }),
   ];
@@ -125,7 +125,7 @@ export const LuminanceMask: StoryObj<Args> = {
           y: 0,
           w: args.w,
           h: args.h,
-          filter: Filter.luminanceToAlpha,
+          effect: Effect.luminanceToAlpha,
         }).hidden(),
         cover,
       ])
@@ -172,7 +172,7 @@ export const IntersectInCells: StoryObj = {
     const container = initializeContainer();
     container.innerHTML = "";
     chart([{ v: 5 }, { v: 15 }, { v: 25 }], { w: 480 })
-      .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+      .flow(partition({ by: field("v").bin(Binning.step(10)), dir: "x" }))
       .mark(
         intersect([
           rect({ x: 0, y: 0, w: 90, h: 40, fill: "#467DA8" }),

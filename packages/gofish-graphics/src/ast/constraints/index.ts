@@ -87,7 +87,7 @@ export type { GridConstraint } from "./grid";
 export type { OverlapConstraint } from "./overlap";
 export { isOverlapConstraint } from "./overlap";
 // Like overlap, `labelPlace` is a private elaboration target (`.label()` with
-// a `Place` strategy), with no `Constraint.labelPlace`.
+// a `Placement` strategy), with no `Constraint.labelPlace`.
 export type { LabelPlaceConstraint } from "../labels/placeStep";
 export { isLabelPlaceConstraint } from "../labels/placeStep";
 export { isZOrderConstraint } from "./zorder";

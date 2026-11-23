@@ -10,7 +10,7 @@ import {
   allExamples,
   validate,
   checkStrategy,
-  checkStructBin,
+  checkStructBinning,
   checkPartition,
   checkOption,
   encodeIR,
@@ -1178,20 +1178,20 @@ check(
 );
 check(
   "label: [{ accessor }] accepts (array-of-specs form)",
-  validate(chartWithLabel([{ accessor: "amount", position: "outset" }])).valid
+  validate(chartWithLabel([{ accessor: "amount", placement: "outset" }])).valid
 );
 check(
   "label: [{ accessor }, { accessor }] accepts (multiple specs)",
   validate(
     chartWithLabel([
-      { accessor: "amount", position: "outset" },
-      { accessor: "count", position: "center", fontWeight: "bold" },
+      { accessor: "amount", placement: "outset" },
+      { accessor: "count", placement: "center", fontWeight: "bold" },
     ])
   ).valid
 );
 check(
   "label: { accessor } is rejected (bare object shorthand was dropped; must be an array)",
-  !validate(chartWithLabel({ accessor: "amount", position: "outset" })).valid
+  !validate(chartWithLabel({ accessor: "amount", placement: "outset" })).valid
 );
 check(
   "label: number is rejected (not a recognized shape)",
@@ -1358,11 +1358,11 @@ console.log("\n# Strategies");
     }
   };
   const accepts: Array<[Parameters<typeof checkStrategy>[0], unknown]> = [
-    ["Tile", { kind: "squarify" }],
-    ["Tile", { kind: "squarify", ratio: 1 }],
-    ["Tile", { kind: "squarify", ratio: undefined }],
-    ["Tile", { kind: "voronoi" }],
-    ["Tile", { kind: "voronoi", seed: 7 }],
+    ["Tiling", { kind: "squarify" }],
+    ["Tiling", { kind: "squarify", ratio: 1 }],
+    ["Tiling", { kind: "squarify", ratio: undefined }],
+    ["Tiling", { kind: "voronoi" }],
+    ["Tiling", { kind: "voronoi", seed: 7 }],
     ["Overlap", { kind: "separate", padding: 2 }],
     ["Overlap", { kind: "noise", smoothing: Infinity, randomness: "uniform" }],
     ["Overlap", { kind: "noise", smoothing: { $numberDouble: "Infinity" } }],
@@ -1370,10 +1370,10 @@ console.log("\n# Strategies");
     ["Curve", { kind: "monotone" }],
     ["Curve", { kind: "arc", direction: "down" }],
     ["Curve", { kind: "perfectArrows", bow: 0.3, padEnd: 4 }],
-    ["Bin", { kind: "step", size: 0.5 }],
-    ["Bin", { kind: "thresholds", thresholds: 20 }],
-    ["Bin", { kind: "thresholds", thresholds: [0, 5, 10] }],
-    ["Bin", { kind: "hex", radius: 1 }],
+    ["Binning", { kind: "step", size: 0.5 }],
+    ["Binning", { kind: "thresholds", thresholds: 20 }],
+    ["Binning", { kind: "thresholds", thresholds: [0, 5, 10] }],
+    ["Binning", { kind: "hex", radius: 1 }],
     ["Calendar", { kind: "month" }],
     ["Calendar", { kind: "month", every: 3 }],
     ["Calendar", { kind: "week", every: 2, start: "sunday" }],
@@ -1405,12 +1405,12 @@ console.log("\n# Strategies");
         }),
         /expected object, got function/,
       ],
-      ["Tile", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
-      ["Tile", "squarify", /expected object/],
-      ["Tile", { kind: "squarify", ratio: 0.5 }, /at least 1/],
-      ["Tile", { kind: "slice", ratio: 2 }, /unknown field "ratio"/],
-      ["Tile", { kind: "sliceDice" }, /unknown kind "sliceDice"/],
-      ["Tile", { kind: "voronoi", seed: NaN }, /seed/],
+      ["Tiling", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
+      ["Tiling", "squarify", /expected object/],
+      ["Tiling", { kind: "squarify", ratio: 0.5 }, /at least 1/],
+      ["Tiling", { kind: "slice", ratio: 2 }, /unknown field "ratio"/],
+      ["Tiling", { kind: "sliceDice" }, /unknown kind "sliceDice"/],
+      ["Tiling", { kind: "voronoi", seed: NaN }, /seed/],
       ["Overlap", { kind: "separate", padding: -1 }, /at least 0/],
       ["Overlap", { kind: "separate", padding: Infinity }, /finite/],
       ["Overlap", { kind: "noise", randomness: "pink" }, /randomness/],
@@ -1422,12 +1422,12 @@ console.log("\n# Strategies");
       ["Curve", { type: "monotone" }, /unknown kind undefined/],
       ["Curve", { kind: "arc", direction: "left" }, /direction/],
       ["Curve", { kind: "linear", options: {} }, /unknown field "options"/],
-      ["Bin", { kind: "step", size: 0 }, /above 0/],
-      ["Bin", { kind: "step", size: Infinity }, /finite/],
-      ["Bin", { kind: "step" }, /size/],
-      ["Bin", { step: 1 }, /unknown kind undefined/],
-      ["Bin", { kind: "thresholds", thresholds: 0 }, /at least 1/],
-      ["Bin", { kind: "quantiles", quantiles: [1] }, /below 1/],
+      ["Binning", { kind: "step", size: 0 }, /above 0/],
+      ["Binning", { kind: "step", size: Infinity }, /finite/],
+      ["Binning", { kind: "step" }, /size/],
+      ["Binning", { step: 1 }, /unknown kind undefined/],
+      ["Binning", { kind: "thresholds", thresholds: 0 }, /at least 1/],
+      ["Binning", { kind: "quantiles", quantiles: [1] }, /below 1/],
       ["Calendar", { kind: "month", every: 0 }, /at least 1/],
       ["Calendar", { kind: "month", every: 1.5 }, /whole number/],
       [
@@ -1456,7 +1456,7 @@ console.log("\n# Strategies");
     );
   }
 
-  // A Bin kind is valid only on its key, and the error names the key that
+  // A Binning kind is valid only on its key, and the error names the key that
   // takes it.
   const errorIn = (fn: () => void): string => {
     try {
@@ -1471,26 +1471,28 @@ console.log("\n# Strategies");
     errorIn(() => checkPartition({ kind: "step", size: 1 }, "where")) === ""
   );
   check(
-    "checkStructBin accepts a struct bin",
-    errorIn(() => checkStructBin({ kind: "hex", radius: 1 }, "where")) === ""
+    "checkStructBinning accepts a struct bin",
+    errorIn(() => checkStructBinning({ kind: "hex", radius: 1 }, "where")) ===
+      ""
   );
   {
     const why = errorIn(() =>
       checkPartition({ kind: "hex", radius: 1 }, "where")
     );
     check(
-      "checkPartition rejects Bin.hex, naming struct",
-      /Bin\.hex bins two fields/.test(why) && why.includes("struct({ x, y })"),
+      "checkPartition rejects Binning.hex, naming struct",
+      /Binning\.hex bins two fields/.test(why) &&
+        why.includes("struct({ x, y })"),
       why
     );
   }
   {
     const why = errorIn(() =>
-      checkStructBin({ kind: "step", size: 1 }, "where")
+      checkStructBinning({ kind: "step", size: 1 }, "where")
     );
     check(
-      "checkStructBin rejects Bin.step, naming field",
-      /Bin\.step bins one field/.test(why) && why.includes("field(x).bin"),
+      "checkStructBinning rejects Binning.step, naming field",
+      /Binning\.step bins one field/.test(why) && why.includes("field(x).bin"),
       why
     );
   }
@@ -1516,14 +1518,14 @@ console.log("\n# Strategies");
   );
 
   // The validator walks a strategy option the same way.
-  const doc = (tile: unknown) =>
+  const doc = (tiling: unknown) =>
     ({
       irVersion: 0,
       ir: "gofish-frontend",
       root: {
         type: "chart",
         data: { type: "table", id: "t0" },
-        operators: [{ type: "treemap", tile }],
+        operators: [{ type: "tile", tiling }],
         mark: { type: "rect" },
       },
     }) as unknown as FrontendIRDocument;
@@ -1533,7 +1535,7 @@ console.log("\n# Strategies");
     !unknownKind.valid &&
       unknownKind.errors.some(
         (e) =>
-          /tile\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
+          /tiling\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
       ),
     JSON.stringify(unknownKind)
   );

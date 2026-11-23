@@ -6,7 +6,7 @@ from python_stories.data import SEAFOOD
 
 def story_default():
     mark = rect(h="count", fill="species").label(
-        "species", position="center", color="white", font_size=12
+        "species", placement="center", color="white", font_size=12
     )
     return (
         chart(SEAFOOD, w=440, h=400)

@@ -1,0 +1,2072 @@
+<title>Tile Strategy Option</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --ink: #1f2328;
+    --muted: #5d636b;
+    --line: #e1e0dc;
+    --accent: #2d6a4f;
+    --accent-soft: #e5f1ea;
+    --tint: #dcefe3;
+    --tint-old: #f6e3df;
+    --code-bg: #f3f3f0;
+    --chart-surface: #ffffff;
+    --tok-key: #7a3e9d;
+    --tok-str: #2f6f3e;
+    --tok-num: #a3511a;
+    --tok-com: #7a8088;
+    --tok-fn: #255f99;
+    --tok-attr: #8a5a00;
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141615;
+      --surface: #1c1f1e;
+      --ink: #e6e7e4;
+      --muted: #a0a5a2;
+      --line: #2e3331;
+      --accent: #7cc49b;
+      --accent-soft: #1d3127;
+      --tint: #1f3a2b;
+      --tint-old: #3b2423;
+      --code-bg: #181b1a;
+      --chart-surface: #f7f7f5;
+      --tok-key: #cfa0ea;
+      --tok-str: #93d3a2;
+      --tok-num: #f0a46e;
+      --tok-com: #858c88;
+      --tok-fn: #8ab8ec;
+      --tok-attr: #e6c27a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141615;
+    --surface: #1c1f1e;
+    --ink: #e6e7e4;
+    --muted: #a0a5a2;
+    --line: #2e3331;
+    --accent: #7cc49b;
+    --accent-soft: #1d3127;
+    --tint: #1f3a2b;
+    --tint-old: #3b2423;
+    --code-bg: #181b1a;
+    --chart-surface: #f7f7f5;
+    --tok-key: #cfa0ea;
+    --tok-str: #93d3a2;
+    --tok-num: #f0a46e;
+    --tok-com: #858c88;
+    --tok-fn: #8ab8ec;
+    --tok-attr: #e6c27a;
+    color-scheme: dark;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1 {
+    font-size: 28px;
+    line-height: 1.2;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 40px 0 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 17px;
+    margin: 0 0 10px;
+  }
+  h4 {
+    font-size: 15px;
+    margin: 0 0 6px;
+  }
+  p {
+    margin: 0 0 10px;
+  }
+  a {
+    color: var(--accent);
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 72ch;
+  }
+  .status {
+    font-size: 13.5px;
+    color: var(--ink);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .terms {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 12px 0 16px;
+  }
+  .terms b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+    margin: 20px 0 20px;
+    flex-wrap: wrap;
+  }
+  .tabs a {
+    padding: 8px 14px;
+    text-decoration: none;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .tabs a[aria-selected="true"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  ol.rules {
+    padding-left: 22px;
+    margin: 0 0 12px;
+  }
+  ol.rules li {
+    margin-bottom: 12px;
+  }
+  ol.rules .code {
+    margin: 6px 0 0;
+  }
+  .rec {
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    background: var(--accent-soft);
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+  }
+  .rec p {
+    margin-bottom: 8px;
+  }
+  .rec ul {
+    margin: 0 0 8px;
+    padding-left: 18px;
+  }
+  .rec li {
+    margin-bottom: 4px;
+  }
+  .rec .arrow {
+    color: var(--muted);
+  }
+  .code {
+    margin: 10px 0;
+    min-width: 0;
+  }
+  .code-label {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .code.now .code-label {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .scroll {
+    overflow-x: auto;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  pre {
+    margin: 0;
+    padding: 10px 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    display: block;
+    min-width: max-content;
+  }
+  pre .ln {
+    display: block;
+    padding: 0 12px;
+  }
+  .now pre .ln.mark {
+    background: var(--tint);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .was pre .ln.mark {
+    background: var(--tint-old);
+  }
+  .hljs-keyword,
+  .hljs-built_in,
+  .hljs-literal {
+    color: var(--tok-key);
+  }
+  .hljs-string {
+    color: var(--tok-str);
+  }
+  .hljs-number {
+    color: var(--tok-num);
+  }
+  .hljs-comment {
+    color: var(--tok-com);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_ {
+    color: var(--tok-fn);
+  }
+  .hljs-attr,
+  .hljs-property,
+  .hljs-params {
+    color: var(--tok-attr);
+  }
+  table.grid {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    margin: 10px 0 16px;
+  }
+  table th,
+  table td {
+    text-align: left;
+    vertical-align: top;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  table th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  tr.chg td {
+    background: var(--accent-soft);
+  }
+  td code {
+    white-space: nowrap;
+  }
+  table.audit td:nth-child(3) code,
+  table.audit td:nth-child(4) code,
+  table.effects td code {
+    white-space: normal;
+  }
+  table.counts td:not(:first-child),
+  table.counts th:not(:first-child) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .cards {
+    display: grid;
+    gap: 20px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    min-width: 0;
+  }
+  .shot {
+    margin: 0 0 12px;
+    background: var(--chart-surface);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+  }
+  .shot img {
+    max-width: 100%;
+    height: auto;
+    display: inline-block;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .why {
+    font-size: 14px;
+    border-left: 3px solid var(--accent);
+    padding: 4px 0 4px 12px;
+  }
+  .strategies {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .strategy {
+    min-width: 0;
+  }
+  .strategy .shot {
+    margin-bottom: 6px;
+  }
+  .strategy h4 code {
+    font-size: 14px;
+  }
+  .strategy p {
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  ul.plain {
+    padding-left: 20px;
+  }
+  ul.plain li {
+    margin-bottom: 6px;
+  }
+  details.more {
+    margin-top: 24px;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  details.more > summary {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  details.more[open] > summary {
+    margin-bottom: 12px;
+  }
+  details.more ol,
+  details.more ul {
+    padding-left: 20px;
+  }
+  details.more li {
+    margin-bottom: 10px;
+  }
+  blockquote {
+    margin: 8px 0 12px;
+    padding: 8px 14px;
+    border-left: 3px solid var(--line);
+    color: var(--ink);
+  }
+  @media (max-width: 640px) {
+    h1 {
+      font-size: 24px;
+    }
+    .card {
+      padding: 14px;
+    }
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<main class="page">
+  <h1>Naming strategy options</h1>
+  <p class="status">
+    Status: accepted and implemented in PR #1366 (2026-11-17).
+  </p>
+  <p class="lede">
+    GoFish has thirteen strategy families, the capitalized namespaces such as
+    <code>Curve</code> and <code>Tiling</code> whose members are the choices for
+    one option. One naming rule of two statements now decides every family's
+    name and the key of every option that takes a member. Six spellings changed
+    to follow it, among them <code>tile({ tiling: Tiling.voronoi })</code> for
+    the operator that #1355 renamed from <code>treemap</code>.
+  </p>
+  <nav class="tabs" role="tablist">
+    <a href="#rule" role="tab">Rule</a><a href="#tile" role="tab">Tile</a
+    ><a href="#precedent" role="tab">Precedent</a>
+  </nav>
+  <section id="tab-rule" role="tabpanel">
+    <ol class="rules">
+      <li>
+        A family is a capitalized noun for what one member is:
+        <code>Curve</code>, <code>Shape</code>, <code>Effect</code>. When the
+        members are the ways an operator does its work, the noun is what the
+        operator makes: <code>Tiling</code>, <code>Packing</code>,
+        <code>Binning</code>, <code>Placement</code>. It is never an operator's
+        own name.
+        <div class="code">
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark=""
+            ><code>[Curve.monotone, Shape.blob, Effect.grayscale, Tiling.voronoi, Placement.around];</code></pre>
+          </div>
+        </div>
+      </li>
+      <li>
+        The option that takes a member is always the same word in lowercase:
+        <code>curve: Curve.monotone</code>, <code>tiling: Tiling.voronoi</code>,
+        <code>placement: Placement.around</code>,
+        <code>effect: Effect.grayscale</code>.
+        <div class="code">
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark=""
+            ><code>tile({ by: "region", size: "pop", tiling: Tiling.voronoi });</code></pre>
+          </div>
+        </div>
+      </li>
+    </ol>
+    <p>
+      The rule has nothing to name where there is no single keyed slot. When one
+      construct takes the same family in several slots, the slots are named for
+      their roles:
+      <code
+        >.transition({ enter: Animation.grow(), exit: Animation.fadeOut()
+        })</code
+      >. A method whose only argument is the strategy takes it bare:
+      <code>field("x").bin(Binning.step(0.5))</code>. <code>pack</code> will
+      follow the rule with <code>pack({ packing: Packing.circles })</code> when
+      it gets a second strategy.
+    </p>
+    <p class="terms">
+      <b>Strategy family</b>: a capitalized namespace whose members are the
+      choices for one option, such as <code>Curve.monotone</code> or
+      <code>Overlap.separate</code>. <b>Member</b>: one of those choices, such
+      as <code>monotone</code>. <b>Key</b>: the name of the option that takes a
+      member.
+    </p>
+    <div class="rec">
+      <p><b>What changed</b></p>
+      <ul>
+        <li>
+          <code>treemap({ tile: Tile.voronoi })</code>
+          <span class="arrow">became</span>
+          <code>tile({ tiling: Tiling.voronoi })</code>
+        </li>
+        <li>
+          <code>.label("units", { position: Place.around })</code>
+          <span class="arrow">became</span>
+          <code>.label("units", { placement: Placement.around })</code>
+        </li>
+        <li>
+          <code>interpolate(rows, { method: Curve.monotone() })</code>
+          <span class="arrow">became</span>
+          <code>interpolate(rows, { curve: Curve.monotone })</code>
+        </li>
+        <li>
+          <code>field("x").bin(Bin.step(0.5))</code>
+          <span class="arrow">became</span>
+          <code>field("x").bin(Binning.step(0.5))</code>
+        </li>
+        <li>
+          <code>rect({ filter: Filter.grayscale })</code>
+          <span class="arrow">became</span>
+          <code>rect({ effect: Effect.grayscale })</code>
+        </li>
+        <li>
+          <code>coord({ transform: Coord.polar() }, children)</code>
+          <span class="arrow">became</span>
+          <code>layer({ coord: Coord.polar() }, children)</code>
+        </li>
+      </ul>
+      <p>
+        Each rename is clean, with no alias for the old spelling, and the
+        <code>coord</code> combinator is removed. A bare member such as
+        <code>Curve.monotone</code> now works in <code>interpolate</code> and
+        <code>Animation.tween</code>. Python follows with the modules
+        <code>gofish.tiling</code>, <code>gofish.placement</code>,
+        <code>gofish.binning</code> and <code>gofish.effect</code>.
+        <code>gofish/filter_.py</code> is gone, and the Python generator now
+        raises an error if a family shares an operator's name.
+      </p>
+    </div>
+    <h2>Examples</h2>
+    <p class="note">
+      Each card shows a real render, then the spelling now, then the spelling on
+      <code>main</code>. Changed lines are tinted in both. The
+      <code>tile</code> example is on the Tile tab.
+    </p>
+    <div class="cards">
+      <article class="card" id="label">
+        <h3>1. Label placement: <code>placement: Placement.around</code></h3>
+        <figure class="shot">
+          <img
+            src="img/label-bar-values.png"
+            alt="Six bars with their values above them, and the tallest bar&#x27;s value inside its top"
+          />
+        </figure>
+        <p class="note">
+          Each bar's value goes above it, or inside its top when there is no
+          room. From
+          <code>Forward Syntax/Label Placement/BarValuesAboveOrInside</code>.
+        </p>
+        <p class="note">
+          The family is the noun for what <code>.label()</code> makes, a
+          placement, and the key is the same word in lowercase. The same key
+          still takes the position strings (<code>"center"</code>,
+          <code>"outset"</code>, <code>"inset-top"</code>,
+          <code>"outset-left-start"</code> and the rest), as
+          <code>effect</code> takes a CSS string beside an
+          <code>Effect</code> member.
+        </p>
+        <p class="why">
+          <b>Why this spelling.</b> Tooltip and popover libraries call this
+          option <code>placement</code>: Floating UI, Popper, Bootstrap and
+          Material UI all do. The old family name <code>Place</code> also read
+          as a verb, and a capital letter is meant to mark a namespace of
+          values, not an action.
+        </p>
+        <div class="code now">
+          <div class="code-label">Now</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="4"
+            ><code>chart(sales, { w: 320, h: 200 })
+  .flow(spread({ by: "month", dir: "x" }))
+  .mark(
+    rect({ h: "units", fill: "#4e79a7" }).label("units", {
+      placement: Placement.around({
+        directions: ["top"],
+        side: ["outset", "inset"],
+      }),
+    })
+  );</code></pre>
+          </div>
+        </div>
+        <div class="code was">
+          <div class="code-label">On <code>main</code></div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="4"
+            ><code>chart(sales, { w: 320, h: 200 })
+  .flow(spread({ by: "month", dir: "x" }))
+  .mark(
+    rect({ h: "units", fill: "#4e79a7" }).label("units", {
+      position: Place.around({
+        directions: ["top"],
+        side: ["outset", "inset"],
+      }),
+    })
+  );</code></pre>
+          </div>
+        </div>
+      </article>
+      <article class="card" id="interpolate">
+        <h3>2. <code>interpolate</code>: the key is <code>curve</code></h3>
+        <figure class="shot">
+          <img
+            src="img/interpolate-gapminder.png"
+            alt="Gapminder scatter of fertility against life expectancy, read halfway between 1955 and 1960"
+          />
+        </figure>
+        <p class="note">
+          <code>interpolate</code> reads the table halfway between the 1955 and
+          1960 keyframes, and an ordinary scatter draws the result. From
+          <code>Animated Vega-Lite/Gapminder Tower/L3DataSpace</code>, with the
+          curve written out at its default; the story does not write it.
+        </p>
+        <p class="note">
+          On <code>main</code> the curve had to be a call,
+          <code>Curve.monotone()</code>, because <code>interpolate</code> did
+          not read a bare member. The same commit fixes that here and in
+          <code>Animation.tween</code>.
+        </p>
+        <p class="why">
+          <b>Why this spelling.</b> Every other slot that takes a
+          <code>Curve</code> is already called <code>curve</code>: on
+          <code>line</code>, <code>ribbon</code>,
+          <code>time.transition</code> and <code>Animation.tween</code>.
+          <code>interpolate</code> now matches them.
+        </p>
+        <div class="code now">
+          <div class="code-label">Now</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="14"
+            ><code>chart(gapminder, { legend: false, w: 300, h: 300 })
+  .flow(
+    group({ by: "year" }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(blank())
+  .layer(
+    chart(gapminder)
+      .flow(
+        derive((rows) =&gt;
+          interpolate(rows, {
+            along: "year",
+            key: "country",
+            at: year(),
+            curve: Curve.monotone,
+          })
+        ),
+        scatter({ by: "country", x: "fertility", y: "life_expect" })
+      )
+      .mark(circle({ r: 4, fill: "country" }))
+  );</code></pre>
+          </div>
+        </div>
+        <div class="code was">
+          <div class="code-label">On <code>main</code></div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="14"
+            ><code>chart(gapminder, { legend: false, w: 300, h: 300 })
+  .flow(
+    group({ by: "year" }),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(blank())
+  .layer(
+    chart(gapminder)
+      .flow(
+        derive((rows) =&gt;
+          interpolate(rows, {
+            along: "year",
+            key: "country",
+            at: year(),
+            method: Curve.monotone(),
+          })
+        ),
+        scatter({ by: "country", x: "fertility", y: "life_expect" })
+      )
+      .mark(circle({ r: 4, fill: "country" }))
+  );</code></pre>
+          </div>
+        </div>
+      </article>
+      <article class="card" id="coord">
+        <h3>3. The <code>coord</code> combinator is removed</h3>
+        <figure class="shot">
+          <img src="img/coord-pie.png" alt="A pie of five wedges" />
+        </figure>
+        <p class="note">
+          A pie: five bars stacked along x in a clock coordinate space. Captured
+          from a throwaway story that used the <code>coord</code> combinator on
+          <code>main</code>;
+          <code>Low Level Syntax/Nested Orientation/PolarInChart</code> draws
+          the same pie with <code>layer({ coord })</code>.
+        </p>
+        <p class="note">
+          The combinator shared its name with the <code>Coord</code> family,
+          which statement 1 does not allow. It also did the same job as
+          <code>layer({ coord })</code>, which wraps the same internal node and
+          adds name scoping: a named mark inside the combinator could not be
+          selected by a sibling, and under <code>layer({ coord })</code> it can.
+          So the combinator is no longer exported, and <code>coord</code> is
+          only the key on <code>chart</code> and <code>layer</code>, which
+          statement 2 already spells. The combinator was JS only and not on the
+          wire, and no story used it.
+        </p>
+        <div class="code now">
+          <div class="code-label">Now</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0"
+            ><code>layer({ coord: Coord.clock() }, [
+  stackX(
+    { h: 70, spacing: 0, alignment: "start" },
+    map(pieData, (d) =&gt; rect({ w: v(d.count), fill: d.color }))
+  ),
+]);</code></pre>
+          </div>
+        </div>
+        <div class="code was">
+          <div class="code-label">On <code>main</code></div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0"
+            ><code>coord({ transform: Coord.clock() }, [
+  stackX(
+    { h: 70, spacing: 0, alignment: "start" },
+    map(pieData, (d) =&gt; rect({ w: v(d.count), fill: d.color }))
+  ),
+]);</code></pre>
+          </div>
+        </div>
+      </article>
+      <article class="card" id="bin">
+        <h3>4. Binning: <code>Bin</code> becomes <code>Binning</code></h3>
+        <figure class="shot">
+          <img
+            src="img/bin-rating-histogram.png"
+            alt="Histogram of movie ratings in half-point bins, with the empty bin from 2 to 2.5"
+          />
+        </figure>
+        <p class="note">
+          Movie ratings in half-point bins. From
+          <code>Forward Syntax/Bin/RatingHistogram</code>.
+        </p>
+        <p class="note">
+          <code>.bin()</code> is a method and stays a verb. The family is the
+          noun for what it makes, a binning. The strategy is the method's only
+          argument, so it has no key. The two-field kinds follow:
+          <code>struct({ x, y }).bin(Binning.hex({ radius }))</code>.
+          <code>Calendar.month</code> in the same slot does not change.
+        </p>
+        <div class="code now">
+          <div class="code-label">Now</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="3"
+            ><code>chart(movies, { axes: true, w: 560, h: 200 })
+  .flow(
+    spread({
+      by: field("rating").bin(Binning.step(0.5)),
+      dir: "x",
+      spacing: 1,
+    })
+  )
+  .mark(rect({ h: field("rating").count(), fill: "steelblue" }));</code></pre>
+          </div>
+        </div>
+        <div class="code was">
+          <div class="code-label">On <code>main</code></div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="3"
+            ><code>chart(movies, { axes: true, w: 560, h: 200 })
+  .flow(
+    spread({
+      by: field("rating").bin(Bin.step(0.5)),
+      dir: "x",
+      spacing: 1,
+    })
+  )
+  .mark(rect({ h: field("rating").count(), fill: "steelblue" }));</code></pre>
+          </div>
+        </div>
+      </article>
+      <article class="card" id="effect">
+        <h3>5. Effects: <code>Filter</code> becomes <code>Effect</code></h3>
+        <figure class="shot">
+          <img
+            src="img/filter-bottle.png"
+            alt="Four bottles drawn in gray and filled with green to 30, 60, 75 and 100 percent"
+          />
+        </figure>
+        <p class="note">
+          The bottle image is drawn in grays with <code>Effect.grayscale</code>,
+          and the green fill is laid on it. From
+          <code>Piccl/Bottle/Default</code>. The CSS string form moves with the
+          key. The data operator <code>filter(predicate)</code> keeps its name;
+          the last block is from
+          <code>Animated Vega-Lite/Gapminder/Frame1955</code>.
+        </p>
+        <p class="why">
+          <b>Why this spelling.</b> The word "filter" is kept for filtering
+          rows, which is what it means for arrays. <code>Effect</code> is the
+          word Figma, SwiftUI, Sketch, Illustrator and Android use for a visual
+          treatment of one element, and SwiftUI files <code>grayscale</code> and
+          <code>luminanceToAlpha</code> under "Graphical effects".
+          <code>Effect</code> is a working name that will be revisited when
+          shadow and blur are added.
+        </p>
+        <div class="code now">
+          <div class="code-label">Now</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="5"
+            ><code>chart(data, { axes: false })
+  .flow(spread({ by: "category", dir: "x", spacing: 20, axes: { x: false } }))
+  .mark(
+    layer([
+      atop({ blendMode: "color" }, [
+        image({ href: bottlePng, h: v(100), effect: Effect.grayscale }),
+        rect({ h: "amount", w: 175, fill: "#00ff00" }),
+      ]).name("bottle"),
+      rect({ h: 1, fill: "#666", w: 175, y: "amount" }).name("line"),
+      text({ fontSize: 35, fill: "#666", text: (d) =&gt; `${d.amount}%` }).name(
+        "label"
+      ),
+    ]).relate(({ line, label, bottle }) =&gt; [
+      Constraint.align({ x: "start" }, [bottle, line]),
+      Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
+      Constraint.align({ x: "end" }, [label, line]),
+    ])
+  );</code></pre>
+          </div>
+        </div>
+        <div class="code was">
+          <div class="code-label">On <code>main</code></div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="5"
+            ><code>chart(data, { axes: false })
+  .flow(spread({ by: "category", dir: "x", spacing: 20, axes: { x: false } }))
+  .mark(
+    layer([
+      atop({ blendMode: "color" }, [
+        image({ href: bottlePng, h: v(100), filter: Filter.grayscale }),
+        rect({ h: "amount", w: 175, fill: "#00ff00" }),
+      ]).name("bottle"),
+      rect({ h: 1, fill: "#666", w: 175, y: "amount" }).name("line"),
+      text({ fontSize: 35, fill: "#666", text: (d) =&gt; `${d.amount}%` }).name(
+        "label"
+      ),
+    ]).relate(({ line, label, bottle }) =&gt; [
+      Constraint.align({ x: "start" }, [bottle, line]),
+      Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
+      Constraint.align({ x: "end" }, [label, line]),
+    ])
+  );</code></pre>
+          </div>
+        </div>
+        <div class="code now">
+          <div class="code-label">Now, with a CSS string</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0"
+            ><code>image({ href: bottlePng, effect: "blur(2px)" });</code></pre>
+          </div>
+        </div>
+        <div class="code was">
+          <div class="code-label">On <code>main</code>, with a CSS string</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0"
+            ><code>image({ href: bottlePng, filter: "blur(2px)" });</code></pre>
+          </div>
+        </div>
+        <div class="code">
+          <div class="code-label">
+            The data operator <code>filter(predicate)</code>, unchanged
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark=""
+            ><code>chart(gapminder, { legend: false, w: 300, h: 300 })
+  .flow(
+    filter((d) =&gt; d.year === 1955),
+    scatter({ by: "country", x: "fertility", y: "life_expect" })
+  )
+  .mark(circle({ r: 4, fill: "country" }));</code></pre>
+          </div>
+        </div>
+      </article>
+      <article class="card" id="length">
+        <h3>6. Length</h3>
+        <p class="note">
+          Full nouns make longer names. The three blocks below are the same
+          three call sites: the short names on <code>main</code>, the full nouns
+          now, and the full nouns with member imports.
+        </p>
+        <div class="table-wrap">
+          <table class="grid counts">
+            <thead>
+              <tr>
+                <th>Call site</th>
+                <th>On <code>main</code></th>
+                <th>Now</th>
+                <th>Now, with member imports</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Label</td>
+                <td>43</td>
+                <td>48</td>
+                <td>38</td>
+              </tr>
+              <tr>
+                <td>Tile</td>
+                <td>58</td>
+                <td>59</td>
+                <td>52</td>
+              </tr>
+              <tr>
+                <td>Bin</td>
+                <td>34</td>
+                <td>38</td>
+                <td>30</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Characters in each call line below.</p>
+        <div class="code was">
+          <div class="code-label">On <code>main</code></div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0,1,2"
+            ><code>.label("symbol", { position: Place.end() });
+treemap({ by: "region", size: "pop", tile: Tile.voronoi });
+field("rating").bin(Bin.step(0.5));</code></pre>
+          </div>
+        </div>
+        <div class="code now">
+          <div class="code-label">Now</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0,1,2"
+            ><code>.label("symbol", { placement: Placement.end() });
+tile({ by: "region", size: "pop", tiling: Tiling.voronoi });
+field("rating").bin(Binning.step(0.5));</code></pre>
+          </div>
+        </div>
+        <div class="code now">
+          <div class="code-label">Now, with member imports</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark=""
+            ><code>.label("symbol", { placement: end() });
+tile({ by: "region", size: "pop", tiling: voronoi });
+field("rating").bin(step(0.5));</code></pre>
+          </div>
+        </div>
+        <div class="code">
+          <div class="code-label">The imports, JS</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark=""
+            ><code>import { end } from "gofish-graphics/placement";
+import { voronoi } from "gofish-graphics/tiling";
+import { step } from "gofish-graphics/binning";</code></pre>
+          </div>
+        </div>
+        <div class="code">
+          <div class="code-label">The imports, Python</div>
+          <div class="scroll">
+            <pre
+              data-lang="python"
+              data-mark=""
+            ><code>from gofish.placement import end
+from gofish.tiling import voronoi
+from gofish.binning import step</code></pre>
+          </div>
+        </div>
+        <p>
+          The long form appears in full only where a call writes both the key
+          and the family. Member imports, the reason #1013 (one namespace per
+          strategy family) accepted family prefixes, shorten it to the bare
+          member, and most calls never name a strategy at all, because each
+          option has a default. The short names <code>Place</code>,
+          <code>Tile</code> and <code>Bin</code> were the ones that read as
+          verbs and shared a word with an operator or method.
+        </p>
+        <p>
+          One cost of member imports: a member name can appear in two families
+          (<code>step</code> in <code>Curve</code> and <code>Binning</code>,
+          <code>voronoi</code> in <code>Tiling</code> and <code>Binning</code>),
+          so a file that imports both renames one with <code>as</code>. The
+          subpaths are <code>gofish-graphics/placement</code>,
+          <code>gofish-graphics/tiling</code> and
+          <code>gofish-graphics/binning</code>.
+        </p>
+      </article>
+    </div>
+    <h2>The audit</h2>
+    <p>
+      Some family names are also verbs. <code>Overlap</code> is both, as
+      <code>Place</code>, <code>Tile</code> and <code>Bin</code> were. It stays,
+      because it is the established noun for overlap removal in the layout
+      literature, and no operator is called <code>overlap</code>.
+    </p>
+    <p>
+      <code>Color</code> and <code>Calendar</code> name the domain their members
+      come from more than what one member is (a color scale, a calendar unit).
+      They stay: each is the established word, neither reads as a verb, and
+      neither shares a name with an operator.
+    </p>
+    <details class="more" id="audit" open>
+      <summary>Every strategy-valued option in the library</summary>
+      <p class="note">
+        Tinted rows changed. The rule column names the statement that decides
+        the row, or "no key" where there is no single keyed slot.
+      </p>
+      <div class="table-wrap">
+        <table class="grid audit">
+          <thead>
+            <tr>
+              <th>Family</th>
+              <th>Construct</th>
+              <th>On <code>main</code></th>
+              <th>Now</th>
+              <th>Rule</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Overlap</code></td>
+              <td><code>scatter</code></td>
+              <td><code>overlap: Overlap.separate</code></td>
+              <td>unchanged</td>
+              <td>2</td>
+            </tr>
+            <tr class="chg">
+              <td><code>Tiling</code> (was <code>Tile</code>)</td>
+              <td><code>tile</code> (was <code>treemap</code>)</td>
+              <td><code>tile: Tile.voronoi</code></td>
+              <td><code>tiling: Tiling.voronoi</code></td>
+              <td>1, 2</td>
+            </tr>
+            <tr>
+              <td><code>Curve</code></td>
+              <td>
+                <code>line</code>, <code>ribbon</code>,
+                <code>time.transition</code>, <code>Animation.tween</code>
+              </td>
+              <td><code>curve: Curve.monotone</code></td>
+              <td>unchanged</td>
+              <td>2</td>
+            </tr>
+            <tr class="chg">
+              <td><code>Curve</code></td>
+              <td><code>interpolate(rows, opts)</code>, JS only</td>
+              <td><code>method: Curve.monotone()</code></td>
+              <td><code>curve: Curve.monotone</code></td>
+              <td>2</td>
+            </tr>
+            <tr>
+              <td><code>Shape</code></td>
+              <td><code>enclose</code></td>
+              <td><code>shape: Shape.blob</code></td>
+              <td>unchanged</td>
+              <td>2</td>
+            </tr>
+            <tr class="chg">
+              <td><code>Effect</code> (was <code>Filter</code>)</td>
+              <td>every mark, and <code>layer</code></td>
+              <td><code>filter: Filter.grayscale</code>, or a CSS string</td>
+              <td><code>effect: Effect.grayscale</code>, or a CSS string</td>
+              <td>1, 2</td>
+            </tr>
+            <tr>
+              <td><code>Coord</code></td>
+              <td><code>chart</code>, <code>layer</code></td>
+              <td><code>coord: Coord.polar()</code></td>
+              <td>unchanged</td>
+              <td>2</td>
+            </tr>
+            <tr class="chg">
+              <td><code>Coord</code></td>
+              <td>the <code>coord</code> combinator, JS only</td>
+              <td>
+                <code>coord({ transform: Coord.polar() }, children)</code>
+              </td>
+              <td>
+                removed; <code>layer({ coord: Coord.polar() }, children)</code>
+              </td>
+              <td>1, 2</td>
+            </tr>
+            <tr>
+              <td><code>Color</code></td>
+              <td><code>chart</code></td>
+              <td><code>color: Color.palette([...])</code></td>
+              <td>unchanged</td>
+              <td>2</td>
+            </tr>
+            <tr class="chg">
+              <td><code>Placement</code> (was <code>Place</code>)</td>
+              <td><code>.label()</code> on every mark and operator</td>
+              <td><code>position: Place.around</code>, or a position string</td>
+              <td>
+                <code>placement: Placement.around</code>, or a position string
+              </td>
+              <td>1, 2</td>
+            </tr>
+            <tr class="chg">
+              <td><code>Binning</code> (was <code>Bin</code>)</td>
+              <td>
+                <code>field(x).bin(...)</code>,
+                <code>struct({ x, y }).bin(...)</code>
+              </td>
+              <td>
+                <code>Bin.step(0.5)</code>, <code>Bin.hex({ radius })</code>
+              </td>
+              <td>
+                <code>Binning.step(0.5)</code>,
+                <code>Binning.hex({ radius })</code>
+              </td>
+              <td>1, no key</td>
+            </tr>
+            <tr>
+              <td><code>Calendar</code></td>
+              <td><code>field(x).bin(...)</code> on a time column</td>
+              <td><code>Calendar.month</code></td>
+              <td>unchanged</td>
+              <td>no key</td>
+            </tr>
+            <tr>
+              <td><code>Calendar</code></td>
+              <td>an axis's <code>levels</code></td>
+              <td><code>levels: [Calendar.month, Calendar.year]</code></td>
+              <td>unchanged: a list with one slot per level</td>
+              <td>no key</td>
+            </tr>
+            <tr>
+              <td><code>Animation</code></td>
+              <td>a mark's <code>.transition()</code>, JS only</td>
+              <td>
+                <code>enter: Animation.grow()</code>, <code>exit</code>,
+                <code>update: Animation.tween()</code>
+              </td>
+              <td>unchanged</td>
+              <td>no key</td>
+            </tr>
+            <tr>
+              <td><code>Domain</code></td>
+              <td><code>Unit({ domain })</code></td>
+              <td><code>domain: Domain.discrete(levels)</code></td>
+              <td>unchanged; not a strategy option</td>
+              <td>2</td>
+            </tr>
+            <tr>
+              <td><code>Trait</code></td>
+              <td><code>Unit({ traits })</code></td>
+              <td><code>traits: [Trait.ordered()]</code></td>
+              <td>unchanged; not a strategy option, and a list</td>
+              <td>no key</td>
+            </tr>
+            <tr class="chg">
+              <td><code>Packing</code>, future</td>
+              <td><code>pack</code></td>
+              <td>no option: <code>pack</code> has one strategy</td>
+              <td><code>packing: Packing.circles</code></td>
+              <td>1, 2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ul class="plain note">
+        <li>
+          Sources: the <code>STRATEGIES</code> table and the fields that
+          reference it in
+          <code>packages/gofish-ir/src/frontend/descriptors.ts</code>
+          (<code>Effect</code>, <code>Tiling</code>, <code>Overlap</code>,
+          <code>Curve</code>, <code>Binning</code>, <code>Calendar</code>,
+          <code>Shape</code>, <code>Placement</code>), the modules in
+          <code>packages/gofish-graphics/src/families/</code>, and the
+          <code>export * as</code> lines in <code>src/lib.ts</code>, which add
+          <code>Coord</code>, <code>Color</code>, <code>Animation</code>,
+          <code>Domain</code> and <code>Trait</code>.
+        </li>
+        <li>
+          <code>Domain</code> and <code>Trait</code> are not strategy options.
+          <code>Domain</code> has one member, <code>discrete</code>, and says
+          which values exist. <code>Trait</code> is a list in which every entry
+          applies at once. Neither chooses one way an operator works, and
+          neither reaches the wire (<code>api-design.md</code>).
+        </li>
+        <li>
+          An operator's <code>.transition()</code> takes the same three keys,
+          but with <code>time.stagger(...)</code> or
+          <code>time.parallel()</code>, not <code>Animation</code> members
+          (<code>animation/transition.ts</code>).
+        </li>
+        <li>
+          Other options that take one value from a set stay plain strings:
+          <code>alignment</code> and <code>anchor</code> on <code>spread</code>,
+          <code>stack</code> and <code>scatter</code>, <code>dir</code>,
+          <code>tile</code>'s <code>sort</code>, <code>blendMode</code>, an
+          axis's <code>side</code>, <code>Overlap.noise</code>'s
+          <code>randomness</code>, <code>Placement.along</code>'s
+          <code>side</code> and <code>orient</code>, <code>Curve.arc</code>'s
+          <code>direction</code>, and an animation's <code>ease</code> (a name
+          or a function). None of their members takes arguments, and #1013's
+          rule is that a family exists only with two or more strategies, at
+          least one of which takes arguments.
+        </li>
+        <li>
+          Python modules on <code>main</code>: <code>bin</code>,
+          <code>calendar</code>, <code>color</code>, <code>coord</code>,
+          <code>curve</code>, <code>domain</code>, <code>filter_</code>,
+          <code>overlap</code>, <code>place</code>, <code>shape</code>,
+          <code>tile</code> and <code>trait</code>. Now: <code>binning</code>,
+          <code>calendar</code>, <code>color</code>, <code>coord</code>,
+          <code>curve</code>, <code>domain</code>, <code>effect</code>,
+          <code>overlap</code>, <code>placement</code>, <code>shape</code>,
+          <code>tiling</code> and <code>trait</code>. None shares a name with an
+          operator, and the Python generator raises an error if one ever does.
+        </li>
+        <li>
+          Member imports can still shadow a Python builtin:
+          <code>from gofish.binning import hex</code> and
+          <code>from gofish.tiling import slice</code>. The renames changed the
+          module names, not the members.
+        </li>
+      </ul>
+    </details>
+    <p class="note">
+      <b>The wire.</b> The keys are what reach the wire: <code>tiling</code> in
+      the <code>tile</code> options, <code>placement</code> in the label
+      options, and <code>effect</code> on every mark and <code>layer</code>.
+      <code>interpolate</code> and the <code>coord</code> combinator were JS
+      only. Family names do not reach the wire, which carries
+      <code>{ kind, ...params }</code>; renaming a family renamed its descriptor
+      entry, its JS subpath and its Python module.
+    </p>
+    <h2>Related issues</h2>
+    <ul class="plain">
+      <li>
+        <b>#1355</b>: Rename the <code>treemap</code> operator to
+        <code>tile</code>. PR #1366 implements it, with
+        <code>tile({ tiling: Tiling.voronoi })</code> and the naming rule on
+        this page.
+      </li>
+      <li>
+        <b>#1013</b>: One namespace per strategy family
+        (<code>Curve.monotone</code>, <code>Overlap.separate</code>). A family
+        exists only with two or more strategies, at least one taking arguments.
+        It said the key and the family need not match, and named
+        <code>Packing</code>.
+      </li>
+      <li>
+        <b>#1100</b>: Python data-transform names shadow builtins; should data
+        transforms get their own namespace? It no longer involves a family
+        module, since <code>gofish/filter_.py</code> is gone.
+      </li>
+      <li>
+        <b>#1283</b>: Rename the <code>position()</code> operator to
+        <code>translate()</code>. Signed off, not done. Labels use
+        <code>placement</code>, so they do not wait for it.
+      </li>
+      <li>
+        <b>#1145</b>: Use bare strategy members everywhere, and audit options
+        that take one of a set of strategies outside <code>STRATEGIES</code>.
+        The audit on this page answers its item 3.
+      </li>
+      <li>
+        <b>#1101</b>: One extensibility model for strategy families: a user
+        function beside the declared members. The names chosen here are the
+        namespaces that model extends.
+      </li>
+      <li>
+        <b>#1205</b>: Labels for points, lines and areas (merged PR). It
+        introduced the family now called <code>Placement</code> and the label
+        key now called <code>placement</code>.
+      </li>
+      <li>
+        <b>#1276</b>: Delete <code>Tiling.slice</code> and
+        <code>Tiling.dice</code>, since a one-axis tiling is a normalized stack.
+      </li>
+      <li>
+        <b>#762</b>: Renamed <code>spread</code>'s <code>mode</code> to
+        <code>anchor</code>: a specific word over a generic one.
+      </li>
+      <li>
+        <b>#1279</b>: Extensibility audit of marks, operators and strategies.
+        Mentions the internal <code>Tiling</code> function type.
+      </li>
+    </ul>
+    <details class="more" id="rationale">
+      <summary>Why this rule, and what was dropped</summary>
+      <ol>
+        <li>
+          <b>Two statements, not five.</b> Naming should be predictable, and few
+          rules make it so. A reader can guess any key from its family and any
+          family from its key. The two shapes with no key are not extra rules:
+          they are the places where there is no single keyed slot to name.
+        </li>
+        <li>
+          <b>A capital letter means a namespace of values.</b>
+          <code>three-surfaces.md</code> says lowercase names are operators and
+          capitalized names are namespaces. A family that reads as a verb
+          (<code>Place</code>, <code>Tile</code>, <code>Bin</code>) reads like
+          an operator, and two of them sat next to an operator or method of the
+          same word (<code>tile</code>, <code>.bin()</code>).
+        </li>
+        <li>
+          <b>The cost of statement 2.</b> In
+          <code>tile({ tiling: Tiling.voronoi })</code> the stem appears three
+          times. That is accepted for the sake of one predictable rule, and a
+          member import shortens it to <code>tiling: voronoi</code>.
+        </li>
+        <li>
+          <b>Python.</b> A Python package's submodule and its attribute share
+          one name, so a family module named like an operator would replace that
+          operator on import. On <code>main</code>,
+          <code>gofish/filter_.py</code> worked around this with a trailing
+          underscore. Statement 1 removes the case, and the generator now raises
+          an error if it comes back.
+        </li>
+      </ol>
+      <h3>Considered and dropped</h3>
+      <ul>
+        <li>
+          <b
+            >A <code>method</code> key when the key would repeat the operator's
+            word,</b
+          >
+          as in <code>tile({ method: Tiling.voronoi })</code>. Dropped because
+          it is a second rule, and a reader has to know when to apply it.
+        </li>
+        <li>
+          <b><code>position: Position.around</code> for labels.</b> It needs
+          #1283 (rename the <code>position()</code> operator to
+          <code>translate()</code>) to free the word <code>position</code>, and
+          fewer libraries use it for this option than <code>placement</code>.
+        </li>
+        <li>
+          <b>Keeping <code>interpolate</code>'s <code>method</code>.</b> It
+          would leave one slot that takes a <code>Curve</code> and is not called
+          <code>curve</code>.
+        </li>
+        <li>
+          <b
+            >The strategy as the operator itself, as in
+            <code>tile.voronoi({ ... })</code>.</b
+          >
+          Each operator would then choose a strategy in its own way, instead of
+          all of them sharing one option shape.
+        </li>
+      </ul>
+      <p>
+        The wording in <code>api-design.md</code>, under "Strategy families are
+        uppercase namespaces":
+      </p>
+      <blockquote>
+        A family is a capitalized noun for what one member is. When the members
+        are the ways an operator does its work, the noun is what the operator
+        makes (<code>Tiling</code>, <code>Packing</code>, <code>Binning</code>,
+        <code>Placement</code>), and it is never the operator's own name. The
+        option key is always the same word in lowercase:
+        <code>curve: Curve.monotone</code>, <code>tiling: Tiling.voronoi</code>,
+        <code>placement: Placement.around</code>,
+        <code>effect: Effect.grayscale</code>. The rule does not apply where
+        there is no single keyed slot. Several slots are named by their roles,
+        as in <code>.transition({ enter, exit })</code>, and a method whose only
+        argument is the strategy takes it bare, as in
+        <code>.bin(Binning.step(0.5))</code>. <code>pack</code> will follow the
+        rule with <code>pack({ packing: Packing.circles })</code> when it gets a
+        second strategy (#1355).
+      </blockquote>
+    </details>
+  </section>
+  <section id="tab-tile" role="tabpanel" hidden>
+    <p>
+      <code>tile</code> is the operator that #1355 renamed from
+      <code>treemap</code>. Its family is <code>Tiling</code>, the noun for what
+      <code>tile</code> makes, and its key is the same word in lowercase,
+      <code>tiling</code>.
+    </p>
+    <p>
+      In <code>tile({ tiling: Tiling.voronoi })</code> the stem appears three
+      times. That is accepted for the sake of one predictable rule, and a member
+      import shortens it to <code>tiling: voronoi</code>.
+    </p>
+    <p>
+      <code>pack</code> follows when it gets a second strategy:
+      <code>pack({ packing: Packing.circles })</code>. Today it has one, so it
+      has no option (#1013).
+    </p>
+    <article class="card" id="tile-card">
+      <h3>Nested levels with mixed strategies</h3>
+      <figure class="shot">
+        <img
+          src="img/squarify-then-voronoi.png"
+          alt="Continents as squarified rectangles, with Voronoi cells for regions and countries inside each"
+        />
+      </figure>
+      <p class="note">
+        Continents are squarified rectangles; regions and countries inside each
+        are Voronoi cells. From
+        <code>Forward Syntax/Voronoi Treemap/SquarifyThenVoronoi</code>.
+      </p>
+      <div class="code now">
+        <div class="code-label">Now</div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="2,3,4"
+          ><code>chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 8 }),
+    tile({ by: "region", size: "pop", spacing: 2.5, tiling: Tiling.voronoi }),
+    tile({ size: "pop", spacing: 1, tiling: Tiling.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <div class="code was">
+        <div class="code-label">On <code>main</code></div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="2,3,4"
+          ><code>chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    treemap({ by: "continent", size: "pop", spacing: 8 }),
+    treemap({ by: "region", size: "pop", spacing: 2.5, tile: Tile.voronoi }),
+    treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <div class="code now">
+        <div class="code-label">Python, with a member import</div>
+        <div class="scroll">
+          <pre
+            data-lang="python"
+            data-mark=""
+          ><code>from gofish import Tiling, tile
+from gofish.tiling import voronoi
+
+tile(by="region", size="pop", tiling=Tiling.voronoi)
+tile(by="region", size="pop", tiling=voronoi)</code></pre>
+        </div>
+      </div>
+    </article>
+    <h2>The five tiling strategies</h2>
+    <p class="note">
+      Each render is the same one-level spec with
+      <code>.mark(region({ fill: "continent" }))</code>, 13 regions, 240 by 240
+      pixels. Only the strategy changes.
+    </p>
+    <div class="strategies">
+      <div class="strategy">
+        <figure class="shot">
+          <img
+            src="img/strategy-squarify.png"
+            alt="squarify tiling of 13 regions"
+          />
+        </figure>
+        <h4><code>Tiling.squarify</code></h4>
+        <p>Rows of cells close to square, largest first. The default.</p>
+        <div class="code">
+          <div class="scroll">
+            <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  tiling: Tiling.squarify,
+});</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="strategy">
+        <figure class="shot">
+          <img src="img/strategy-slice.png" alt="slice tiling of 13 regions" />
+        </figure>
+        <h4><code>Tiling.slice</code></h4>
+        <p>Horizontal strips, top to bottom, in data order.</p>
+        <div class="code">
+          <div class="scroll">
+            <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  tiling: Tiling.slice,
+});</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="strategy">
+        <figure class="shot">
+          <img src="img/strategy-dice.png" alt="dice tiling of 13 regions" />
+        </figure>
+        <h4><code>Tiling.dice</code></h4>
+        <p>Vertical strips, left to right, in data order.</p>
+        <div class="code">
+          <div class="scroll">
+            <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  tiling: Tiling.dice,
+});</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="strategy">
+        <figure class="shot">
+          <img
+            src="img/strategy-binary.png"
+            alt="binary tiling of 13 regions"
+          />
+        </figure>
+        <h4><code>Tiling.binary</code></h4>
+        <p>
+          Splits the cells into two halves of about equal total and recurses,
+          cutting across the longer side.
+        </p>
+        <div class="code">
+          <div class="scroll">
+            <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  tiling: Tiling.binary,
+});</code></pre>
+          </div>
+        </div>
+      </div>
+      <div class="strategy">
+        <figure class="shot">
+          <img
+            src="img/strategy-voronoi.png"
+            alt="voronoi tiling of 13 regions"
+          />
+        </figure>
+        <h4><code>Tiling.voronoi</code></h4>
+        <p>
+          Convex polygon cells from a weighted Voronoi diagram. Fills any convex
+          region, not only a rectangle.
+        </p>
+        <div class="code">
+          <div class="scroll">
+            <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  tiling: Tiling.voronoi,
+});</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="tab-precedent" role="tabpanel" hidden>
+    <h2>Where a label goes</h2>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>System</th>
+            <th>Spelling</th>
+            <th>Key</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <a href="https://floating-ui.com/docs/computePosition"
+                >Floating UI</a
+              >
+            </td>
+            <td>
+              <code
+                >computePosition(ref, el, { placement: &quot;bottom-start&quot;
+                })</code
+              >
+            </td>
+            <td><code>placement</code></td>
+          </tr>
+          <tr>
+            <td>
+              <a href="https://github.com/floating-ui/floating-ui/tree/v2.x"
+                >Popper</a
+              >
+            </td>
+            <td>
+              <code
+                >createPopper(button, tooltip, { placement: &#x27;right&#x27;
+                })</code
+              >
+            </td>
+            <td><code>placement</code></td>
+          </tr>
+          <tr>
+            <td>
+              <a href="https://getbootstrap.com/docs/5.3/components/tooltips/"
+                >Bootstrap tooltips</a
+              >
+            </td>
+            <td><code>data-bs-placement=&quot;right&quot;</code></td>
+            <td><code>placement</code></td>
+          </tr>
+          <tr>
+            <td>
+              <a href="https://mui.com/material-ui/api/tooltip/"
+                >Material UI Tooltip</a
+              >
+            </td>
+            <td>
+              <code>&lt;Tooltip placement=&quot;top-start&quot; /&gt;</code>
+            </td>
+            <td><code>placement</code></td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html"
+                >matplotlib legend</a
+              >
+            </td>
+            <td><code>ax.legend(loc=&quot;upper right&quot;)</code></td>
+            <td><code>loc</code></td>
+          </tr>
+          <tr>
+            <td>
+              <a href="https://vega.github.io/vega/docs/transforms/label/"
+                >Vega label transform</a
+              >
+            </td>
+            <td>
+              <code
+                >{&quot;type&quot;: &quot;label&quot;, &quot;anchor&quot;:
+                [&quot;top&quot;, &quot;bottom&quot;]}</code
+              >
+            </td>
+            <td><code>anchor</code></td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://ggrepel.slowkow.com/reference/geom_text_repel.html"
+                >ggrepel</a
+              >
+            </td>
+            <td>
+              <code
+                >geom_text_repel(force = 1, direction = &quot;both&quot;)</code
+              >
+            </td>
+            <td>none: forces move the labels</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <h2>A key and its family</h2>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>System</th>
+            <th>Spelling</th>
+            <th>Key</th>
+            <th>Family or type</th>
+            <th>Pattern</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <a
+                href="https://matplotlib.org/stable/api/_as_gen/matplotlib.patches.FancyArrowPatch.html"
+                >matplotlib</a
+              >
+            </td>
+            <td>
+              <code
+                >FancyArrowPatch(connectionstyle=ConnectionStyle.Arc3(rad=0.3))</code
+              >
+            </td>
+            <td><code>connectionstyle</code></td>
+            <td><code>ConnectionStyle</code></td>
+            <td>Key is the family, lowercased (cited in #1013).</td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://ggplot2.tidyverse.org/reference/position_dodge.html"
+                >ggplot2</a
+              >
+            </td>
+            <td>
+              <code
+                >geom_linerange(position = position_dodge(width = 0.9))</code
+              >
+            </td>
+            <td><code>position</code></td>
+            <td><code>position_*</code></td>
+            <td>Key is the family prefix.</td>
+          </tr>
+          <tr>
+            <td>Effect (TypeScript library)</td>
+            <td>
+              <code>Effect.retry(task, { schedule: Schedule.recurs(5) })</code>
+            </td>
+            <td><code>schedule</code></td>
+            <td><code>Schedule</code></td>
+            <td>Key is the family, lowercased.</td>
+          </tr>
+          <tr>
+            <td>
+              <a
+                href="https://developer.apple.com/documentation/swiftui/view/buttonstyle%28_%3A%29-7qx1"
+                >SwiftUI</a
+              >
+            </td>
+            <td>
+              <code>Button(&quot;Save&quot;) { }.buttonStyle(.bordered)</code>
+            </td>
+            <td>none: the role is in the method name</td>
+            <td><code>ButtonStyle</code></td>
+            <td>
+              A noun type; the argument has no label, as with
+              <code>.bin()</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><a href="https://d3js.org/d3-shape/line">d3-shape</a></td>
+            <td><code>d3.line().curve(d3.curveStep)</code></td>
+            <td><code>curve</code></td>
+            <td><code>curve*</code></td>
+            <td>The method is the family's noun.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <h2>Visual effects</h2>
+    <div class="table-wrap">
+      <table class="grid effects">
+        <thead>
+          <tr>
+            <th>System</th>
+            <th>Word</th>
+            <th>Spelling</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Figma</td>
+            <td>Effects</td>
+            <td>
+              <code>node.effects: Effect[]</code>, and the widget prop
+              <code>effect</code>, for shadows, blurs, noise, texture and glass.
+              Color work is "Image adjustments", in
+              <code>ImagePaint.filters</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>SwiftUI</td>
+            <td>Graphical effects</td>
+            <td>
+              <code>.grayscale(_:)</code>, <code>.luminanceToAlpha()</code>, and
+              the <code>VisualEffect</code> protocol.
+            </td>
+          </tr>
+          <tr>
+            <td>Android</td>
+            <td>RenderEffect</td>
+            <td><code>View.setRenderEffect(...)</code></td>
+          </tr>
+          <tr>
+            <td>Sketch</td>
+            <td>Effects</td>
+            <td>Effects for blurs, with separate Shadows and Color Adjust.</td>
+          </tr>
+          <tr>
+            <td>Illustrator, After Effects</td>
+            <td>Effect</td>
+            <td>The Effect menu.</td>
+          </tr>
+          <tr>
+            <td>CSS, SVG, Canvas</td>
+            <td>filter</td>
+            <td>
+              <code>filter: grayscale(1)</code>. The spec is titled "Filter
+              Effects Module".
+            </td>
+          </tr>
+          <tr>
+            <td>PixiJS, Konva, Fabric, p5</td>
+            <td>filters</td>
+            <td><code>filters</code></td>
+          </tr>
+          <tr>
+            <td>Observable Plot</td>
+            <td>imageFilter</td>
+            <td>
+              <code>imageFilter</code> for the visual effect, beside the data
+              <code>filter</code> option on the same marks: the same clash
+              GoFish had.
+            </td>
+          </tr>
+          <tr>
+            <td>Photoshop</td>
+            <td>layer effects, Filter, Adjustments</td>
+            <td>
+              Layer effects for shadow, the Filter menu for blur, and
+              Adjustments for color.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      "vfx" and "fx" are not used as a family name by any API surveyed; Unity's
+      VFX Graph is a particle system.
+    </p>
+    <h2>Naming guidance</h2>
+    <ul class="plain">
+      <li>
+        <a href="https://swift.org/documentation/api-design-guidelines"
+          >Swift API Design Guidelines</a
+        >: "Omit needless words. Every word in a name should convey salient
+        information at the use site," and "omit words that merely repeat type
+        information."
+      </li>
+      <li>
+        <a href="https://google.aip.dev/140">Google AIP-140</a>: "Messages
+        should not include a field with the same name as the enclosing message."
+      </li>
+      <li>
+        Rust RFC 356: items exported from a module should not be prefixed with
+        the module name (<code>io::Error</code>, not <code>io::IoError</code>).
+      </li>
+      <li>
+        <a href="https://peps.python.org/pep-0008">PEP 8</a>, on an argument
+        name that clashes with a reserved keyword: "Perhaps better is to avoid
+        such clashes by using a synonym."
+      </li>
+    </ul>
+    <details class="more" id="treemap-precedent">
+      <summary>The tiling option in other treemap libraries</summary>
+      <div class="table-wrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>System</th>
+              <th>Spelling</th>
+              <th>Key</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <a href="https://d3js.org/d3-hierarchy/treemap">d3-hierarchy</a>
+              </td>
+              <td><code>d3.treemap().tile(d3.treemapSquarify)</code></td>
+              <td><code>tile</code> ("the tiling method")</td>
+            </tr>
+            <tr>
+              <td>visx</td>
+              <td><code>&lt;Treemap tile={treemapSquarify} /&gt;</code></td>
+              <td><code>tile</code></td>
+            </tr>
+            <tr>
+              <td>nivo</td>
+              <td>
+                <code
+                  >&lt;ResponsiveTreeMap tile=&quot;squarify&quot; /&gt;</code
+                >
+              </td>
+              <td><code>tile</code></td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://vega.github.io/vega/docs/transforms/treemap"
+                  >Vega</a
+                >
+              </td>
+              <td>
+                <code
+                  >{&quot;type&quot;: &quot;treemap&quot;, &quot;method&quot;:
+                  &quot;squarify&quot;}</code
+                >
+              </td>
+              <td><code>method</code> ("The layout method to use")</td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://github.com/vega/vega-lite/pull/9784"
+                  >Vega-Lite, open PR #9784</a
+                >
+              </td>
+              <td><code>method on the treemap mark</code></td>
+              <td><code>method</code></td>
+            </tr>
+            <tr>
+              <td>Highcharts</td>
+              <td><code>layoutAlgorithm: &quot;squarified&quot;</code></td>
+              <td><code>layoutAlgorithm</code></td>
+            </tr>
+            <tr>
+              <td>amCharts 5</td>
+              <td><code>layoutAlgorithm: &quot;squarify&quot;</code></td>
+              <td><code>layoutAlgorithm</code></td>
+            </tr>
+            <tr>
+              <td>DevExpress</td>
+              <td><code>layoutAlgorithm: &quot;squarified&quot;</code></td>
+              <td><code>layoutAlgorithm</code></td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://wilkox.org/treemapify/reference/geom_treemap.html"
+                  >treemapify (ggplot2)</a
+                >
+              </td>
+              <td>
+                <code>geom_treemap(layout = &quot;squarified&quot;)</code>
+              </td>
+              <td><code>layout</code></td>
+            </tr>
+            <tr>
+              <td>R treemap</td>
+              <td>
+                <code>treemap(..., algorithm = &quot;pivotSize&quot;)</code>
+              </td>
+              <td><code>algorithm</code></td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://plotly.com/python/reference/treemap">Plotly</a>
+              </td>
+              <td><code>tiling: { packing: &quot;squarify&quot; }</code></td>
+              <td><code>packing</code>, under <code>tiling</code></td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://vita.had.co.nz/papers/prodplots.pdf"
+                  >productplots</a
+                >
+              </td>
+              <td><code>prodplot(data, formula, divider = mosaic())</code></td>
+              <td><code>divider</code></td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://docs.yworks.com/yfiles-html/api/TreeMapLayout.html"
+                  >yFiles</a
+                >
+              </td>
+              <td><code>tilingStrategy: TilingStrategy.SQUARIFIED</code></td>
+              <td><code>tilingStrategy</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        Count: <code>tile</code> 3, <code>layoutAlgorithm</code> 3,
+        <code>method</code> 2 (one in an unmerged PR), and one each of
+        <code>layout</code>, <code>algorithm</code>, <code>packing</code>,
+        <code>divider</code> and <code>tilingStrategy</code>. d3, visx and nivo
+        use <code>tile</code> under an operator called <code>treemap</code>, so
+        the word is said once there. Plotly's <code>tiling</code> is the same
+        word GoFish uses.
+      </p>
+      <h3>Other patterns for a strategy option</h3>
+      <div class="table-wrap">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Pattern</th>
+              <th>Examples</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Generic key</td>
+              <td>
+                polars <code>rank(method=)</code>,
+                <code>interpolate(method=)</code> and <code>join(how=)</code>,
+                numpy <code>sort(kind=)</code> and
+                <a
+                  href="https://numpy.org/doc/stable/reference/generated/numpy.percentile.html"
+                  ><code>percentile(method=)</code></a
+                >
+                (renamed from <code>interpolation</code> in 1.22), scipy
+                <code>minimize(method=)</code>, ELK <code>algorithm</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Strategy as operator</td>
+              <td>
+                d3's separate <code>tree</code> and <code>cluster</code>,
+                networkx's <code>*_layout</code> functions, pandas
+                <code>ffill()</code> and <code>bfill()</code> replacing
+                <code>fillna(method=)</code>, and the tidyverse design guide's
+                <a href="https://design.tidyverse.org/strategy-functions.html"
+                  >"three functions in a trench coat"</a
+                >
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+</main>
+<script>
+  (function () {
+    function render() {
+      document.querySelectorAll("pre[data-lang]").forEach(function (pre) {
+        var code = pre.querySelector("code");
+        var text = code.textContent;
+        var lang = pre.getAttribute("data-lang");
+        var marks = (pre.getAttribute("data-mark") || "")
+          .split(",")
+          .filter(Boolean)
+          .map(Number);
+        var html = text
+          .split("\n")
+          .map(function (line, i) {
+            var body =
+              line.length && window.hljs
+                ? hljs.highlight(line, { language: lang, ignoreIllegals: true })
+                    .value
+                : line.replace(/[&<>]/g, function (c) {
+                    return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
+                  }) || " ";
+            return (
+              '<span class="ln' +
+              (marks.indexOf(i) >= 0 ? " mark" : "") +
+              '">' +
+              (body || " ") +
+              "</span>"
+            );
+          })
+          .join("");
+        code.innerHTML = html;
+      });
+    }
+    var TABS = ["rule", "tile", "precedent"];
+    function show() {
+      var h = (location.hash || "").replace("#", "");
+      var tab = TABS.indexOf(h) >= 0 ? h : "rule";
+      TABS.forEach(function (t) {
+        var panel = document.getElementById("tab-" + t);
+        if (panel) panel.hidden = t !== tab;
+        var link = document.querySelector('.tabs a[href="#' + t + '"]');
+        if (link) link.setAttribute("aria-selected", String(t === tab));
+      });
+    }
+    function init() {
+      render();
+      show();
+      window.addEventListener("hashchange", function () {
+        show();
+        window.scrollTo(0, 0);
+      });
+    }
+    if (document.readyState === "loading")
+      document.addEventListener("DOMContentLoaded", init);
+    else init();
+  })();
+</script>

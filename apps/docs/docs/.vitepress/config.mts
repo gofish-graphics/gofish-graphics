@@ -591,9 +591,9 @@ export default defineConfig({
               items: [{ text: "Baseline", link: "/js/api/baseline" }],
             },
             {
-              text: "Bin",
+              text: "Binning",
               collapsed: true,
-              items: [{ text: "Bin", link: "/js/api/bin" }],
+              items: [{ text: "Binning", link: "/js/api/binning" }],
             },
             {
               text: "Dist",
@@ -606,14 +606,19 @@ export default defineConfig({
               items: [{ text: "Shape", link: "/js/api/shape" }],
             },
             {
-              text: "Place",
+              text: "Placement",
               collapsed: true,
-              items: [{ text: "Place", link: "/js/api/place" }],
+              items: [{ text: "Placement", link: "/js/api/placement" }],
             },
             {
               text: "Spacing",
               collapsed: true,
               items: [{ text: "Spacing", link: "/js/api/spacing" }],
+            },
+            {
+              text: "Effect",
+              collapsed: true,
+              items: [{ text: "Effect", link: "/js/api/effect" }],
             },
             {
               text: "Reactivity",
@@ -737,9 +742,9 @@ export default defineConfig({
               items: [{ text: "Baseline", link: "/python/api/baseline" }],
             },
             {
-              text: "Bin",
+              text: "Binning",
               collapsed: true,
-              items: [{ text: "Bin", link: "/python/api/bin" }],
+              items: [{ text: "Binning", link: "/python/api/binning" }],
             },
             {
               text: "Dist",
@@ -752,14 +757,19 @@ export default defineConfig({
               items: [{ text: "Shape", link: "/python/api/shape" }],
             },
             {
-              text: "Place",
+              text: "Placement",
               collapsed: true,
-              items: [{ text: "Place", link: "/python/api/place" }],
+              items: [{ text: "Placement", link: "/python/api/placement" }],
             },
             {
               text: "Spacing",
               collapsed: true,
               items: [{ text: "Spacing", link: "/python/api/spacing" }],
+            },
+            {
+              text: "Effect",
+              collapsed: true,
+              items: [{ text: "Effect", link: "/python/api/effect" }],
             },
             {
               text: "GoTree",

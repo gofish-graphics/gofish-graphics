@@ -31,7 +31,6 @@ import {
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
-import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
 import { rejectLength, type LengthValue } from "../length";
 import { createOperator } from "../marks/createOperator";
@@ -39,7 +38,7 @@ import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
 import type { ValueExpr } from "../groupExpr";
 import { checkSummable } from "../measure";
-import { squarify, type Tile } from "../../families/tile";
+import { squarify, type Tiling } from "../../families/tiling";
 import { Frontend } from "gofish-ir";
 import { insetConvex, isConvex } from "../geometry/clip";
 import {
@@ -52,9 +51,9 @@ import {
 } from "../geometry/ring";
 import { voronoiTiling } from "../geometry/voronoiTiling";
 
-/** What a tiling reads from the treemap: its options, the size of its box,
- *  and how an error message names it (`where`). */
-type TilingOptions = {
+/** What a strategy's cells read from the `tile` operator: its options, the
+ *  size of its box, and how an error message names it (`where`). */
+type CellsInput = {
   spacing: number;
   padding: number;
   round: boolean;
@@ -63,60 +62,60 @@ type TilingOptions = {
 };
 
 /**
- * A tiling: the cells of a region, one per weight, each with its weight's
- * share of the region's area, in weight order and in the treemap's frame.
- * `region` is the shape the treemap fills, or `undefined` for its whole box
- * `[0, size[0]] × [0, size[1]]`. Every `Tile` strategy names one
- * (`tiling`), and the treemap lays its children out in the cells the same
+ * The cells of a region, one per weight, each with its weight's share of the
+ * region's area, in weight order and in the operator's frame. `region` is the
+ * shape the operator fills, or `undefined` for its whole box
+ * `[0, size[0]] × [0, size[1]]`. Every `Tiling` strategy names one
+ * (`cellsOf`), and the operator lays its children out in the cells the same
  * way whatever the strategy.
  */
-type Tiling = (
+type CellsFn = (
   region: Ring | undefined,
   weights: readonly number[],
-  options: TilingOptions
+  options: CellsInput
 ) => Ring[];
 
 /** A rectangular tiling: one of d3-hierarchy's methods, which tile a box. */
-type RectTile = Exclude<Tile, { kind: "voronoi" }>;
+type RectTiling = Exclude<Tiling, { kind: "voronoi" }>;
 
 const D3_TILES = {
   squarify: treemapSquarify,
   slice: treemapSlice,
   dice: treemapDice,
   binary: treemapBinary,
-} satisfies Record<RectTile["kind"], unknown>;
+} satisfies Record<RectTiling["kind"], unknown>;
 
-/** The d3 tiling method of a rectangular `Tile` strategy (a squarify ratio
+/** The d3 tiling method of a rectangular `Tiling` strategy (a squarify ratio
  *  of at least 1 is checked with its family, since d3 would clamp it
  *  silently). */
-const d3Tile = (tile: RectTile) =>
-  tile.kind === "squarify" && tile.ratio !== undefined
-    ? treemapSquarify.ratio(tile.ratio)
-    : D3_TILES[tile.kind];
+const d3Tile = (strategy: RectTiling) =>
+  strategy.kind === "squarify" && strategy.ratio !== undefined
+    ? treemapSquarify.ratio(strategy.ratio)
+    : D3_TILES[strategy.kind];
 
-/** `Tile.voronoi()`'s seed when it is given none, as the `Tile` family
+/** `Tiling.voronoi()`'s seed when it is given none, as the `Tiling` family
  *  declares it. */
-const VORONOI_SEED = Frontend.STRATEGIES.Tile.kinds.voronoi.params.seed
+const VORONOI_SEED = Frontend.STRATEGIES.Tiling.kinds.voronoi.params.seed
   .default as number;
 
-/** The spelling of a tiling in an error message: `Tile.squarify`. */
-const tileName = (tile: Tile) => `Tile.${tile.kind}`;
+/** The spelling of a tiling in an error message: `Tiling.squarify`. */
+const tilingName = (strategy: Tiling) => `Tiling.${strategy.kind}`;
 
-/** A rectangular tiling: d3 tiles the box, `padding` in from its edge and
+/** A rectangular tiling's cells: d3 tiles the box, `padding` in from its edge and
  *  `spacing` between siblings, and each tile is a box ring. It tiles only a
  *  box: in any other shape its tiles would not have the areas their weights
  *  give them. */
-const d3Tiling =
-  (tile: RectTile): Tiling =>
+const d3Cells =
+  (strategy: RectTiling): CellsFn =>
   (region, weights, { spacing, padding, round, size, where }) => {
     if (!isWholeBox(region, size[0], size[1]))
       throw new Error(
-        `${where}: ${tileName(tile)} needs a rectangular region, but this ` +
-          `treemap sits in a shape that is not a box (a Voronoi cell, an ` +
-          `oval, or a polygon cell of a partition). Use Tile.voronoi here.`
+        `${where}: ${tilingName(strategy)} needs a rectangular region, but this ` +
+          `tile operator sits in a shape that is not a box (a Voronoi cell, an ` +
+          `oval, or a polygon cell of a partition). Use Tiling.voronoi here.`
       );
     // d3 keeps its children in the order given (there is no `.sort`), so
-    // leaf `k` is weight `k`. Its tiles are in the treemap's own axis
+    // leaf `k` is weight `k`. Its tiles are in the operator's own axis
     // order, like any operator's: top-down in free space, upward in a chart.
     type Datum = { k: number; children?: Datum[] };
     const root = hierarchy<Datum>({
@@ -128,7 +127,7 @@ const d3Tiling =
       .paddingInner(spacing)
       .paddingOuter(padding)
       .round(round)
-      .tile(d3Tile(tile))(root)
+      .tile(d3Tile(strategy))(root)
       .leaves();
     const rings: Ring[] = new Array(weights.length);
     for (const { x0, y0, x1, y1, data } of leaves) {
@@ -144,21 +143,21 @@ const d3Tiling =
     return rings;
   };
 
-/** The Voronoi tiling: one convex cell per weight (`voronoiTiling`), in the
+/** The Voronoi tiling's cells: one convex cell per weight (`voronoiTiling`), in the
  *  region drawn in by the padding, with siblings `spacing` apart; the
  *  spacing leaves the region's own edges alone, as d3's paddingInner does.
  *  A region with no area holds only empty cells. Its cells are not
  *  rounded: `round` snaps a box's edges to whole pixels, and a cell's
  *  slanted edges have no pixel to snap to. */
-const voronoiTilingOf =
-  (seed: number): Tiling =>
+const voronoiCells =
+  (seed: number): CellsFn =>
   (region, weights, { spacing, padding, size, where }) => {
     const whole = region ?? boxRing(size[0], size[1]);
     if (!hasArea(whole)) return weights.map(() => []);
     if (!isConvex(whole))
       throw new Error(
-        `${where}: Tile.voronoi needs a convex region, and the shape this ` +
-          `treemap is in is not convex.`
+        `${where}: Tiling.voronoi needs a convex region, and the shape this ` +
+          `tile operator is in is not convex.`
       );
     return voronoiTiling(insetConvex(whole, padding)!, weights, seed, spacing);
   };
@@ -169,24 +168,24 @@ const boxCenter = (ring: Ring): [number, number] => {
   return [at[0] + size[0] / 2, at[1] + size[1] / 2];
 };
 
-/** The tiling a `Tile` strategy names. */
-const tiling = (tile: Tile): Tiling =>
-  tile.kind === "voronoi"
-    ? voronoiTilingOf(tile.seed ?? VORONOI_SEED)
-    : d3Tiling(tile);
+/** The cells a `Tiling` strategy makes. */
+const cellsOf = (strategy: Tiling): CellsFn =>
+  strategy.kind === "voronoi"
+    ? voronoiCells(strategy.seed ?? VORONOI_SEED)
+    : d3Cells(strategy);
 
-type TreemapSort = "asc" | "desc" | "none";
+type TileSort = "asc" | "desc" | "none";
 
-type TreemapProps = {
+type TileProps = {
   key?: string;
   /** Gap between sibling tiles, in pixels. Default 0. */
   spacing?: number;
-  /** Inset around the outer edge of the treemap, in pixels. Default 0. */
+  /** Inset around the outer edge of the tiled box, in pixels. Default 0. */
   padding?: number;
   round?: boolean;
-  /** The tiling strategy. Default `Tile.squarify()`. */
-  tile?: Tile;
-  sort?: TreemapSort;
+  /** The tiling strategy. Default `Tiling.squarify()`. */
+  tiling?: Tiling;
+  sort?: TileSort;
   /** Per-entry weight driving each leaf's tile area — one value per child, in
    *  child order (mirrors `spread`'s entry-flagged `size`, #700-style). */
   size?: MaybeValue<number>[];
@@ -208,21 +207,21 @@ function resolveWeight(
   return Number.isFinite(num) && num > 0 ? num : 0;
 }
 
-/** A treemap as an error message names it: by the field its children are
+/** A `tile` operator as an error message names it: by the field its children are
  *  split by, which each child records (`keyBy`). */
 const where = (children: readonly GoFishAST[]): string => {
   const by = fieldNameOf((children[0] as GoFishNode | undefined)?.keyBy);
-  return by === undefined ? "treemap" : `treemap (by "${by}")`;
+  return by === undefined ? "tile" : `tile (by "${by}")`;
 };
 
-const Treemap = createNodeOperator(
-  (opts: TreemapProps, children: GoFishAST[]) => {
+const TileNode = createNodeOperator(
+  (opts: TileProps, children: GoFishAST[]) => {
     const {
       key,
       spacing = 0,
       padding = 0,
       round = true,
-      tile = squarify(),
+      tiling = squarify(),
       sort = "desc",
       size: sizeChannel,
       ...fancyDims
@@ -234,33 +233,33 @@ const Treemap = createNodeOperator(
     const { dims } = own;
     // Its spacing and padding are one number d3 applies on both axes, so a
     // percent has no one room to be a percent of.
-    // TODO(#1176): a percent treemap spacing needs the axis it is of (the
+    // TODO(#1176): a percent `tile` spacing needs the axis it is of (the
     // smaller side, or each axis on its own), a design question.
-    rejectLength("treemap's spacing", spacing);
-    rejectLength("treemap's padding", padding);
-    // A tile's area is its entry's share of the total, so the treemap adds
+    rejectLength("tile's spacing", spacing);
+    rejectLength("tile's padding", padding);
+    // A tile's area is its entry's share of the total, so the operator adds
     // its entries: their unit must add up (`checkSummable`, #1197). It is
     // checked once here, so the layout below sums the weights as they are.
     checkSummable(
       sizeChannel?.map(getQuantity).find((q) => q !== undefined),
-      "treemap({ size })"
+      "tile({ size })"
     );
 
     const node = new GoFishNode(
       {
-        type: "treemap",
+        type: "tile",
         args: {
           key,
           spacing,
           padding,
           round,
-          tile,
+          tiling,
           sort,
           size: sizeChannel,
           dims,
         },
         key,
-        // The treemap sizes each child from data into a tile of its own, so
+        // The operator sizes each child from data into a tile of its own, so
         // on both axes each child is detached from the others and nested in
         // its tile, as a grid cell is.
         resolveSharing: nestEach,
@@ -268,9 +267,9 @@ const Treemap = createNodeOperator(
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
           // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed
           // to a Value), emit SIZE so the parent faceting spread can co-solve a
-          // scale shared across sibling treemaps. Otherwise the treemap orders
-          // nothing along the axis by data: it has no axis there and fills the
-          // slot it is given.
+          // scale shared across sibling `tile` operators. Otherwise the
+          // operator orders nothing along the axis by data: it has no axis
+          // there and fills the slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace => {
             const size = own.dataSize(i);
             return isValue(size) ? magnitude(size) : UNDEFINED;
@@ -301,7 +300,7 @@ const Treemap = createNodeOperator(
             return undefined;
           };
 
-          // Treemap box size per axis (the [w, h] handed to d3-treemap):
+          // The box size per axis (the [w, h] handed to d3-treemap):
           //  - no size      -> fill the slot the parent gave (size[dir]), as a
           //    length that is a share of its scope does (`fixedSize`).
           //  - numeric size -> that many px (computeSize literal branch), as a
@@ -329,7 +328,7 @@ const Treemap = createNodeOperator(
 
           const resolvedSize: Size = [resolveAxisSize(0), resolveAxisSize(1)];
 
-          Frontend.checkStrategy("Tile", tile, "treemap({ tile })");
+          Frontend.checkStrategy("Tiling", tiling, "tile({ tiling })");
           if (childAsts.length === 0) {
             return {
               intrinsicDims: {
@@ -366,8 +365,8 @@ const Treemap = createNodeOperator(
               sort === "asc" ? a.weight - b.weight : b.weight - a.weight
             );
 
-          // One cell per child, in the treemap's frame, in weight order.
-          const cells = tiling(tile)(
+          // One cell per child, in the operator's frame, in weight order.
+          const cells = cellsOf(tiling)(
             region,
             leafData.map((d) => d.weight),
             {
@@ -418,7 +417,7 @@ const Treemap = createNodeOperator(
           });
 
           // Its box is the region it was given, `[0, w] × [0, h]`, whatever
-          // the tiling. The padding is an inset at the treemap's own edge,
+          // the tiling. The padding is an inset at the operator's own edge,
           // inside that box, and the box is the frame its shape is in, so a
           // parent that centers it there centers its shape.
           return {
@@ -432,14 +431,14 @@ const Treemap = createNodeOperator(
       },
       children
     );
-    // The treemap's own box is named by axis in `dims` like a mark's; `bind`
+    // The operator's own box is named by axis in `dims` like a mark's; `bind`
     // defers it to the resolveAliases pass.
     own.bind(node);
     return node;
   }
 );
 
-export type TreemapOptions<T = any> = Omit<TreemapProps, "size"> & {
+export type TileOptions<T = any> = Omit<TileProps, "size"> & {
   /** Field to partition rows by (like `spread`/`group`); also accepts a
    *  `field(...)` accessor carrying domain ops (sort/reverse/bin/dropNulls).
    *  Without `by`, one leaf is emitted per row (identity split). */
@@ -451,9 +450,9 @@ export type TreemapOptions<T = any> = Omit<TreemapProps, "size"> & {
   size?: (keyof T & string) | FieldExpr | ValueExpr | MaybeValue<number>[];
 };
 
-export const treemap = createOperator<any, TreemapOptions>(
-  ((props: TreemapProps, children: GoFishAST[]) =>
-    Treemap(props, children)) as any,
+export const tile = createOperator<any, TileOptions>(
+  ((props: TileProps, children: GoFishAST[]) =>
+    TileNode(props, children)) as any,
   {
     split: ({ by }, d) => splitEntries(by, d),
     channels: {

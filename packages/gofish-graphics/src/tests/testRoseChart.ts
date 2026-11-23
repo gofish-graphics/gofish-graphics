@@ -1,4 +1,5 @@
-import { coord, map, groupBy, rect, v, spread, spreadX } from "../lib";
+import { map, groupBy, rect, v, spread, spreadX } from "../lib";
+import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { nightingale } from "../data/nightingale";
 

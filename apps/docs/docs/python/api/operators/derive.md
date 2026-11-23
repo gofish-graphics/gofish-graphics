@@ -106,7 +106,7 @@ derive(lambda d: normalize(d, "count"))
 ```
 
 ```python
-from gofish import Bin, chart, derive, field, kde, partition, ribbon, spread
+from gofish import Binning, chart, derive, field, kde, partition, ribbon, spread
 
 # Each month's highs as a kernel density, cut at its own quintiles
 temp = field("temp_max")
@@ -115,7 +115,7 @@ temp = field("temp_max")
     .flow(
         spread(by="month", dir="y"),
         derive(kde("temp_max")),
-        partition(by=temp.bin(Bin.quantiles(5)), dir="x"),
+        partition(by=temp.bin(Binning.quantiles(5)), dir="x"),
     )
     .mark(ribbon(x=temp.domain(), h=temp.density()))
 )

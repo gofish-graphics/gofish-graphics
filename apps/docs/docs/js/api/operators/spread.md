@@ -364,7 +364,7 @@ order.
 
 ```ts
 // One bar per half-point cell of `rating`, height = row count per cell
-.flow(spread({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }))
+.flow(spread({ by: field("rating").bin(Binning.step(0.5)), dir: "x" }))
 .mark(rect({ h: field("rating").count() }))
 
 // One bar per month of the year, all Junes in one bar
@@ -385,14 +385,14 @@ order.
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | a [Calendar](/js/api/core/calendar) value | The calendar cells of a time column, in the column's zone. A level that is a part of a larger one gives its parts, a cycle: `Calendar.month` is the month of the year, so all Junes are one cell. `Calendar.year` and `Calendar.week` are parts of nothing and give cells of the time line. |
 | a list of Calendar values                 | A product, `[Calendar.year, Calendar.month]`: one cell where one cell of each level meets one of the next (the June of 2015), labeled `"Jun 2015"`.                                                                                                                                         |
-| `Bin.step(size)`                          | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
-| `Bin.thresholds(n)`                       | About `n` cells, with the step a numeric axis with `n` ticks uses. Default: `Bin.thresholds(10)`.                                                                                                                                                                                           |
-| `Bin.thresholds([t1, t2, ...])`           | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
+| `Binning.step(size)`                      | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
+| `Binning.thresholds(n)`                   | About `n` cells, with the step a numeric axis with `n` ticks uses. Default: `Binning.thresholds(10)`.                                                                                                                                                                                       |
+| `Binning.thresholds([t1, t2, ...])`       | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
 
-`Bin.step` and `Bin.thresholds` are members of the [`Bin`](/js/api/bin)
+`Binning.step` and `Binning.thresholds` are members of the [`Binning`](/js/api/binning)
 family. A thresholds partition includes its top edge, so the largest value
 falls in the last cell. Each partition takes `.format((cell) => string)` for
-its labels, as in `Bin.step(10).format((c) => String(c.start))`. A partition
+its labels, as in `Binning.step(10).format((c) => String(c.start))`. A partition
 with a format is JS-only, and serializing it is an error.
 
 A second `.bin(...)` splits each cell of the first, a chain:
@@ -427,7 +427,7 @@ on a continuous axis, use [`partition`](/js/api/operators/partition) with the sa
 ```ts
 // Rows with a null/undefined "genre" are excluded entirely, instead of
 // forming their own "null" group
-.flow(treemap({ by: field("genre").dropNulls(), size: "worldwideGross" }))
+.flow(tile({ by: field("genre").dropNulls(), size: "worldwideGross" }))
 ```
 
 **Override a channel's default aggregation:**

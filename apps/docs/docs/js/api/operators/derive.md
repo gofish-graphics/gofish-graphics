@@ -115,7 +115,7 @@ Helpers for the function `derive` takes:
 .flow(
   spread({ by: "month", dir: "y" }),
   derive(kde("temp_max")),
-  partition({ by: field("temp_max").bin(Bin.quantiles(5)), dir: "x" })
+  partition({ by: field("temp_max").bin(Binning.quantiles(5)), dir: "x" })
 )
 .mark(ribbon({ x: field("temp_max").domain(), h: field("temp_max").density() }))
 ```

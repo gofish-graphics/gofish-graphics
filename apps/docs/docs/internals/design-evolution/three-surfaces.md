@@ -54,7 +54,7 @@ terminal, and so on). Those aliases were removed (#416), so that surface has
 collapsed into the lowercase low-level combinator form. The fluent builder was
 already lowercase-only: its entry point is `chart`, with no capitalized `Chart`
 alias. The node-level operators that the lowercase ones are built from
-(`Spread`, `Layer`, `Treemap`, the region-compositing node operators, and so
+(`Spread`, `Layer`, `TileNode`, the region-compositing node operators, and so
 on) take already-built nodes and return a node. They used to be exported as a
 capitalized second spelling, but they are now internal (#146): each lowercase
 operator works both inside `.flow(...)` and as a combinator over marks, and a
@@ -68,8 +68,8 @@ families described below, and `Unit`, which makes a unit definition, a
 class instance. The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
-`treemap`, `pack`, `derive`, `resolve`, and `join` (`treemap` takes a tiling
-strategy object such as `Tile.squarify()` as its `tile`, never a string, and
+`tile`, `pack`, `derive`, `resolve`, and `join` (`tile` takes a tiling
+strategy object such as `Tiling.squarify()` as its `tiling`, never a string, and
 `scatter` takes an overlap strategy such as `Overlap.separate()` or
 `Overlap.jitter()` the same way; `resolve` dereferences reference columns into
 drawn node refs, driving the ribbon / node-link / labeling patterns via
@@ -83,7 +83,7 @@ or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
 array of `ref(...)` children. The shape of the drawn path is a single `curve`
 key, backed by the internal router registry in
 `ast/graphicalOperators/routers`, which `lib.ts` does not export: the curve
-family is closed, like `Tile` and `Overlap` (user-defined strategies are
+family is closed, like `Tiling` and `Overlap` (user-defined strategies are
 designed in #1101). Every curve is a member of the `Curve` family:
 `Curve.linear`, `Curve.bezier`, `Curve.orthogonal`, `Curve.arc`,
 `Curve.perfectArrows`, and the curves that thread a whole run,
@@ -137,24 +137,26 @@ it a strategy family.
 
 An option whose value is one choice from a set of named strategies, at least
 one of which takes arguments, gets one **strategy family** (#1013): `Overlap`
-(`scatter`'s `overlap`), `Tile` (`treemap`'s `tile`), `Curve` (the `curve` of
-`line`, `ribbon`, `time.transition` and `Animation.tween`, and
-`interpolate`'s `method`), `Bin` (the cells of `field(x).bin(...)` and
+(`scatter`'s `overlap`), `Tiling` (`tile`'s `tiling`), `Curve` (the `curve` of
+`line`, `ribbon`, `time.transition`, `Animation.tween` and `interpolate`),
+`Shape` (`enclose`'s `shape`), `Effect` (the `effect` of a mark or a layer,
+#1267), `Placement` (`.label()`'s `placement`), `Binning` (the cells of `field(x).bin(...)` and
 `struct({ x, y }).bin(...)`), `Calendar` (the cells of a time column's
 `field(x).bin(...)`, and a time axis's `levels`, #1057),
 `Coord` (a chart's or a layer's `coord`), `Color`
-(a chart's `color`), `Filter` (the `filter` of a mark or a layer, #1267),
-`Spacing` (`spread`'s and `Constraint.distribute`'s `spacing`, which also
-takes a bare amount for `Spacing.box(amount)`),
-and `Animation` (`.transition()`'s `enter`, `exit` and `update`). Each family is one module with a lowercase file name,
+(a chart's `color`), `Spacing` (`spread`'s and `Constraint.distribute`'s
+`spacing`, which also takes a bare amount for `Spacing.box(amount)`),
+`Baseline` (`stack`'s `baseline`, #1375) and `Animation` (`.transition()`'s `enter`, `exit` and `update`). Each family is one module with a lowercase file name,
 `src/families/<name>.ts`, which `lib.ts` binds under the capitalized name with
 `export * as Curve from "./families/curve"`, the same mechanism as
 `Serialize`. The same module is published as the subpath
 `gofish-graphics/curve`, so `Curve.monotone` and
 `import { monotone } from "gofish-graphics/curve"` are one function. The
 family's own type lives inside it under the family's name, `Curve.Curve`.
-Strategies are not also exported at the top level, so the lowercase `coord`
-combinator and the lowercase `color` object of named colors keep their names.
+Strategies are not also exported at the top level, so the lowercase `color`
+object of named colors keeps its name. There is no lowercase `coord`
+combinator: a coordinate space is `layer({ coord }, children)` or
+`chart({ coord })`.
 An option with one strategy has no option at all: `pack` always packs
 enclosing circles. Python mirrors the families as modules bound the same way
 (`from . import curve as Curve` in `gofish/__init__.py`).
@@ -162,8 +164,8 @@ enclosing circles. Python mirrors the families as modules bound the same way
 A kind with no required option is a value as it is, and calling it sets
 options (#1133): `Curve.monotone` is `Curve.monotone()`, `Calendar.month` is
 `Calendar.month()`, and `Calendar.month({ every: 3 })` sets the step. A kind
-with a required option stays a call only, like `Bin.step(0.5)` and
-`Bin.hex({ radius })`. Before this rule each family chose one way. `Curve`,
+with a required option stays a call only, like `Binning.step(0.5)` and
+`Binning.hex({ radius })`. Before this rule each family chose one way. `Curve`,
 `Tile` and `Overlap` made every member a call, so no one had to remember which
 need parentheses, and `Calendar` made every level a value, with a method for
 its step (`Calendar.month.every(3)`). The two did not match, and the

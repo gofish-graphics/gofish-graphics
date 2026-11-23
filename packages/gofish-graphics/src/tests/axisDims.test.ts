@@ -24,7 +24,7 @@ const {
   stack,
   scatter,
   group,
-  treemap,
+  tile,
   rect,
   circle,
   layer,
@@ -443,7 +443,7 @@ async function main() {
     );
   }
 
-  console.log("\n# treemap takes dims");
+  console.log("\n# tile takes dims");
   {
     const rows = [
       { k: "a", v: 1 },
@@ -452,16 +452,16 @@ async function main() {
     const tm = async (opts: any) =>
       (
         await chart(rows)
-          .flow(treemap({ by: "k", size: "v", ...opts }))
+          .flow(tile({ by: "k", size: "v", ...opts }))
           .mark(rect({ fill: "k" }))
           .toDisplayList(SIZE)
       ).items.filter((it: any) => it.kind === "rect");
     const wh = await tm({ w: 120, h: 80 });
     const named = await tm({ dims: { x: { size: 120 }, y: { size: 80 } } });
     const full = await tm({});
-    check("treemap dims {x, y} sizes ≡ w/h", same(wh, named));
+    check("tile dims {x, y} sizes ≡ w/h", same(wh, named));
     check(
-      "treemap dims is not dropped (differs from no size)",
+      "tile dims is not dropped (differs from no size)",
       !same(wh, full)
     );
   }

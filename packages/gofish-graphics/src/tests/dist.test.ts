@@ -21,7 +21,7 @@ import { evalGroup, FieldExpr, medianOf, meanOf } from "../ast/fieldExpr";
 import { integrate } from "../ast/fun";
 import { hasNoWireForm } from "../ast/groupExpr";
 import * as DistNS from "../families/dist";
-import * as BinNS from "../families/bin";
+import * as BinningNS from "../families/binning";
 import { splitEntries } from "../ast/datumProjection";
 import { resolveColumn } from "../ast/channels";
 import { applySchema, getColumnTypes } from "../ast/schema";
@@ -546,8 +546,8 @@ console.log("\n# a distribution's cells");
 {
   const d = DistNS.normal({ mean: "mean", sd: "sd" });
   const rows = [{ mean: 0, sd: 1 }];
-  const groups = [...splitEntries(d.bin(BinNS.quantiles(5)) as any, rows)];
-  check("Bin.quantiles(5) makes five cells", groups.length === 5);
+  const groups = [...splitEntries(d.bin(BinningNS.quantiles(5)) as any, rows)];
+  check("Binning.quantiles(5) makes five cells", groups.length === 5);
   check(
     "each cell's group holds every row",
     groups.every(([, g]) => g.length === 1 && g[0] === rows[0])
@@ -570,7 +570,7 @@ console.log("\n# a distribution's cells");
   );
   check(
     "a member of a distribution is not binned",
-    throws(() => (d.median() as any).bin(BinNS.quantiles(5))) !== ""
+    throws(() => (d.median() as any).bin(BinningNS.quantiles(5))) !== ""
   );
 }
 
@@ -578,8 +578,8 @@ console.log("\n# the cells of a field that holds a distribution");
 {
   const mass = field("Body Mass (g)");
   const rows = await applySchema(kde("Body Mass (g)")(penguins), {});
-  const groups = [...splitEntries(mass.bin(BinNS.quantiles(4)) as any, rows)];
-  check("Bin.quantiles(4) makes four cells", groups.length === 4);
+  const groups = [...splitEntries(mass.bin(BinningNS.quantiles(4)) as any, rows)];
+  check("Binning.quantiles(4) makes four cells", groups.length === 4);
   check(
     "each cell's group holds the row",
     groups.every(([, g]) => g.length === 1 && g[0] === rows[0])
@@ -636,7 +636,7 @@ console.log("\n# the cells of a field that holds a distribution");
     /bin/.test(
       throws(() => [
         ...splitEntries(
-          (mass.bin(BinNS.quantiles(4)) as any).bin(BinNS.step(10)),
+          (mass.bin(BinningNS.quantiles(4)) as any).bin(BinningNS.step(10)),
           rows
         ),
       ])

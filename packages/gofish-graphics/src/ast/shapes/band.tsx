@@ -344,7 +344,7 @@ export const Band = ({
     {
       type: closed ? "ribbon" : "line",
       // Labeled by its outline: a line at its end, a band inside itself.
-      labelPosition: "outline",
+      labelPlacement: "outline",
       color: isValue(fill) ? fill : strokeColor,
       strokeOverhang: outlineOverhang(strokeColor, strokeWidth),
       // A band of amounts can be moved by an offset that changes along its

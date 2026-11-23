@@ -136,7 +136,7 @@ is, both bin the same column:
 | a chained key, `field("date").bin(Calendar.year).bin(Calendar.month)`                                          | between the years      |
 | nested splits that bin one column, `field("date").bin(Calendar.year)` then `field("date").bin(Calendar.month)` | between the years      |
 | a coarser Calendar entry of `levels`, `levels: [true, Calendar.month]` over week slots                         | between the months     |
-| numeric bins inside bins of one column, `Bin.step(10)` then `Bin.step(2)`                                      | between the outer bins |
+| numeric bins inside bins of one column, `Binning.step(10)` then `Binning.step(2)`                              | between the outer bins |
 | categories inside categories (a lake over its species), or months over weather categories                      | none                   |
 | the innermost level of the dimension                                                                           | none                   |
 

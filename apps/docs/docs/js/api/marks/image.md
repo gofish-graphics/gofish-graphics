@@ -26,7 +26,7 @@ gf.chart([{ label: "badge" }])
 ## Signature
 
 ```ts
-image({ href, w?, h?, x?, y?, opacity?, filter?, preserveAspectRatio? })
+image({ href, w?, h?, x?, y?, opacity?, effect?, preserveAspectRatio? })
 ```
 
 ## Parameters

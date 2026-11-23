@@ -13,7 +13,7 @@
  * values for any channel.
  *
  * `d.bin(p)` is a grouping key: the cells of a numeric partition over the
- * distribution's interval (`Bin.quantiles(5)` at its quintiles), each
+ * distribution's interval (`Binning.quantiles(5)` at its quintiles), each
  * group the distribution restricted to its cell (groupCell.ts).
  *
  * Its wire form is `{ type: "dist", family, params, ops? }`, the params as
@@ -156,7 +156,7 @@ export class DistExpr {
   }
 
   /** A grouping key with regions: the cells of `p` over the interval the
-   *  density is drawn over, `Bin.quantiles(n)` at the distribution's own
+   *  density is drawn over, `Binning.quantiles(n)` at the distribution's own
    *  quantiles, so each cell holds `1 / n` of it. Each group is the
    *  distribution restricted to its cell. Valid only in a `by` slot, such
    *  as `partition`'s. */
@@ -293,7 +293,7 @@ function numberStep(step: BinStep, where: string): NumberPartition {
   if (kind !== "step" && kind !== "thresholds" && kind !== "quantiles")
     throw new Error(
       `${where}: a distribution's cells are intervals of numbers: use ` +
-        `Bin.step, Bin.thresholds or Bin.quantiles, not ${String(step)}.`
+        `Binning.step, Binning.thresholds or Binning.quantiles, not ${String(step)}.`
     );
   return step as NumberPartition;
 }
@@ -374,7 +374,7 @@ export function distKeyCells(
 }
 
 /** The cells of the partition `partition` (about 10 when undefined) over
- *  the interval `dist` is drawn over: `Bin.quantiles(n)` at its own
+ *  the interval `dist` is drawn over: `Binning.quantiles(n)` at its own
  *  quantiles, so each cell holds `1 / n` of its mass. A distribution's
  *  cells are intervals of numbers. */
 export function distCells(

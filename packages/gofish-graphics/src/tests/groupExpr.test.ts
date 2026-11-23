@@ -34,7 +34,7 @@ const {
   partition,
   derive,
   kde,
-  Bin,
+  Binning,
   Unit,
   Trait,
 } = GoFish as any;
@@ -488,7 +488,7 @@ async function main() {
       .flow(
         spread({ by: "Species", dir: "y" }),
         derive(kde(col())),
-        partition({ by: F(col()).bin(Bin.step(1000)), dir: "x" })
+        partition({ by: F(col()).bin(Binning.step(1000)), dir: "x" })
       )
       .mark(ribbon({ x: F(col()).domain(), h: F(col()).density() }))
       .toDisplayList({ w: 500, h: 200, axes: false });

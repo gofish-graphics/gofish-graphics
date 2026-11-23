@@ -95,7 +95,7 @@ export const exampleScatter: FrontendIRDocument = {
 };
 
 /**
- * A treemap, built combinator-form: a `treemap` combinator wraps rect leaves.
+ * A treemap, built combinator-form: a `tile` combinator wraps rect leaves.
  *
  * Exercises: combinator-form mark in the mark tree (with `__combinator: true`),
  * nested children.
@@ -107,7 +107,7 @@ export const exampleTreemap: FrontendIRDocument = {
     type: "chart",
     data: { type: "table", id: "t0" },
     mark: {
-      type: "treemap",
+      type: "tile",
       __combinator: true,
       options: { size: "value" },
       children: [{ type: "rect", fill: "region" }],

@@ -12,7 +12,7 @@ story cuts an area into calendar months.
 """
 
 from gofish import (
-    Bin,
+    Binning,
     Calendar,
     Dist,
     Spacing,
@@ -43,7 +43,7 @@ D = Dist.normal(mean="mean", sd="sd")
 def story_croissant():
     return (
         chart([{"mean": 0, "sd": 1}])
-        .flow(partition(by=D.bin(Bin.quantiles(5)), dir="x"))
+        .flow(partition(by=D.bin(Binning.quantiles(5)), dir="x"))
         .mark(
             layer(
                 [
@@ -71,7 +71,7 @@ def story_penguin_body_mass():
         chart(PENGUINS)
         .flow(
             derive(kde("Body Mass (g)")),
-            partition(by=MASS.bin(Bin.quantiles(10)), dir="x"),
+            partition(by=MASS.bin(Binning.quantiles(10)), dir="x"),
         )
         .mark(
             layer(
@@ -118,7 +118,7 @@ def story_ridgeline():
                 spacing=Spacing.pitch(36, at="baseline"),
             ),
             derive(kde("temp_max")),
-            partition(by=TEMP.bin(Bin.quantiles(5)), dir="x"),
+            partition(by=TEMP.bin(Binning.quantiles(5)), dir="x"),
         )
         .mark(
             layer(

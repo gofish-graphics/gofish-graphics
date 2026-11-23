@@ -266,7 +266,7 @@ slot, `applyChannels` looks up that option's own channel spec and applies it,
 so a slot infers exactly as its counterpart: scatter's bare value and
 `center` as `x` (per entry, discrete for a nonnumeric field), its `min` as
 `xMin` (per entry, never discrete). A counterpart with no channel leaves the
-slot as given (treemap's `min` stands for its unannotated `x`), and the
+slot as given (`tile`'s `min` stands for its unannotated `x`), and the
 counterparts on the two axes must share one spec.
 
 A `size` or `pos` channel resolves its column (`resolveColumn`: its quantity
@@ -431,7 +431,7 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it),
   `tag.label = {accessor: {type: "field", name, ops?}, ...options}`;
   a function accessor warns and is dropped from the emitted IR (functions
   aren't serializable). The options are read through `withKindValues`, so a
-  bare `Place` kind (`position: Place.end`) is stored as its value; the
+  bare `Placement` kind (`placement: Placement.end`) is stored as its value; the
   emitter keeps only the `LABEL_OPTIONS` keys (`wireLabels` in `toJSON.ts`).
   `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the

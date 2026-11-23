@@ -18,7 +18,7 @@ chart([{"label": "GoFish"}]).mark(
 ## Signature
 
 ```python
-text(*, text=None, fill=None, stroke=None, stroke_width=None, filter=None,
+text(*, text=None, fill=None, stroke=None, stroke_width=None, effect=None,
      font_size=None, font_family=None, font_style=None, font_weight=None,
      debug_bounding_box=None, rotate=None, text_anchor=None,
      x=None, cx=None, x2=None, w=None, em_x=None,
