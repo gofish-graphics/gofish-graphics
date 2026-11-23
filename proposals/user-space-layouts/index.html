@@ -1097,11 +1097,23 @@ parPre  Node { x, y, w, h }                place
             fixed schedule, so the schedule stays static and is only recursive.
           </li>
           <li>
-            <b>Text that wraps is the hard case.</b> Its height depends on a
-            width that is only assigned in the last pass. CSS handles this by
-            always computing widths before heights. A parent cannot size itself
-            to wrapped text across a <code>layout</code> node that reports no
-            size. Label avoidance is similar.
+            <b
+              >Text that wraps belongs to <code>choose</code>, not to
+              <code>layout</code>.</b
+            >
+            Every way of breaking the text exists up front, so nothing is
+            created late. What it needs depends on where the width comes from. A
+            literal width (<code>w: 260</code>) needs nothing new. A width that
+            comes from the room offered needs the height to be measured after
+            the width is placed. CSS does this by always computing widths before
+            heights, and GoFish's two axes are solved separately, so running the
+            x passes to the end before the y measure pass is the same move. A
+            choice that interacts with the scale on its own axis (how many
+            columns fit) is a minimum over the alternatives' lengths, which is
+            <code>min</code> in the size algebra (#630). Only a trade between
+            the two axes needs a set of alternatives carried upward, which is
+            the frontier in the choice proposal. Label avoidance is not this: it
+            is the greedy rule.
           </li>
           <li>
             <b>Fixed passes grew in practice.</b>
@@ -1165,6 +1177,85 @@ parPre  Node { x, y, w, h }                place
           through the shape of the API: in the measure pass, pixel values do not
           exist to be read. Their error is the model for ours: name the first
           pass that fails and the value it could not get.
+        </p>
+        <p class="label">What declared structure buys</p>
+        <p class="note">
+          These papers are mostly about speed, and every speedup comes from
+          knowing something about the layout before running it. The split in
+          this proposal (a plan of decisions, and a drawing in operators) is
+          that kind of knowledge.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>What is known</th>
+                <th>What it allows</th>
+                <th>Precedent</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>A node's structure is fixed (it only measures)</td>
+                <td>
+                  Its passes can be fused, and its children can be processed in
+                  parallel or as arrays.
+                </td>
+                <td>
+                  Superconductor fuses rendering into the layout passes and
+                  sizes buffers with a prefix sum. Six to seven times faster on
+                  eight cores.
+                </td>
+              </tr>
+              <tr>
+                <td>The tree's shape did not change, only data</td>
+                <td>
+                  Re-evaluate the stored formulas. Do not re-plan and do not
+                  re-measure.
+                </td>
+                <td>
+                  Spineless Traversal recomputes only fields that changed, in
+                  the original order: 1.8 times faster on average. d3's
+                  resquarify keeps the row plan and redoes the arithmetic.
+                </td>
+              </tr>
+              <tr>
+                <td>Only the box changed (a resize)</td>
+                <td>
+                  Size requests are functions of the scale and do not mention
+                  the box, so only the solve and the place pass run again.
+                </td>
+                <td>Follows from the symbolic engine. Not measured.</td>
+              </tr>
+              <tr>
+                <td>A node is a <code>layout</code> box</td>
+                <td>
+                  Its size is fixed from outside, so a change inside cannot
+                  spread out, and separate boxes are independent.
+                </td>
+                <td>Flutter's relayout boundary. CSS containment.</td>
+              </tr>
+              <tr>
+                <td>A kernel scales evenly</td>
+                <td>Run it once at scale 1 and multiply.</td>
+                <td>d3's circle packing.</td>
+              </tr>
+              <tr>
+                <td>A cost adds up along a sequence</td>
+                <td>
+                  <code>choose</code> can prune alternatives instead of trying
+                  every combination.
+                </td>
+                <td>Knuth and Plass. Bernardy's pretty printer.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          None of this is needed for the design to work, and none of it is
+          measured on GoFish. It says which declarations are worth keeping:
+          whether a node only measures, chooses, or builds late; what each pass
+          reads; and stable keys for children.
         </p>
         <p class="note">
           Naming: in this literature a "visit" is one entry into one node, a
