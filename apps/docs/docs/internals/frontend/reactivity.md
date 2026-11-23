@@ -398,9 +398,11 @@ the bar above it, not none. Dragology's `closest(...).whenFar(...)` limits the g
 target it chose; here the reach narrows the targets first, because a mark's
 size is not part of its position: the mark nearest by position can be far
 from the pointer while another is near it. A behavior's result is the mark it
-chose, or none. `within` comes before
-`snap`, so it measures a line by its path, and sliding along a line between
-rows far apart keeps the box. The reach,
+chose, or none. `snap` is chained after `within`, so on each frame it maps
+the current row to its line before `within` takes the reach: the current
+focus is the line, not its row, and the line keeps the 20 px hysteresis.
+The reach to a line is to its path, so sliding along a line between rows
+far apart keeps the box. The reach,
 `TOOLTIP_REACH`, is 16 px: more than half an ordinary gap between bars, so
 crossing a gap never closes the box, and less than the hole of a donut.
 Observable Plot's pointer uses 40 px to a point's center, Plotly's
