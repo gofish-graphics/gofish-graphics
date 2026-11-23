@@ -64,7 +64,7 @@ const frame = (
   current?: Candidate,
   candidates = bars
 ): Frame => ({ pointer: { x, y }, candidates, current, clicked: false });
-const pick = (f: Frame) => defaultFocus(f).choice?.key;
+const pick = (f: Frame) => defaultFocus(f)?.key;
 
 console.log("# focus: a hit wins");
 check("inside the long bar", pick(frame(100, 12)) === "long");
@@ -80,7 +80,7 @@ check("17 px right of the short bar: none", pick(frame(57, 40)) === undefined);
 check("the short bar the focus, 20 px: it", pick(frame(60, 40, bars[1])) === "short");
 check("the short bar the focus, 21 px: none", pick(frame(61, 40, bars[1])) === undefined);
 check("far right of the short bar: none", pick(frame(200, 40)) === undefined);
-check("Focus.closest alone ignores x", Focus.closest()(frame(250, 69)).choice?.key === "mid");
+check("Focus.closest alone ignores x", Focus.closest()(frame(250, 69))?.key === "mid");
 
 console.log("# focus: stickiness");
 // Halfway between two rows, 1 px nearer the long bar: a fresh pointer takes
@@ -98,9 +98,14 @@ check("16 px past the long bar: it", pick(frame(316, 10)) === "long");
 check("17 px past it: none", pick(frame(317, 10)) === undefined);
 check("it the focus, 20 px: still it", pick(frame(320, 10, bars[0])) === "long");
 check("it the focus, 21 px: none", pick(frame(321, 10, bars[0])) === undefined);
+// Reach first, then position: right of the short bar's end, below it, the
+// short bar's row is the nearest position but the bar is 60 px off; the
+// mid bar, 8 px off, is the only one within reach.
+check("past the short bar, 8 px above mid: mid", pick(frame(100, 52)) === "mid");
+check("the short bar the focus there: still mid", pick(frame(100, 52, bars[1])) === "mid");
 // The head start is the current focus's: another focus does not lend it.
 check("another the focus, 18 px: none", pick(frame(318, 10, bars[1])) === undefined);
-check("no pointer: none", defaultFocus({ ...frame(0, 0), pointer: undefined }).choice === undefined);
+check("no pointer: none", defaultFocus({ ...frame(0, 0), pointer: undefined }) === undefined);
 
 console.log("# focus: a mark placed on no axis is as near as its outline");
 {
@@ -213,7 +218,7 @@ console.log("# focus: on a line drawn through rows, the nearest row");
   const low = through("low", xs.map((x) => [x, 100] as [number, number]));
   const lines = [high, low];
   const at = (x: number, y: number, current?: Candidate) =>
-    defaultFocus(frame(x, y, current, lines)).choice?.key;
+    defaultFocus(frame(x, y, current, lines))?.key;
   const pointOf = (key: string | undefined) =>
     lines.flatMap((l) => l.points!).find((p) => p.key === key);
   check("on a row's point: that row", at(100, 40) === "high#1");
@@ -241,7 +246,7 @@ console.log("# focus: on a line drawn through rows, the nearest row");
     const atNear = (x: number, y: number, current?: string) =>
       defaultFocus(
         frame(x, y, near.flatMap((l) => l.points!).find((p) => p.key === current), near)
-      ).choice?.key;
+      )?.key;
     check(
       "between lines 30 px apart, the current line stays",
       atNear(100, 56, "high#1") === "high#1" &&
@@ -258,7 +263,7 @@ console.log("# focus: on a line drawn through rows, the nearest row");
   let current: Candidate | undefined;
   let changes = 0;
   for (let x = 0; x <= 400; x += 5) {
-    const choice = defaultFocus(frame(x, 41, current, lines)).choice;
+    const choice = defaultFocus(frame(x, 41, current, lines));
     if (choice?.key !== current?.key) changes++;
     current = choice;
   }
@@ -376,7 +381,7 @@ console.log("# a filled path is a region");
     [{ key: "line", node: fakeNode("line"), rows: [] }]
   );
   const hit = (x: number, y: number, cs: Candidate[]) =>
-    Focus.hit()(frame(x, y, undefined, cs)).choice?.key;
+    Focus.hit()(frame(x, y, undefined, cs))?.key;
   check("inside the wedge, by its center", hit(140, 140, regions) === "wedge");
   check("inside the wedge, near its tip", hit(105, 104, regions) === "wedge");
   check("outside the wedge, past its arc", hit(165, 165, regions) === undefined);
@@ -472,7 +477,7 @@ console.log("# focus: bars far apart, a dead gap");
   const seen: string[] = [];
   let current: Candidate | undefined;
   for (let x = 10; x <= 90; x += 1) {
-    const choice = defaultFocus(frame(x, 50, current, cols)).choice;
+    const choice = defaultFocus(frame(x, 50, current, cols));
     const k = choice?.key ?? "none";
     if (seen[seen.length - 1] !== k) seen.push(k as string);
     current = choice;

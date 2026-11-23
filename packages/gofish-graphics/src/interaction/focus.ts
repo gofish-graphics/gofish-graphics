@@ -8,7 +8,7 @@
  * INTERNAL. Nothing here is exported from `src/lib.ts` yet. The shape is the
  * proposed `Focus` family's: plain types and pure functions, no DOM, no
  * Solid, no GoFish node. A behavior, like a Dragology drag behavior, is a
- * function from a frame to a result. Calls start a behavior or join several
+ * function from a frame to the candidate it chooses, or none. Calls start a behavior or join several
  * (`Focus.first`); a step that transforms one behavior is a chained method
  * (`.within`). Exposing the family later is exporting this module as a
  * family namespace (`src/families/`), with `.tooltip({ focus })` taking one.
@@ -65,18 +65,20 @@ export type Frame = {
   clicked: boolean;
 };
 
-/** `gap`: the pointer's distance to the choice's drawn outline, in px, 0
- *  inside it (Dragology's `gap`, the distance to the chosen target). */
-export type Result = { choice: Candidate | undefined; gap: number };
-export type FocusBehavior = (frame: Frame) => Result;
+/** A behavior chooses a candidate, or none. */
+export type FocusBehavior = (frame: Frame) => Candidate | undefined;
 
 /** A behavior with the chained steps. A plain `FocusBehavior` is accepted
  *  wherever a behavior is an argument. */
 export type Chain = FocusBehavior & {
-  /** Keep the choice only while the pointer is within `reach` px of its
-   *  drawn outline (its `gap`); the current focus is kept out to `out` px.
-   *  This is Dragology's `closest(...).whenFar(...)`: the limit is on the
-   *  distance to the chosen mark, not to all of them. */
+  /** Run this behavior on the marks within `reach` px of the pointer
+   *  only: those whose drawn outline is that near (0 inside it), and the
+   *  current focus out to `out` px. With none, it chooses nothing. This is
+   *  Dragology's `closest(...).whenFar(...)` turned around: there the
+   *  limit is on the gap to the chosen target; here the reach narrows the
+   *  targets first, because a mark's size is not part of its position, so
+   *  the mark nearest by position can be far from the pointer while
+   *  another is near it. */
   within(reach: number, out?: number): Chain;
   /** Run this behavior only on a click; between clicks the focus stays. */
   onClick(): Chain;
@@ -87,8 +89,6 @@ export type Chain = FocusBehavior & {
   snap(stickiness?: number): Chain;
 };
 
-const NONE: Result = { choice: undefined, gap: Infinity };
-
 /* ------------------------------- the family ------------------------------ */
 
 /** Lift a plain behavior so it can be chained. */
@@ -96,12 +96,16 @@ function from(run: FocusBehavior): Chain {
   const chain = ((frame: Frame) => run(frame)) as Chain;
   chain.within = (reach, out = reach + 4) =>
     from((f) => {
-      const r = run(f);
-      const kept = r.choice !== undefined && r.choice.key === f.current?.key;
-      return r.gap <= (kept ? out : reach) ? r : NONE;
+      const p = f.pointer;
+      if (!p) return undefined;
+      const candidates = f.candidates.filter(
+        (c) =>
+          outlineDistance(p, c.outline) <=
+          (c.key === f.current?.key ? out : reach)
+      );
+      return candidates.length === 0 ? undefined : run({ ...f, candidates });
     });
-  chain.onClick = () =>
-    from((f) => (f.clicked ? run(f) : { choice: f.current, gap: 0 }));
+  chain.onClick = () => from((f) => (f.clicked ? run(f) : f.current));
   chain.snap = (stickiness = 0) =>
     from((f) => {
       const current =
@@ -111,11 +115,10 @@ function from(run: FocusBehavior): Chain {
             c.key === f.current!.key ||
             c.points?.some((p) => p.key === f.current!.key) === true
         );
-      const r = run({ ...f, current });
-      const points = r.choice?.points;
-      if (!points || points.length === 0) return r;
-      const p = closest({ stickiness })({ ...f, candidates: points });
-      return p.choice ? { choice: p.choice, gap: r.gap } : r;
+      const choice = run({ ...f, current });
+      const points = choice?.points;
+      if (!points || points.length === 0) return choice;
+      return closest({ stickiness })({ ...f, candidates: points }) ?? choice;
     });
   return chain;
 }
@@ -124,8 +127,7 @@ function from(run: FocusBehavior): Chain {
  *  the last in the candidates' paint order. */
 function hit(): Chain {
   return from(({ pointer, candidates }) => {
-    const c = pointer && candidates.findLast((c) => inside(pointer, c.outline));
-    return c ? { choice: c, gap: 0 } : NONE;
+    return pointer && candidates.findLast((c) => inside(pointer, c.outline));
   });
 }
 
@@ -134,8 +136,7 @@ function hit(): Chain {
  * `position` (absent axes drop out; a mark with none is measured to its
  * outline), the box `center`, or the `outline`. The current focus gets a
  * head start of `stickiness` px. A candidate more than `radius` px away,
- * so measured, is not picked. The result's `gap` is the distance to the
- * chosen candidate's outline, whatever `to` chose it by.
+ * so measured, is not picked.
  */
 function closest({
   to = "position",
@@ -147,7 +148,7 @@ function closest({
   radius?: number;
 } = {}): Chain {
   return from(({ pointer, candidates, current }) => {
-    if (!pointer) return NONE;
+    if (!pointer) return undefined;
     let best: Candidate | undefined;
     let bestD = Infinity;
     let bestScore = Infinity;
@@ -156,8 +157,7 @@ function closest({
       const score = d - (c.key === current?.key ? stickiness : 0);
       if (score < bestScore) [best, bestD, bestScore] = [c, d, score];
     }
-    if (best === undefined || bestD > radius) return NONE;
-    return { choice: best, gap: outlineDistance(pointer, best.outline) };
+    return bestD > radius ? undefined : best;
   });
 }
 
@@ -165,10 +165,10 @@ function closest({
 function first(behaviors: FocusBehavior[]): Chain {
   return from((f) => {
     for (const b of behaviors) {
-      const r = b(f);
-      if (r.choice) return r;
+      const choice = b(f);
+      if (choice) return choice;
     }
-    return NONE;
+    return undefined;
   });
 }
 
@@ -184,13 +184,14 @@ export const Focus = { hit, closest, first, from };
  */
 export const TOOLTIP_REACH = 16;
 
-/** The default tooltip focus: the mark under the pointer, else the nearest
- *  by placed position with a 4 px head start for the current one, kept only
- *  while the pointer is within {@link TOOLTIP_REACH} px of that mark's drawn
- *  outline (4 px more for the current one); on a mark drawn through rows (a
- *  line), its row nearest the pointer, with the same head start. The reach
- *  is measured to the line's path, not the row's point, so sliding along a
- *  line keeps the box. As a spec this would read
+/** The default tooltip focus. Reach first: only the marks whose drawn
+ *  outline is within {@link TOOLTIP_REACH} px of the pointer count (the
+ *  current one out to 4 px more). Then the mark under the pointer, else
+ *  the nearest of them by placed position, with a 4 px head start for the
+ *  current one; on a mark drawn through rows (a line), its row nearest the
+ *  pointer, with the same head start. The reach is measured to the line's
+ *  path, not the row's point, so sliding along a line keeps the box. With
+ *  no mark within reach there is no focus. As a spec this would read
  *  `pointer().snap(selectAll("lines"), { by: ... })`: the marks are the
  *  candidates, and each step here is one pure behavior over them. */
 export const defaultFocus: Chain = Focus.first([

@@ -386,14 +386,21 @@ and of the mark's rows (a ref or node by its rows, a date by its instant), so
 two marks of one call drawn from equal rows are one candidate, and the marks
 of two calls are not.
 
-`within` is Dragology's `closest(...).whenFar(...)`: a behavior's result
-carries its `gap`, the pointer's distance to the drawn outline of the mark
-it chose (0 inside it), and `within(reach)` keeps the choice only while the
-gap is at most `reach` px, or `reach + 4` when the choice is the current
-focus. The limit is on the chosen mark, not on the marks as a whole, so the
-hole of a donut and a wide gap between bars, which are near no mark, show no
-box. `within` comes before `snap`, so it measures a line by its path, and
-sliding along a line between rows far apart keeps the box. The reach,
+The rule is reach first, then position. `within(reach)` narrows the
+frame's candidates before the behavior it is chained on runs: only the marks
+whose drawn outline is within `reach` px of the pointer (0 inside it) are
+considered, and the current focus out to `reach + 4`. With none, there is no
+focus. Then `first([hit, closest])` chooses among them: the one the pointer
+is inside, else the nearest by placed position. So the hole of a donut and a
+wide gap between bars, which are near no mark, show no box, and a pointer
+6 px below a bar's end, in the row of a much shorter bar, gets the box of
+the bar above it, not none. Dragology's `closest(...).whenFar(...)` limits the gap to the
+target it chose; here the reach narrows the targets first, because a mark's
+size is not part of its position: the mark nearest by position can be far
+from the pointer while another is near it. A behavior's result is the mark it
+chose, or none. `within` comes before
+`snap`, so it measures a line by its path, and sliding along a line between
+rows far apart keeps the box. The reach,
 `TOOLTIP_REACH`, is 16 px: more than half an ordinary gap between bars, so
 crossing a gap never closes the box, and less than the hole of a donut.
 Observable Plot's pointer uses 40 px to a point's center, Plotly's

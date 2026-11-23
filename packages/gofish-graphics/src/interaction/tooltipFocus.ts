@@ -199,7 +199,7 @@ export class TooltipFocus implements InputPrimitive {
       candidates: this.candidates,
       current: this.focused(),
       clicked: false,
-    }).choice;
+    });
     const found = choice && this.byKey.get(choice.key);
     const key = found?.mark.key as string | undefined;
     const point =

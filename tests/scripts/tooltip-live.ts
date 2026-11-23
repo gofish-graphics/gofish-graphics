@@ -135,6 +135,13 @@ async function render(
   return snap(page);
 }
 
+/** The distance from (x, y) to a mark's client box, 0 inside it. */
+const gapOf = (b: Snap["targets"][number], x: number, y: number) =>
+  Math.hypot(
+    Math.max(b.x - x, 0, x - (b.x + b.w)),
+    Math.max(b.y - y, 0, y - (b.y + b.h))
+  );
+
 const same = (a: string[], b: string[]) =>
   JSON.stringify(a) === JSON.stringify(b);
 
@@ -184,48 +191,73 @@ async function main() {
         right.box
       );
       await shot("bar-chart-short");
-      // Level with the shortest bar, a px at a time to the right of its end:
-      // its box, though a longer bar is just above, until the reach with
-      // the focus's head start (20 px), then closed; coming back from the
-      // right, the box opens at the reach (16 px).
+      // Level with the shortest bar, a px at a time to the right of its end
+      // and back: reach first, then position. The shortest bar's box while
+      // it is within reach (20 px with the focus's head start), then the
+      // box of a bar still within reach (the one above, nearest by row of
+      // those left), then closed, and never closed while a bar is within
+      // 16 px. Coming back, the box opens at 16 px from a bar.
       {
         const y = short.y + short.h / 2;
         const end = short.x + short.w;
+        const near = (x: number) =>
+          Math.min(...closed.targets.map((b) => gapOf(b, x, y)));
+        const sweep = async (ds: number[]) => {
+          const runs: { from: number; to: number; box: string | null }[] = [];
+          let broken: number[] = [];
+          for (const d of ds) {
+            await page.mouse.move(end + d, y);
+            await page.waitForTimeout(40);
+            const s = await snap(page);
+            const box =
+              s.box === null
+                ? null
+                : (s.box.find((t) => t.includes("→")) ?? s.box.join(" "));
+            const last = runs[runs.length - 1];
+            if (last && last.box === box) last.to = d;
+            else runs.push({ from: d, to: d, box });
+            if (box === null && near(end + d) <= 16) broken.push(d);
+          }
+          return { runs, broken };
+        };
+        const show = (rs: { from: number; to: number; box: string | null }[]) =>
+          rs.map((r) => `${r.box ?? "none"} ${r.from}..${r.to}`).join(", ");
         await hover(page, end - 2, y);
-        let closedAt: number | undefined;
-        let other = false;
-        for (let d = 0; d <= 60 && closedAt === undefined; d++) {
-          await page.mouse.move(end + d, y);
-          await page.waitForTimeout(40);
-          const s = await snap(page);
-          if (s.box === null) closedAt = d;
-          else if (!s.box.includes("VO→INF→VO")) other = true;
-        }
-        let openAt: number | undefined;
-        for (let d = 60; d >= 0 && openAt === undefined; d--) {
-          await page.mouse.move(end + d, y);
-          await page.waitForTimeout(40);
-          const s = await snap(page);
-          if (s.box !== null) openAt = s.box.includes("VO→INF→VO") ? d : -1;
-        }
+        const out = await sweep(Array.from({ length: 81 }, (_, d) => d));
+        const back = await sweep(Array.from({ length: 81 }, (_, d) => 80 - d));
+        const above = [...closed.targets]
+          .filter((b) => b.y < short.y)
+          .sort((a, b) => b.y - a.y)[0];
+        console.log(
+          `    level with the shortest bar (${Math.round(short.w)} px long; the bar above ends ${Math.round(above.x + above.w - end)} px past it, ${Math.round(short.y - above.y - above.h)} px above): out ${show(out.runs)}; back ${show(back.runs)}`
+        );
+        const own = out.runs[0];
         check(
-          `level with the shortest bar: its box, closed ${closedAt} px past its end`,
-          !other && closedAt !== undefined && closedAt >= 20 && closedAt <= 22,
-          [closedAt, other]
+          `level with the shortest bar: its box out to ${own.to} px past its end`,
+          own.box === "VO→INF→VO" && own.to >= 19 && own.to <= 21,
+          show(out.runs)
         );
         check(
-          `level with the shortest bar, coming back: its box opens ${openAt} px past its end`,
-          openAt !== undefined && openAt >= 15 && openAt <= 17,
-          openAt
+          "level with the shortest bar: never closed while a bar is within 16 px, out or back",
+          out.broken.length === 0 && back.broken.length === 0,
+          [out.broken, back.broken]
+        );
+        const lastBack = back.runs[back.runs.length - 1];
+        check(
+          `level with the shortest bar, coming back: its box from ${lastBack.from} px`,
+          lastBack.box === "VO→INF→VO" &&
+            lastBack.from >= 15 &&
+            lastBack.from <= 16,
+          show(back.runs)
         );
         // At rest for 1 s at the reach's two edges, from inside and from
         // outside: the box the approach left, and no change, no re-run.
         for (const [d, from, want] of [
-          [16, "inside", true],
-          [16, "outside", true],
-          [20, "inside", true],
-          [20, "outside", false],
-          [24, "inside", false],
+          [16, "inside", "VO→INF→VO"],
+          [16, "outside", "VO→INF→VO"],
+          [20, "inside", "VO→INF→VO"],
+          [20, "outside", near(end + 20) <= 16 ? "other" : null],
+          [24, "inside", near(end + 24) <= 16 ? "other" : null],
         ] as const) {
           await hover(page, 2, 2);
           const via: [number, number][] =
@@ -238,16 +270,22 @@ async function main() {
                   ]),
                 ]
               : [
-                  [end + 60, y],
+                  [end + 80, y],
                   ...Array.from(
-                    { length: 60 - d },
-                    (_, k): [number, number] => [end + 60 - k, y]
+                    { length: 80 - d },
+                    (_, k): [number, number] => [end + 80 - k, y]
                   ),
                 ];
           const r = await rest(page, end + d, y, via);
+          const got =
+            r.box === null
+              ? null
+              : r.box.includes("VO→INF→VO")
+                ? "VO→INF→VO"
+                : "other";
           check(
-            `at rest ${d} px past the shortest bar, from ${from}: ${r.box === null ? "closed" : "its box"}, no change, no re-run`,
-            (r.box !== null) === want && !r.changed && !r.reran,
+            `at rest ${d} px past the shortest bar, from ${from}: ${got ?? "closed"}, no change, no re-run`,
+            got === want && !r.changed && !r.reran,
             r
           );
         }
@@ -276,18 +314,60 @@ async function main() {
           [shown, closedAt]
         );
       }
-      // The gap between bars 1 and 2.
-      const gap = await hover(
-        page,
-        bars[0].x + 10,
-        (bars[0].y + bars[0].h + bars[1].y) / 2
-      );
-      check(
-        "in the gap: a neighbor's box",
-        gap.box !== null &&
-          (gap.box.includes(expect[0]) || gap.box.includes(expect[1])),
-        gap.box
-      );
+      // The 4 px gap between bars 1 and 2, half a px at a time, down from
+      // bar 1 and back up from bar 2: both bars are within reach, so the
+      // nearer by row wins, and the head start (4 px, the gap's width)
+      // keeps the bar the pointer came from across the gap.
+      {
+        const x = bars[0].x + 10;
+        const top = bars[0].y + bars[0].h;
+        const ys = Array.from(
+          { length: 2 * Math.round(bars[1].y - top + 4) + 1 },
+          (_, k) => top - 2 + k / 2
+        );
+        const walk = async (order: number[]) => {
+          const runs: string[] = [];
+          for (const y of order) {
+            await page.mouse.move(x, y);
+            await page.waitForTimeout(40);
+            const s = await snap(page);
+            const n =
+              expect.find((e) => s.box?.includes(e)) ??
+              (s.box === null ? "none" : "other");
+            const inGap = y > top + 0.5 && y < bars[1].y - 0.5;
+            const tag = `${n}${inGap ? " (gap)" : ""}`;
+            if (runs[runs.length - 1]?.split("@")[0] !== tag)
+              runs.push(`${tag}@${(y - top).toFixed(1)}`);
+          }
+          return runs;
+        };
+        // The bars shown in turn, gap or not.
+        const names = (runs: string[]) =>
+          runs
+            .map((r) => r.split(/ \(gap\)|@/)[0])
+            .filter((n, i, a) => i === 0 || a[i - 1] !== n)
+            .join("|");
+        await hover(page, x, bars[0].y + bars[0].h / 2);
+        const down = await walk(ys);
+        const up = await walk([...ys].reverse());
+        console.log(
+          `    the 4 px gap (y from bar 1's bottom): down ${down.join(" ")}; up ${up.join(" ")}`
+        );
+        check(
+          "the 4 px gap, down: bar 1's box across the gap, bar 2's from its edge",
+          names(down) === `${expect[0]}|${expect[1]}` &&
+            down.some((r) => r.startsWith(`${expect[0]} (gap)`)) &&
+            !down.some((r) => r.startsWith(`${expect[1]} (gap)`)),
+          down
+        );
+        check(
+          "the 4 px gap, up: bar 2's box across the gap, bar 1's from its edge",
+          names(up) === `${expect[1]}|${expect[0]}` &&
+            up.some((r) => r.startsWith(`${expect[1]} (gap)`)) &&
+            !up.some((r) => r.startsWith(`${expect[0]} (gap)`)),
+          up
+        );
+      }
       // The box is no pointer target: moving down through the first bar's
       // box, over the bars under it, reaches them in turn, with a box open
       // on every sample.
@@ -296,59 +376,59 @@ async function main() {
         bars[0].x + bars[0].w - 10,
         bars[0].y + bars[0].h / 2
       );
-      const [bx, by, bw, bh] = open1.boxClient!;
+      const [bx, , bw] = open1.boxClient!;
       // A column of the box over the second bar, if the box reaches it.
       const colX = Math.min(bx + bw - 4, bars[1].x + bars[1].w - 3);
       if (colX > bx + 2) {
-        const seen: string[] = [];
-        let closedFrames = 0;
-        const closedAt: number[] = [];
-        for (let y = bars[0].y + bars[0].h / 2; y < by + bh - 2; y += 4) {
+        // Reach first, then position: near bar 2's end, down into bar 3's
+        // row past bar 3's end, bar 3 is the nearest by row but far; bar 2,
+        // within reach above, is shown.
+        // Never closed while a bar is within 16 px.
+        const runs: { from: number; to: number; box: string | null }[] = [];
+        const broken: number[] = [];
+        const y0 = Math.round(bars[0].y + bars[0].h / 2);
+        const y1 = Math.round(bars[2].y + bars[2].h + 24);
+        for (let y = y0; y <= y1; y++) {
           await page.mouse.move(colX, y);
-          await page.waitForTimeout(60);
+          await page.waitForTimeout(40);
           const s = await snap(page);
-          // Closed though the bar the focus chooses (the nearest by row) is
-          // within reach: the reach broke. Where that bar is out of reach,
-          // closing is the rule, under the box or not, even when another
-          // bar's outline is nearer (logged below).
-          const gapTo = (b: Snap["targets"][number]) =>
-            Math.hypot(
-              Math.max(b.x - colX, 0, colX - (b.x + b.w)),
-              Math.max(b.y - y, 0, y - (b.y + b.h))
-            );
-          const row = [...closed.targets].sort(
-            (p, q) => Math.abs(p.y + p.h / 2 - y) - Math.abs(q.y + q.h / 2 - y)
-          )[0];
-          const nearest = Math.min(...closed.targets.map(gapTo));
-          if (s.box === null && nearest <= 16)
-            console.log(
-              `    closed at x ${Math.round(colX)}, y ${Math.round(y)}: the row's bar is ${Math.round(gapTo(row))} px away, another bar ${Math.round(nearest)} px`
-            );
-          if (s.box === null && gapTo(row) <= 16) {
-            closedFrames++;
-            closedAt.push(Math.round(y));
-          }
-          const n = expect.find((e) => s.box?.includes(e));
-          if (n !== undefined && seen[seen.length - 1] !== n) seen.push(n);
+          const box =
+            expect.find((e) => s.box?.includes(e)) ??
+            (s.box === null ? null : "other");
+          const last = runs[runs.length - 1];
+          if (last && last.box === box) last.to = y;
+          else runs.push({ from: y, to: y, box });
+          const nearest = Math.min(
+            ...closed.targets.map((b) => gapOf(b, colX, y))
+          );
+          if (s.box === null && nearest <= 16) broken.push(y);
         }
-        check(
-          `down through bar 1's box at x ${Math.round(colX)}: bars in order (${seen.join(", ")})`,
-          seen.length >= 2 && seen.every((n, i) => expect.indexOf(n) === i),
-          seen
+        const show = runs
+          .map((r) => `${r.box ?? "none"} y ${r.from}..${r.to}`)
+          .join(", ");
+        console.log(
+          `    down at x ${Math.round(colX)} (bar 2 ends at ${Math.round(bars[1].x + bars[1].w)}, bar 3 at ${Math.round(bars[2].x + bars[2].w)}; bar 3's row y ${Math.round(bars[2].y)}..${Math.round(bars[2].y + bars[2].h)}): ${show}`
+        );
+        const seen = runs.flatMap((r) =>
+          r.box && r.box !== "other" ? [r.box] : []
         );
         check(
-          "down through bar 1's box: never closed with the row's bar within reach",
-          closedFrames === 0,
-          [
-            closedAt,
-            bars.map((b) => [
-              Math.round(b.x),
-              Math.round(b.y),
-              Math.round(b.w),
-              Math.round(b.h),
-            ]),
-            open1.boxClient,
-          ]
+          `down at x ${Math.round(colX)}: bars in order (${seen.join(", ")})`,
+          seen.length >= 2 && seen.every((n, i) => expect.indexOf(n) === i),
+          show
+        );
+        const inRow3 = runs.filter(
+          (r) => r.to >= bars[2].y + 2 && r.from <= bars[2].y + 10
+        );
+        check(
+          "in bar 3's row, past bar 3's end, bar 2 within reach: bar 2's box",
+          inRow3.length > 0 && inRow3.every((r) => r.box === expect[1]),
+          inRow3
+        );
+        check(
+          `down at x ${Math.round(colX)}: never closed while a bar is within 16 px`,
+          broken.length === 0,
+          broken
         );
       } else
         console.log("  (the first bar's box does not reach the second bar)");
@@ -693,8 +773,33 @@ async function main() {
             states.slice(wIn, wOut + 1).every((n) => n === own),
             seq
           );
+          // Where the ray leaves the svg, the pointer is off the chart.
+          const [sx, sy, sw, sh] = closed.svg;
+          const rLeave = rs.find((r) => {
+            const [x, y] = along(r);
+            return (
+              r > wOut && (x < sx || x >= sx + sw || y < sy || y >= sy + sh)
+            );
+          });
           console.log(
-            `    past the outer edge: ${own}'s box until ${rClose - wOut} px, then ${states[rClose]}; inward, a box from ${rBack - wOut} px`
+            `    past the outer edge: ${own}'s box until ${rClose - wOut} px, then ${states[rClose]}; inward, a box from ${rBack - wOut} px; the ray leaves the svg ${rLeave === undefined ? "beyond the sweep" : `${rLeave - wOut} px past the edge`}`
+          );
+          // Off the svg the pointer is off the chart and the box closes
+          // there; that is before 20 px on the rays that leave it sooner.
+          const offChart = rLeave !== undefined && rLeave - wOut < 20;
+          check(
+            offChart
+              ? `${own}: past the outer edge, closed at ${rClose - wOut} px where the ray leaves the svg (${rLeave! - wOut} px), reopened at ${rBack - wOut} px`
+              : `${own}: past the outer edge, closed at ${rClose - wOut} px, reopened at ${rBack - wOut} px`,
+            states[rClose] === "none" &&
+              (offChart
+                ? Math.abs(rClose - rLeave!) <= 1 &&
+                  Math.abs(rBack - rLeave!) <= 1
+                : rClose - wOut >= 20 &&
+                  rClose - wOut <= 21 &&
+                  rBack - wOut >= 15 &&
+                  rBack - wOut <= 16),
+            seq
           );
           if (fill === wedges[0][0]) {
             pt = along;
