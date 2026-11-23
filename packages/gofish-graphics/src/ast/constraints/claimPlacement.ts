@@ -70,6 +70,12 @@ import type { ConstraintSpec } from ".";
  * axis takes room, and a label in a ring that a spread along its axis
  * holds is ink there (`layer`'s `claimChildren`). Ink overflows the canvas
  * (`layout` in gofish.tsx).
+ *
+ * The layout side of the same plan is here too. The plan's formulas name
+ * what only layout measures as inputs (`planInput`). Layout answers them
+ * from the facts a layer hands over (`LaidOut`, `laidOutInput`), evaluates
+ * the formulas at the σ it lays out at, and writes the seats onto the
+ * children (`seatByPlan`).
  */
 
 /** A box's two edges along one axis, `[lo, hi]`, each a function of σ: where

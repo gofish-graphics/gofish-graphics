@@ -824,13 +824,18 @@ fixed-size nodes report their size).
   sibling) are placed by the same placement solver layout runs, on boxes
   that are their claims, with data mapped through σ from data 0. The solve
   runs once in formulas (`Tape`), so each box's edges are piecewise-linear
-  in σ, and the hull is their envelope (`buildPlan` in `solver/plan.ts`). A ring is such a layer, so its claim holds its axis, titles or
-  legend around what it wraps, and so does a scatter's around its marks.
+  in σ, and the hull is their envelope (`buildPlan` in `solver/plan.ts`).
+  Layout evaluates the same formulas at the σ it lays out at, answers their
+  inputs from what it measured (`LaidOut`), and writes the seats onto the
+  children (`seatByPlan` in `constraints/claimPlacement.ts`). A ring is such
+  a layer, so its claim holds its axis, titles or legend around what it
+  wraps, and so does a scatter's around its marks.
 - **Frames read across layers.** A `position` with `in: ref` places a
   datum in the frame of the node `ref` names (#1257). The claim walk reads
   that frame's data 0 and one data unit up the plans from the node to the
   layer (`frameIn` in `solver/plan.ts`), crossing each scope at the σ it
-  solved (`leaving`), and layout measures them (`in0:`, `in1:`). Where a
+  solved (`leaving`), and layout measures them (`in0:`, `in1:`, answered
+  by `laidFrames` in `solver/plan.ts`). Where a
   scope between cannot be read out of, or where the child of the layer that
   holds the node is placed by the solve (its frame would move with it, which
   needs a relation, not a pin), what the datum places is ink.
