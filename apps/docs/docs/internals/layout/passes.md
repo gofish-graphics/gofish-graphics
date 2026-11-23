@@ -926,7 +926,7 @@ fixed-size nodes report their size).
   need, because a larger room would change nothing it draws; and where no
   member of a chain reads its room, the slack is left over and each
   member's room is its need. Nothing in this rule names chrome. Each chain splits the
-  slack on its own (`chainsOf` in `layer`), so two chains of one width side
+  slack on its own (`chainsOf` in `constraints/distribute.ts`), so two chains of one width side
   by side each fill the room; a chain narrower than the hull gets only the
   hull's slack. This is CSS's `flex: 1 1 auto`. σ is solved from the
   needs alone, so where a scope fits its needs to its room the slack is 0

@@ -726,7 +726,7 @@ each inherent to what the origin states are:
   - a child that is in no continuous or ordinal part by the rules above,
     and that a point or `"span"` `align` places at a partner that is in
     one, is in its partner's part on that axis (`alignedParts` in
-    `layer`). An align has no offset or gap, so the child's anchor is at the partner's anchor,
+    `constraints/compose.ts`). An align has no offset or gap, so the child's anchor is at the partner's anchor,
     which is a datum there: the child is at a datum, as a circle is, with a
     size of its own in pixels. A polar chart aligned to the end of its
     stem (`Forward Syntax/Flower Chart`) is in the stem's y part, though
@@ -869,7 +869,8 @@ overlay, an alignment, a stack, a layer placing its children,
 is (`offset`, the `position` operator, a `ref`). A layer claims its
 plan (`buildPlan` in `solver/plan.ts`): one solve over all its children
 in values in σ, by their boxes. Layout seats each child from the same
-plan, evaluated at the σ it lays out at (`solver/formula.ts`, see
+plan, evaluated at the σ it lays out at (`seatByPlan` in
+`constraints/claimPlacement.ts`, `solver/formula.ts`, see
 [Piecewise-Linear Values](/internals/core/pwl)). The plan reads three forms
 of each child: its box, which it places, its plot, which a chain lays it
 by, and all it draws, which takes room. A layer's forms are the envelopes
@@ -1395,8 +1396,8 @@ solve places it there, as it places any box: its claim is its own claim
 moved by σ·offset, its pixel dressing (a stroke) included, and nothing is
 added between parts. A part whose offset changes along u states its tail at
 the stack's 0, and the layer hands it the offset as the `shear` of its
-`AxisScale` on the stack's axis (`composeLayerTypes` → `stackPlacesOf` in
-`layer.tsx`). The band adds it to both edges before it maps them
+`AxisScale` on the stack's axis (`composeLayerTypes` in `layer.tsx` → `stackPlacesOf` in
+`constraints/compose.ts`). The band adds it to both edges before it maps them
 (`band.tsx`), so its box, outline and cross-section are where it is drawn,
 and labels, `ref` and `selectAll` read them there. Only a node with a
 `shearAxis` (a band, on its value axis) draws a shear. Any other part with a
