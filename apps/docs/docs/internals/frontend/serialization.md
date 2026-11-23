@@ -475,8 +475,12 @@ value in both places, a `RelateOperandIR`
 `{ type: "ref", selection: "name", scope }`: a `RefMarkIR` whose `scope` is
 required, as a constraint's `refs` entry and as a child of a drawing clause.
 The validator checks each `refs` entry with the same ref walker, so an error
-names the entry's path. Python serializes a constraint's operands as the ref
-marks they are (`_refs_ir`). Its `scope` is the id of the `.relate()`
+names the entry's path. An `align`'s entry may instead be a mean of
+positions, `MeanOperandIR` `{ type: "mean", refs }`, whose `refs` are again
+operands of `align` (`walkAlignOperand`); `constraintFromIR` rebuilds it as
+`mean([...])`, and any other constraint's entries are refs only. Python
+serializes a constraint's operands as the ref marks they are, and a `Mean` as
+its own entry (`_refs_ir`). An operand's `scope` is the id of the `.relate()`
 call that bound it, which may be an enclosing layer's call when the clause
 holds a nested related layer. Python mints the id per call
 (`relate-<uuid4>`), so ids from separate mark-function replies never clash.

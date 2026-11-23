@@ -19,7 +19,7 @@ import { combine, byDepth, mount } from "./_shared";
 //
 // ── MAPPING. Under polar(): x = θ (radians 0..2π), y = r (radius). ───────────
 // A sector wedge SWEEPS through θ, so the θ-dimension is EMBEDDED in the node's
-// width (emX:true, measured in radians); the radial thickness is its height
+// width (a data weight, or unsized); the radial thickness is its height
 // (emY:true, measured in r-units). Same embedded-wedge technique as the
 // Sunburst / IciclePlot(polar) templates.
 //   - sibling = (distribute θ, align r): siblings pack angularly into their
@@ -100,7 +100,6 @@ const node = (d: any) =>
     ? rect({
         w: datum(1),
         h: RING_THICKNESS,
-        emX: true,
         emY: true,
         fill: byDepth(sectorBlues)(d),
         stroke: "#2f78b8",
@@ -108,7 +107,6 @@ const node = (d: any) =>
       })
     : rect({
         h: RING_THICKNESS,
-        emX: true,
         emY: true,
         fill: byDepth(sectorBlues)(d),
         stroke: "#2f78b8",

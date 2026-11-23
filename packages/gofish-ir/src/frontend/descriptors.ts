@@ -1787,7 +1787,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       spacing: {
         type: SPACING_TYPE,
         default: 8,
-        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
+        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so n children have n gaps; a partial sweep has n - 1.",
       },
       alignment: {
         type: t.string,
@@ -2776,11 +2776,10 @@ export const COORDS: Record<string, ConstructDescriptor> = {
  *  operand, or one anchor per operand. */
 const alignAxis = (axis: string): FieldSpec => ({
   type: t.union(
-    // PLACEHOLDER: "mean" is not signed off.
-    t.enum(...ALIGN_ANCHORS, "span", "size", "mean"),
+    t.enum(...ALIGN_ANCHORS, "span", "size"),
     t.array(t.enum(...ALIGN_ANCHORS))
   ),
-  doc: `How the refs line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), "mean" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, ${axis} is left as it is.`,
+  doc: `How the refs line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. A ref may be a mean of positions (\`mean([a, b])\`), whose anchor is the mean of the same anchor of its refs. Omitted, ${axis} is left as it is.`,
 });
 
 /** A coordinate of `Constraint.position`: a pixel or a `datum(v)`. */

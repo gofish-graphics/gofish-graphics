@@ -1175,6 +1175,51 @@ def _callback_refs(
     return {name: operand(name) for name in names}
 
 
+class Mean:
+    """The mean of its operands' positions, an operand of `Constraint.align`
+    alone: `mean([a, b])`. It is no node: it has no ink and takes no room.
+    On each axis the align reads one anchor of it, the mean of the same
+    anchor of each operand. An operand may be a mean itself, which weighs as
+    one operand."""
+
+    def __init__(self, operands: List[Any]):
+        self.operands = operands
+
+    @property
+    def name(self) -> str:
+        return "mean(%s)" % ", ".join(
+            getattr(o, "name", None) or getattr(o, "selection", None) or repr(o)
+            for o in self.operands
+        )
+
+    def to_dict(self, payload: "_Payload") -> dict:
+        return {"type": "mean", "refs": _refs_ir(self.operands, payload)}
+
+
+def mean(operands: List[Any]) -> Mean:
+    """The mean of the positions of `operands` (refs, or means of them), as
+    an operand of `Constraint.align`: `Constraint.align([p, mean([a, b])],
+    x="middle")` puts p's middle at the mean of a's and b's middles."""
+    if not isinstance(operands, (list, tuple)) or len(operands) == 0:
+        raise ValueError(
+            "mean: expected a list of at least one operand, e.g. mean([a, b])."
+        )
+    return Mean(list(operands))
+
+
+def _node_operands(ctype: str, refs: List[Any]) -> List[Any]:
+    """`refs`, checked to hold no mean: a mean is an operand of
+    `Constraint.align` alone, as in JS (`nodeOperands`)."""
+    for i, r in enumerate(refs):
+        if isinstance(r, Mean):
+            raise ValueError(
+                f"Constraint.{ctype}: operand {i + 1} is {r.name}, a mean of "
+                "positions, which only Constraint.align takes. Align a node "
+                "to the mean instead."
+            )
+    return refs
+
+
 class AlignConstraint:
     """IR carrier for `Constraint.align(refs, x=..., y=...)`."""
 
@@ -1291,7 +1336,8 @@ class Constraint:
 
         Args:
             refs: List of RefSentinels (typically the kwargs given to the
-                relate callback).
+                relate callback), or means of them (`mean([a, b])`), each
+                at the mean of the same anchor of its refs.
             x: Optional `"start" | "middle" | "end" | "baseline"` — alignment
                 on the x-axis. Also accepts the interval-statistic values
                 `"span"` (the target adopts the source's position AND size)
@@ -1334,7 +1380,7 @@ class Constraint:
                 Forces `spacing` to 0. Mirrors spread's `glue`.
         """
         return DistributeConstraint(
-            refs,
+            _node_operands("distribute", refs),
             _distribute_constraint_opts(
                 dir=dir, spacing=spacing, order=order, glue=glue
             ),
@@ -1364,7 +1410,8 @@ class Constraint:
                 on the coordinate. Defaults to "middle" (the ref's center).
         """
         return PositionConstraint(
-            refs, _position_constraint_opts(x=x, y=y, anchor=anchor)
+            _node_operands("position", refs),
+            _position_constraint_opts(x=x, y=y, anchor=anchor)
         )
 
     @staticmethod
@@ -1398,7 +1445,8 @@ class Constraint:
                 "Constraint.nest requires exactly 2 refs [outer, inner], "
                 f"got {len(refs)}"
             )
-        return NestConstraint(refs, _nest_constraint_opts(x=x, y=y))
+        return NestConstraint(
+            _node_operands("nest", refs), _nest_constraint_opts(x=x, y=y))
 
     @staticmethod
     def z_above(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:
@@ -1408,12 +1456,12 @@ class Constraint:
         affect position. `z_below(a, b)` is equivalent to `z_above(b, a)`;
         both spellings are provided so the spec reads naturally either way.
         """
-        return ZOrderConstraint("zAbove", [a, b])
+        return ZOrderConstraint("zAbove", _node_operands("z_above", [a, b]))
 
     @staticmethod
     def z_below(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:
         """`a` paints behind `b` (under in z). See `Constraint.z_above`."""
-        return ZOrderConstraint("zBelow", [a, b])
+        return ZOrderConstraint("zBelow", _node_operands("z_below", [a, b]))
 
 
 def _relate_clauses(result: Any) -> List[Any]:

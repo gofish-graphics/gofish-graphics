@@ -28,8 +28,9 @@ import { initializeContainer } from "../helper";
 //
 // EMBEDDED-DIMENSION WEDGE. A sector wedge SWEEPS through θ, so the node's
 // θ-dimension is EMBEDDED in the polar transform: the rect's WIDTH is measured
-// in θ-units (radians) with emX:true, so its width sweeps an arc rather than a
-// flat pixel span. Its r-dimension (height, emY:true) is the ring thickness.
+// in θ-units (a data weight, or unsized), so its width sweeps an arc rather
+// than a flat pixel span. Its r-dimension (height) is the ring thickness: each
+// ring touches the next, so its pixel height is a length of the space too.
 // This is the hard "embedded vs non-embedded dimension" case:
 //   - LEAVES carry an explicit θ-width = leafTheta (their angular share).
 //   - INTERNAL nodes get NO width — nest grows the parent's θ-width to its
@@ -92,24 +93,20 @@ const sectorTree = {
 
 const bandHeight = 90; // radial thickness of one ring
 
-// Wedge node: width in θ-units (emX) sweeps an arc; height in r-units (emY) is
-// the ring thickness. Leaves carry the explicit θ-share; internal nodes leave
+// Wedge node: width in θ-units sweeps an arc; height is the ring thickness,
+// and rings touch, so both are lengths of the polar space. Leaves carry the explicit θ-share; internal nodes leave
 // width to nest (grows to children's combined arc).
 const node = (d: any) =>
   d.height === 0
     ? rect({
         w: datum(1),
         h: bandHeight,
-        emX: true,
-        emY: true,
         fill: byDepth(sectorRamp)(d),
         stroke: "white",
         strokeWidth: 1.5,
       })
     : rect({
         h: bandHeight,
-        emX: true,
-        emY: true,
         fill: byDepth(sectorRamp)(d),
         stroke: "white",
         strokeWidth: 1.5,

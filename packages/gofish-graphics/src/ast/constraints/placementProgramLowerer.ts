@@ -201,14 +201,21 @@ export class PlacementProgramLowerer<T> implements PlacementFactEmitter<T> {
   }
 
   mean(request: PlacementMeanRequest): void {
-    if (!this.target(request.target.key)) return;
-    const operands = request.operands.filter(({ key }) => this.target(key));
-    if (operands.length === 0) return;
+    // A mean of nodes some of which are not here is no mean of the rest.
+    if (
+      !this.target(request.target.key) ||
+      !request.operands.every(({ key }) => this.target(key))
+    )
+      return;
     this.anchorFacts(request.axis).push({
       type: "anchor-mean",
       axis: request.axis,
       target: { node: request.target.key, anchor: request.target.anchor },
-      operands: operands.map(({ key, anchor }) => ({ node: key, anchor })),
+      operands: request.operands.map(({ key, anchor, weight }) => ({
+        node: key,
+        anchor,
+        weight,
+      })),
       owner: request.owner,
     });
   }

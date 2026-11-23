@@ -73,7 +73,7 @@ import {
 import {
   axisIndex,
   directSlot,
-  isPointAlign,
+  pointAlignOn,
   type AlignAnchor,
   type ConstraintRef,
   type ResolvedOperands,
@@ -311,12 +311,13 @@ export function planConstraintComposition(
     const idx = idxOf(a.children);
     if (idx === undefined) continue;
     for (const axis of [0, 1] as const) {
-      const spec = axis === 0 ? a.x : a.y;
+      const spec = pointAlignOn(a, axis);
       // "span"/"size" (#726) are placement-time interval statistics, not a
       // point-anchor space fold — the target they write is UNDEFINED on this
       // axis by construction (that's the unbound-target scope), so it
-      // contributes no space claim here.
-      if (typeof spec === "string" && isPointAlign(spec))
+      // contributes no space claim here. Nor does an align with a mean,
+      // whose averaged nodes are not at its point.
+      if (typeof spec === "string")
         alignFolds.push({ axis, anchor: spec, idx });
     }
   }
@@ -492,8 +493,8 @@ export function planSharing(
       }
       case "align": {
         const idx = idxOf(c.children);
-        if (isPointAlign(c.x)) joins[0].push(idx);
-        if (isPointAlign(c.y)) joins[1].push(idx);
+        if (pointAlignOn(c, 0) !== undefined) joins[0].push(idx);
+        if (pointAlignOn(c, 1) !== undefined) joins[1].push(idx);
         break;
       }
       case "distribute": {

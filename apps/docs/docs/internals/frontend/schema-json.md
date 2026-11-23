@@ -962,6 +962,34 @@ for the API.
         }
       ]
     },
+    "MeanOperandIR": {
+      "description": "A mean of positions, an operand of align alone: its anchor is the mean of the same anchor of its refs. It has no ink and takes no room.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "mean"
+        },
+        "refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/AlignOperandIR"
+          }
+        }
+      }
+    },
+    "AlignOperandIR": {
+      "description": "An operand of align: a .relate() operand or a mean of them.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RelateOperandIR"
+        },
+        {
+          "$ref": "#/$defs/MeanOperandIR"
+        }
+      ]
+    },
     "ChannelValue": {
       "description": "Right-hand side of a channel slot. Bare primitives for the shorthand path; tagged objects for the explicit field/datum/literal constructors and Python-bridge sentinels.",
       "oneOf": [
@@ -1225,7 +1253,7 @@ for the API.
               "$ref": "#/$defs/Spacing"
             }
           ],
-          "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
+          "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so n children have n gaps; a partial sweep has n - 1.",
           "default": 8
         },
         "alignment": {
@@ -1959,15 +1987,7 @@ for the API.
             "x": {
               "anyOf": [
                 {
-                  "enum": [
-                    "start",
-                    "middle",
-                    "end",
-                    "baseline",
-                    "span",
-                    "size",
-                    "mean"
-                  ]
+                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
                 },
                 {
                   "type": "array",
@@ -1976,20 +1996,12 @@ for the API.
                   }
                 }
               ],
-              "description": "How the refs line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), \"mean\" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, x is left as it is."
+              "description": "How the refs line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. A ref may be a mean of positions (`mean([a, b])`), whose anchor is the mean of the same anchor of its refs. Omitted, x is left as it is."
             },
             "y": {
               "anyOf": [
                 {
-                  "enum": [
-                    "start",
-                    "middle",
-                    "end",
-                    "baseline",
-                    "span",
-                    "size",
-                    "mean"
-                  ]
+                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
                 },
                 {
                   "type": "array",
@@ -1998,7 +2010,7 @@ for the API.
                   }
                 }
               ],
-              "description": "How the refs line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), \"mean\" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, y is left as it is."
+              "description": "How the refs line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. A ref may be a mean of positions (`mean([a, b])`), whose anchor is the mean of the same anchor of its refs. Omitted, y is left as it is."
             }
           },
           "anyOf": [
@@ -2013,7 +2025,7 @@ for the API.
         "refs": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/RelateOperandIR"
+            "$ref": "#/$defs/AlignOperandIR"
           }
         }
       }

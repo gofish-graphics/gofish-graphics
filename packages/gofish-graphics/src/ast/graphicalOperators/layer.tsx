@@ -62,7 +62,7 @@ import {
 import {
   axisIndex,
   axisName,
-  isPointAlign,
+  pointAlignOn,
   directSlot,
   type ConstraintPosScales,
   type ResolvedOperands,
@@ -482,8 +482,9 @@ export const layer = createNodeOperatorSequential(
         reads: (number | UnderlyingSpace)[];
       }[] = [];
       for (const c of aligns) {
-        const spec = c.type === "align" ? c[axisName(axis)] : undefined;
-        if (spec !== "span" && !isPointAlign(spec)) continue;
+        if (c.type !== "align") continue;
+        if (c[axisName(axis)] !== "span" && pointAlignOn(c, axis) === undefined)
+          continue;
         const moved: number[] = [];
         const reads: (number | UnderlyingSpace)[] = [];
         for (const r of c.children) {

@@ -482,11 +482,14 @@ constraints. A chain (`distribute`, a spread or a stack) with a box gap of 0
 shares each part's start with the previous part's end. A node whose own edge
 is shared passes it to a child that lies on it: an `align` at `start` or `end`
 (both for `span`), the first or last part of a chain with a gap 0 or more, and
-the content of a ring. It passes nothing when the relation misses a child or
-the node has a size of its own on the axis, since then its edge is not its
-children's hull. A center relation (`middle`, `baseline`, a pitch) pins a
-point, not an edge, and a chain with a gap pins no edge to another, so neither
-shares one. So pixel rings stacked along a polar radius are drawn as annular
+the content of a ring. An only child lies on both edges of its parent, since
+it is the hull. So do marks of one literal size and no position of their own
+put at one anchor by an `align`, `middle` and `baseline` included, since they
+take one interval, which is then the hull. It passes nothing when the
+relation misses a child or the node has a size of its own on the axis, since
+then its edge is not its children's hull. Otherwise a center relation
+(`middle`, `baseline`, a pitch) pins a point, not an edge, and a chain with a
+gap pins no edge to another, so neither shares one. So pixel rings stacked along a polar radius are drawn as annular
 sectors that touch, while a pixel-width bar that touches nothing keeps its
 width as ink. In a linear space the three drawings of a rect are the same box,
 so Route A changes nothing there.
@@ -846,6 +849,9 @@ fixed-size nodes report their size).
   runs once in formulas (`Tape`), so each box's edges are piecewise-linear
   in σ, and the hull is their envelope (`buildPlan` in `solver/plan.ts`). A ring is such a layer, so its claim holds its axis, titles or
   legend around what it wraps, and so does a scatter's around its marks.
+  A chain that closes around a closed axis (a spread around a full turn)
+  reaches one lap past its first part, its last gap included
+  (`closingTurn`), so the slack its members share is what n gaps leave.
 - **Frames read across layers.** A `position` with `in: ref` places a
   datum in the frame of the node `ref` names (#1257). The claim walk reads
   that frame's data 0 and one data unit up the plans from the node to the

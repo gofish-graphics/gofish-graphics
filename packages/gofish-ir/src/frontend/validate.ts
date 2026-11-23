@@ -1478,6 +1478,21 @@ function walkRelateOperand(node: unknown, path: string, ctx: Context): void {
     });
 }
 
+/** An operand of `align`: a `.relate()` operand, or a mean of positions
+ *  `{ type: "mean", refs }` over at least one operand of `align`. */
+function walkAlignOperand(node: unknown, path: string, ctx: Context): void {
+  if (!isObject(node) || node.type !== "mean") {
+    walkRelateOperand(node, path, ctx);
+    return;
+  }
+  expectField(node, "refs", path, ctx, (v, p) => {
+    walkArray(v, p, ctx, walkAlignOperand);
+    if (Array.isArray(v) && v.length === 0)
+      ctx.errors.push({ path: p, message: "a mean needs at least one ref" });
+  });
+  rejectUnknown(node, ["type", "refs"], path, ctx);
+}
+
 /** A relate clause is a constraint when it carries `refs`, else a mark. */
 function walkRelateClause(node: unknown, path: string, ctx: Context): void {
   if (isObject(node) && isConstraintIR(node as RelateClauseIR))
@@ -1501,7 +1516,7 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     return;
   }
   expectField(node, "refs", path, ctx, (v, p) => {
-    walkArray(v, p, ctx, walkRelateOperand);
+    walkArray(v, p, ctx, t === "align" ? walkAlignOperand : walkRelateOperand);
     // `nest` relates exactly two refs: [outer, inner].
     if (t === "nest" && Array.isArray(v) && v.length !== 2) {
       ctx.errors.push({

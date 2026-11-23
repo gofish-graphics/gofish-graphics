@@ -687,7 +687,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so n children have n gaps; a partial sweep has n - 1. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
@@ -979,7 +979,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so n children have n gaps; a partial sweep has n - 1. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
@@ -1293,8 +1293,8 @@ def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | 
     """Align the refs on one or both axes.
 
     Args:
-        x: How the refs line up on x: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), "mean" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, x is left as it is.
-        y: How the refs line up on y: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), "mean" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, y is left as it is.
+        x: How the refs line up on x: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. A ref may be a mean of positions (`mean([a, b])`), whose anchor is the mean of the same anchor of its refs. Omitted, x is left as it is.
+        y: How the refs line up on y: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. A ref may be a mean of positions (`mean([a, b])`), whose anchor is the mean of the same anchor of its refs. Omitted, y is left as it is.
     """
     if x is None and y is None:
         raise ValueError("Constraint.align requires at least one of x, y")

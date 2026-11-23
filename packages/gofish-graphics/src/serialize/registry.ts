@@ -74,6 +74,7 @@ import { geo } from "../ast/coordinateTransforms/geo";
 import { GoFishRef } from "../ast/_ref";
 import {
   Constraint,
+  type AlignOperand,
   type ConstraintRef,
   type ConstraintSpec,
 } from "../ast/constraints";
@@ -324,17 +325,23 @@ type ConstraintOptionsIR<T extends Frontend.ConstraintIR["type"]> = Extract<
 export const CONSTRAINT_FACTORIES: {
   [T in Frontend.ConstraintIR["type"]]: (
     options: ConstraintOptionsIR<T>,
-    refs: ConstraintRef[]
+    refs: AlignOperand[]
   ) => ConstraintSpec;
 } = {
   align: (options, refs) => Constraint.align(options, refs),
-  distribute: (options, refs) => Constraint.distribute(options, refs),
-  position: (options, refs) => Constraint.position(options, refs),
+  // A mean is an operand of align alone: the validator holds the other
+  // constraints to refs, and each factory throws on a mean.
+  distribute: (options, refs) =>
+    Constraint.distribute(options, refs as ConstraintRef[]),
+  position: (options, refs) =>
+    Constraint.position(options, refs as ConstraintRef[]),
   // The validator holds a nest to exactly two refs, [outer, inner].
   nest: (options, refs) =>
     Constraint.nest(options, refs as [ConstraintRef, ConstraintRef]),
-  zAbove: (_options, [a, b]) => Constraint.zAbove(a, b),
-  zBelow: (_options, [a, b]) => Constraint.zBelow(a, b),
+  zAbove: (_options, [a, b]) =>
+    Constraint.zAbove(a as ConstraintRef, b as ConstraintRef),
+  zBelow: (_options, [a, b]) =>
+    Constraint.zBelow(a as ConstraintRef, b as ConstraintRef),
 };
 
 /** The constraints whose wire node has options (not `zAbove`/`zBelow`). */

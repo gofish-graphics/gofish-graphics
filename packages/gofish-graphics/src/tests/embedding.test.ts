@@ -23,6 +23,7 @@ import { DatumValueImpl, baseEmbedded } from "../ast/data";
 import { fresh } from "./testHelpers";
 import { Spread } from "../ast/graphicalOperators/spread";
 import { resolveReferences } from "../ast/_ref";
+import { layer } from "../ast/graphicalOperators/layer";
 
 /** A data value read from column `name`, i.e. an amount of that quantity. */
 const q = (v: number, name: string) => new DatumValueImpl(v, { name });
@@ -273,6 +274,81 @@ console.log("# embedding: Route B in context");
       ),
       [0, 1, 0]
     )) === JSON.stringify([true, false])
+  );
+
+  // An only child is its hull: a wrapper with no size of its own (gotree
+  // wraps each node this way) has the child's edges, so a ring inside one
+  // still touches its neighbor. A wrapper with a size of its own does not.
+  for (const i of [0, 1]) {
+    ok(
+      `a ring wrapped alone, edge to edge: ring ${i} embeds on both axes`,
+      (await leafEmbeds(
+        polarOf(
+          Spread({ dir: "y", spacing: 0 }, [
+            await layer([ring()]),
+            await layer([ring()]),
+          ])
+        ),
+        i === 0 ? [0, 0, 0] : [0, 1, 0]
+      )) === JSON.stringify([true, true])
+    );
+  }
+  ok(
+    "a ring wrapped alone in a sized wrapper: the radius stays ink",
+    (await leafEmbeds(
+      polarOf(
+        Spread({ dir: "y", spacing: 0 }, [
+          ring(),
+          await layer({ h: 200 }, [ring()]),
+        ])
+      ),
+      [0, 1, 0]
+    )) === JSON.stringify([true, false])
+  );
+  // Rings of one pixel size aligned at the middle take one interval, the
+  // hull's, so each lies on both of its edges and touches the parent ring.
+  for (const i of [0, 1]) {
+    ok(
+      `sunburst child rings of one size aligned at the middle: ring ${i} embeds`,
+      (await leafEmbeds(
+        polarOf(
+          Spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+            ring(),
+            Spread({ dir: "x", glue: true, alignment: "middle" } as any, [
+              ring(),
+              ring(),
+            ]),
+          ])
+        ),
+        [0, 1, i]
+      )) === JSON.stringify([true, true])
+    );
+  }
+  // The rose: each month a stack of pixel-width bars aligned at their
+  // baseline, months edge to edge. Bars of one width take the hull's
+  // interval, so the first month's bars touch the second month too.
+  const rose = (w2: number) =>
+    polarOf(
+      Spread({ dir: "x", spacing: 0 }, [
+        Spread({ dir: "y", glue: true, alignment: "baseline" } as any, [
+          bar(),
+          Rect({ w: w2, h: q(3, "amount") }),
+        ]),
+        Spread({ dir: "y", glue: true, alignment: "baseline" } as any, [
+          bar(),
+          bar(),
+        ]),
+      ])
+    );
+  for (const i of [0, 1]) {
+    ok(
+      `rose bars of one width: the first month's bar ${i} embeds x`,
+      (await leafEmbeds(rose(16), [0, 0, i])) === JSON.stringify([true, true])
+    );
+  }
+  ok(
+    "rose bars of two widths: the first month's bar stays a line",
+    (await leafEmbeds(rose(10), [0, 0, 0])) === JSON.stringify([false, true])
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

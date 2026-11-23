@@ -287,6 +287,36 @@ export function keysDownTheScreen(node: GoFishNode): string[] | undefined {
   return yDirection(node) === -1 ? [...down].reverse() : down;
 }
 
+/**
+ * Whether the chain `node` lays along `axis` closes around: its room is the
+ * whole of a closed axis, one that is periodic and laid out over one whole
+ * period (`SpaceDeclaration.closed`, as a full-turn polar angle is). The
+ * end of that room is its start, so the chain's last part neighbors its
+ * first, and the chain lays n gaps between n parts, the last one after its
+ * last part. Its room is the whole axis from `node` up to the space it is
+ * in, until a node has a size of its own there, is a part of a chain along
+ * the axis (a group of a spread of groups, whose own chain stays open), or
+ * is a scope of its own (a cell it is given). A stack glues its parts, so
+ * it lays no gap either way.
+ */
+export function closesAround(node: GoFishNode, axis: 0 | 1): boolean {
+  for (let n = node; ; ) {
+    if (n.fixedSize(axis) !== undefined) return false;
+    const p = n.parent;
+    if (p === undefined) return false;
+    if (p._space !== undefined) return p._space.closed?.[axis] === true;
+    if (
+      (p.axisDir === axis &&
+        p.constraints.some(
+          (c) => c.type === "distribute" && axisIndex(c.dir) === axis
+        )) ||
+      p.isScope(axis)
+    )
+      return false;
+    n = p;
+  }
+}
+
 export function distributePlacementAnchors({
   spacing,
 }: Pick<DistributeConstraint, "spacing">): {

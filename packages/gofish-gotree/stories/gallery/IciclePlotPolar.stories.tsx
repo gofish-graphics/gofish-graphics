@@ -23,9 +23,9 @@ import { initializeContainer } from "../helper";
 // is a polar wedge (rect swept through θ), per the brief.
 //
 // ── EMBEDDED-DIMENSION APPROACH (the hard part) ──────────────────────────────
-// A wedge SWEEPS in θ, so the θ-dimension is *embedded* (emX) and the radial band
-// is *embedded* in h (emY), so once polar() maps it the rect renders as an
-// annular wedge.
+// A wedge SWEEPS in θ, so the θ-dimension is *embedded* (a data weight, or
+// unsized) and the radial band is *embedded* in h (emY), so once polar() maps
+// it the rect renders as an annular wedge.
 //
 // The dsl's "include" (X.Root) — parent SPANS its children's angular extent — is
 // realized by `nest` on θ (the proper containment primitive): the parent leaves
@@ -64,7 +64,6 @@ const node = (d: any) =>
   d.height === 0
     ? rect({
         w: datum(1),
-        emX: true,
         h: bandHeight,
         emY: true,
         fill: byDepth(icicleBlues)(d),
@@ -72,7 +71,6 @@ const node = (d: any) =>
         strokeWidth: 2,
       })
     : rect({
-        emX: true,
         h: bandHeight,
         emY: true,
         fill: byDepth(icicleBlues)(d),

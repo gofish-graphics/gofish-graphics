@@ -376,6 +376,7 @@ console.log("# constraint confluence: explicit pin + align");
   const align: AlignConstraint = {
     type: "align",
     x: "middle",
+    operands: [A, B],
     children: [A, B],
   };
 
@@ -412,11 +413,13 @@ console.log("# constraint confluence: normalized floating components");
   const centerValueOnBox: AlignConstraint = {
     type: "align",
     x: "middle",
+    operands: [C, A],
     children: [C, A],
   };
   const startLabelOnBox: AlignConstraint = {
     type: "align",
     x: "start",
+    operands: [B, A],
     children: [B, A],
   };
 
@@ -456,6 +459,7 @@ console.log("# constraint confluence: baseline offsets");
   const alignBaselines: AlignConstraint = {
     type: "align",
     x: "baseline",
+    operands: [A, B],
     children: [A, B],
   };
   const asymmetric = (name: string) =>
@@ -499,6 +503,7 @@ console.log("# constraint confluence: nest and grid placement");
   const alignRow: AlignConstraint = {
     type: "align",
     y: "middle",
+    operands: [A, B],
     children: [A, B],
   };
   // Two fill columns of one share each: (300 − 10) / 2 = 145 px.
@@ -587,6 +592,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   const alignAC: AlignConstraint = {
     type: "align",
     x: "middle",
+    operands: [A, C],
     children: [A, C],
   };
   const withAlign = (order: Constraint[]) => {
@@ -918,6 +924,7 @@ console.log("# constraint confluence: grid proposal ownership");
   const alignMix: AlignConstraint = {
     type: "align",
     y: "middle",
+    operands: [A, B],
     children: [A, B],
   };
   ok(
@@ -1118,7 +1125,7 @@ console.log("# constraint confluence: placement constraint lowering");
 
   const loweredAlign = lowerPlacementConstraints(
     numbers,
-    [{ type: "align", x: "middle", children: [A, B] }],
+    [{ type: "align", x: "middle", operands: [A, B], children: [A, B] }],
     targets("A", "B"),
     [300, 200],
     pixelGaps
@@ -1261,6 +1268,7 @@ console.log("# constraint confluence: interval position + align");
   const alignAB: AlignConstraint = {
     type: "align",
     x: "middle",
+    operands: [A, B],
     children: [A, B],
   };
   expectConfluent(
@@ -1289,6 +1297,7 @@ console.log("# constraint confluence: region cell + align on the cell's axis");
   const alignStarts: AlignConstraint = {
     type: "align",
     x: "start",
+    operands: [A, B, C],
     children: [A, B, C],
   };
   expectConfluent(
@@ -1559,6 +1568,7 @@ console.log("# constraint confluence: span size-setting");
   const alignCenters: AlignConstraint = {
     type: "align",
     x: "middle",
+    operands: [A, B],
     children: [A, B],
   };
   const apply = (constraints: Constraint[]): Geometry => {
@@ -1610,6 +1620,7 @@ console.log("# constraint confluence: span size-setting");
   const alignCentersOnB: AlignConstraint = {
     type: "align",
     x: "middle",
+    operands: [B, A],
     children: [B, A],
   };
   expectConfluent(
@@ -1667,7 +1678,7 @@ console.log("# constraint confluence: self-placement and override");
   // arrives as an explicit ownership input, not a `placementOn` method on the
   // target). align must leave A where its own scale puts it.
   solveAndSeat(
-    [{ type: "align", x: "baseline", children: [A, B] }],
+    [{ type: "align", x: "baseline", operands: [A, B], children: [A, B] }],
     targets,
     [300, 200],
     [(value) => value * 10 - 200, undefined],
@@ -1686,7 +1697,7 @@ console.log("# constraint confluence: self-placement and override");
   ]);
   sourceTargets.get("A")!.pinAnchor!("x", 40, "min");
   solveAndSeat(
-    [{ type: "align", x: "baseline", children: [A, B] }],
+    [{ type: "align", x: "baseline", operands: [A, B], children: [A, B] }],
     sourceTargets,
     [300, 200],
     [(value) => value * 10 - 200, undefined]
@@ -1707,6 +1718,7 @@ console.log("# constraint confluence: self-placement and override");
   const baselineAlign: AlignConstraint = {
     type: "align",
     x: "baseline",
+    operands: [A, B],
     children: [A, B],
   };
   const sameSolve = solveAndSeat;

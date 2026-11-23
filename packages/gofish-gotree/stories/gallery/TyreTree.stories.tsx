@@ -58,10 +58,11 @@ const sampleTree = (() => {
 //
 // ── EMBEDDED-DIMENSION WEDGE (the hard part) ─────────────────────────────────
 // A wedge SWEEPS in θ, so the θ-dimension is embedded in the node's width:
-//   w = d.width * leafTheta   with emX:true   (d.width = leaf count from d3-hierarchy)
+//   w = d.width * leafTheta   (d.width = leaf count from d3-hierarchy)
 //   h = (d.height + 1) * band with emY:true   (rdepth → radial extent, leaves ≥1 band)
-// emX/emY tell gofish the rect's width/height are measured in the transform's
-// DOMAIN units (radians for θ, r-units for r), not pixels. Because each node's
+// A data width (or none) is a length of the polar space, and emY says the same
+// of the pixel height: both are measured in the transform's DOMAIN units
+// (radians for θ, r-units for r), not pixels. Because each node's
 // angular width is its leaf-count share, a parent's width equals the sum of its
 // children's widths automatically — so nest-θ (pad 0) and the embedded width
 // agree, and the parent wedge spans exactly its subtree's arc (RootWidth=value).
@@ -107,7 +108,6 @@ const node = (d: any) =>
   d.height === 0
     ? rect({
         w: datum(1),
-        emX: true,
         h: (d.height + 1) * band,
         emY: true,
         fill: byDepth(tyreBlues)(d),
@@ -115,7 +115,6 @@ const node = (d: any) =>
         strokeWidth: 2,
       })
     : rect({
-        emX: true,
         h: (d.height + 1) * band,
         emY: true,
         fill: byDepth(tyreBlues)(d),

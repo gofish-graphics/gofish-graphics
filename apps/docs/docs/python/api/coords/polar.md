@@ -63,11 +63,11 @@ Polar also declares its own names for the two axes: `theta` for the angle and
 chart(data, coord=Coord.polar()) \
     .flow(spread(by="category", dir="theta")) \
     .mark(rect(dims={"theta": {"size": 0.4}, "r": {"size": "value"}},
-               em_x=True, em_y=True))
+               em_x=True))
 ```
 
 This is the same chart as `spread(by="category", dir="x")` with
-`rect(w=0.4, h="value", em_x=True, em_y=True)`. The names only work inside a
+`rect(w=0.4, h="value", em_x=True)`. The names only work inside a
 coordinate space that declares them; anywhere else, `"theta"` raises an error
 that lists the names you can use there. A coordinate space nested inside polar
 that declares no names, such as `Coord.wavy()`, hides them too.

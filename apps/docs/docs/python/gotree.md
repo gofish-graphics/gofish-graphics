@@ -252,9 +252,11 @@ sibling = lambda children: layer(children)
 angle and y as the radius. Nodes drawn as circles are points there, so give
 their combiners a middle pitch, `Spacing.pitch(angle, at="middle")`, with the
 angle in radians.
-Wedges that should sweep around the circle are rects with `em_x=True` and
-`em_y=True`. The [JavaScript page](/js/gotree#coord-coordinate-transform) has
-the details.
+A wedge sweeps around the circle when its size is a data value such as
+`datum(1)`, is left for `nest` to grow, or touches a neighbor's edge. A pixel
+size that touches nothing is drawn flat, and `em_x=True` or `em_y=True` sweeps
+it anyway. The [JavaScript page](/js/gotree#coord-coordinate-transform) has the
+details.
 
 ## Differences from JavaScript
 

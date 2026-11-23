@@ -40,7 +40,6 @@ export const RoseRadius: StoryObj<Args> = {
       .mark(
         rect({
           w: (Math.PI * 2) / 6,
-          emX: true,
           fill: "lake",
           dims: { r: { size: (d: { count: number }) => Math.sqrt(d.count) } },
         })

@@ -186,8 +186,10 @@ export type { PolygonCell, PlaneFields } from "./ast/polygonCells";
 export * as Binning from "./families/binning";
 
 // Constraints
-export { Constraint } from "./ast/constraints";
+export { Constraint, mean } from "./ast/constraints";
 export type {
+  AlignOperand,
+  MeanOperand,
   ConstraintRef,
   RelateEnv,
   RelateClause,

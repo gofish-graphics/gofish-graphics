@@ -4,6 +4,7 @@
 
 import type { AlignAnchor, AlignValue, Axis, ConstraintRef } from "./shared";
 import { axisIndex, type KeyOf } from "./shared";
+import { MeanOperand, meanLeaves, nodesRead, type AlignOperand } from "./mean";
 import { isUNDEFINED } from "../underlyingSpace";
 import type { PlacementFactEmitter } from "./placementFacts";
 import type { SolvePlaceable } from "./placementProgramLowerer";
@@ -11,12 +12,12 @@ import type { Arith } from "../solver/arith";
 
 /**
  * Value spec for one axis of an `align` constraint. A single anchor
- * is shared by every child (the common case). An array gives each child its
- * own anchor positionally — `align({x: ["middle", "start"]}, [A, B])` aligns
- * A's center with B's start. The array length must equal `children.length`.
- * `"span"`/`"size"` (#726) are whole-constraint values, not per-child — a
- * heterogeneous array of point anchors has no span/size equivalent, so they
- * are rejected inside an array (see `normalizedAnchors`).
+ * is shared by every operand (the common case). An array gives each operand
+ * its own anchor positionally — `align({x: ["middle", "start"]}, [A, B])`
+ * aligns A's center with B's start. The array length must equal the number
+ * of operands. `"span"`/`"size"` (#726) are whole-constraint values, not
+ * per-operand — a heterogeneous array of point anchors has no span/size
+ * equivalent, so they are rejected inside an array (see `normalizedAnchors`).
  */
 export type AlignAxisSpec = AlignValue | AlignAnchor[];
 
@@ -24,6 +25,14 @@ export interface AlignConstraint {
   type: "align";
   x?: AlignAxisSpec;
   y?: AlignAxisSpec;
+  /** The operands as written: nodes, and means of positions
+   *  ({@link MeanOperand}). Every operand is at the same point on each
+   *  axis; a mean's point is the mean of its operands' anchors. */
+  operands: AlignOperand[];
+  /** Every node the align reads, in order (`nodesRead`): its node operands
+   *  and the nodes its means average. This is what every constraint names
+   *  as its `children`, which the passes that resolve and place nodes
+   *  read. */
   children: ConstraintRef[];
 }
 
@@ -34,14 +43,37 @@ export interface AlignOptions {
 
 export const createAlignConstraint = (
   { x, y }: AlignOptions,
-  children: ConstraintRef[]
+  operands: AlignOperand[]
 ): AlignConstraint => {
   if (x === undefined && y === undefined) {
     throw new Error(
       "Constraint.align: at least one of `x` or `y` must be specified"
     );
   }
-  return { type: "align", x, y, children };
+  const means = operands.filter((o) => o instanceof MeanOperand);
+  if (means.length > 0) {
+    for (const [axis, spec] of [
+      ["x", x],
+      ["y", y],
+    ] as const)
+      if (spec === "span" || spec === "size")
+        throw new Error(
+          `Constraint.align: "${spec}" on ${axis} copies the extent of an ` +
+            `operand that is already placed, but ${means[0].name} is a ` +
+            `position, not a node: it has no extent of its own, and the ` +
+            `solve places it with the rest. Use a point anchor ("start", ` +
+            `"middle", "end", "baseline") with a mean.`
+        );
+    if (means.length === operands.length)
+      throw new Error(
+        `Constraint.align: every operand (${operands
+          .map((o) => o.name)
+          .join(", ")}) is a mean. A mean is placed by the nodes it ` +
+          `averages, so means set equal to each other place no node; ` +
+          `align at least one node to a mean.`
+      );
+  }
+  return { type: "align", x, y, operands, children: nodesRead(operands) };
 };
 
 function normalizedAnchors(
@@ -51,7 +83,7 @@ function normalizedAnchors(
   if (!Array.isArray(spec)) return new Array<AlignAnchor>(count).fill(spec);
   if (spec.length !== count) {
     throw new Error(
-      `Constraint.align: anchor array length ${spec.length} must match number of children ${count}`
+      `Constraint.align: anchor array length ${spec.length} must match number of operands ${count}`
     );
   }
   return spec;
@@ -151,30 +183,42 @@ export function lowerAlignPlacement<T>(
       emitSpanOrSize(axis, spec);
       return;
     }
-    // `"mean"`: the first operand's middle at the mean of the others'
-    // middles, one equation the solve places after its operands
-    // (`placeMeans` in differenceGraph.ts).
-    if (spec === "mean") {
-      const [first] = constraint.children;
-      const target = children.find(({ ref }) => ref === first);
-      const operands = children.filter(({ ref }) => ref !== first);
-      if (target === undefined || operands.length === 0) return;
+    // Each operand's anchor, by its place among the operands as written.
+    const anchors = normalizedAnchors(spec, constraint.operands.length);
+    const entries = constraint.operands.flatMap((ref, index) =>
+      ref instanceof MeanOperand
+        ? []
+        : [{ ref, key: keyOf(ref), anchor: anchors[index] }]
+    );
+    const nodes = entries.filter(({ key }) => targets.has(key));
+    if (nodes.length === 0) return;
+    alignNodes(axis, nodes);
+    // A mean is one more operand at the same point: the first node's anchor
+    // is at the mean of the same anchor of the nodes the mean averages. A
+    // mean any of whose nodes this solve does not place is left out, as a
+    // relation to such a node is.
+    constraint.operands.forEach((operand, index) => {
+      if (!(operand instanceof MeanOperand)) return;
+      const leaves = meanLeaves(operand).map(({ ref, weight }) => ({
+        key: keyOf(ref),
+        anchor: anchors[index],
+        weight,
+      }));
+      if (!leaves.every(({ key }) => targets.has(key))) return;
       emitter.mean({
         axis,
-        target: { key: target.key, anchor: "middle" },
-        operands: operands.map(({ key }) => ({ key, anchor: "middle" })),
+        target: { key: nodes[0].key, anchor: nodes[0].anchor },
+        operands: leaves,
         owner,
       });
-      return;
-    }
-    if (children.length === 0) return;
-    const anchors = normalizedAnchors(spec, children.length);
+    });
+  };
 
-    const entries = children.map(({ ref, key }, index) => ({
-      ref,
-      key,
-      anchor: anchors[index],
-    }));
+  /** Put the node operands at one point on `axis`. */
+  const alignNodes = (
+    axis: Axis,
+    entries: { ref: ConstraintRef; key: string; anchor: AlignAnchor }[]
+  ) => {
     const idx = axisIndex(axis);
 
     // Two-phase semantics:
@@ -199,7 +243,7 @@ export function lowerAlignPlacement<T>(
       if (!entries.some(({ key }) => isDataPositioned(idx, key))) {
         console.warn(
           `[align] ${owner} on axis "${axis}": nothing movable — every ` +
-            `operand [${children.map((c) => c.ref.name).join(", ")}] is ` +
+            `operand [${entries.map((c) => c.ref.name).join(", ")}] is ` +
             `already placed.`
         );
       }

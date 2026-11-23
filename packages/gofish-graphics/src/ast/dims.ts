@@ -172,10 +172,13 @@ export type AxisScope = {
 export const BASE_AXIS_SCOPE: AxisScope = { names: { x: 0, y: 1 } };
 
 /** What a `coord` node declares about the space it opens: the names its
- *  transform gives the axes (none for most spaces) and the transform's type. */
+ *  transform gives the axes (none for most spaces), the transform's type,
+ *  and which of its axes are closed (`closesOn` in coord.tsx: periodic, and
+ *  laid out over one whole period, as a full-turn polar angle is). */
 export type SpaceDeclaration = {
   aliases?: { x?: string; y?: string };
   type: string;
+  closed?: readonly [boolean, boolean];
 };
 
 /** The scope inside a coordinate space: `x`/`y` plus the names its transform

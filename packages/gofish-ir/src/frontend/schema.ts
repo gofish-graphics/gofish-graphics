@@ -1218,12 +1218,7 @@ export type AlignAnchorIR = "start" | "middle" | "end" | "baseline";
 
 /** One axis of an `align` constraint: an anchor or interval statistic for
  *  every operand, or one anchor per operand. */
-export type AlignAxisIR =
-  | AlignAnchorIR
-  | "span"
-  | "size"
-  | "mean"
-  | AlignAnchorIR[];
+export type AlignAxisIR = AlignAnchorIR | "span" | "size" | AlignAnchorIR[];
 
 /** A constraint over the operands of a `.relate()` call: `{ type, options?,
  *  refs }`. The keys of each kind's `options` are declared once, in
@@ -1242,7 +1237,8 @@ export type ConstraintIR =
       type: "align";
       /** At least one of `x`, `y`. */
       options: { x?: AlignAxisIR; y?: AlignAxisIR };
-      refs: RelateOperandIR[];
+      /** A ref may be a mean of positions (`MeanOperandIR`). */
+      refs: AlignOperandIR[];
     }
   | {
       type: "distribute";
@@ -1285,6 +1281,16 @@ export type ConstraintIR =
  * it.
  */
 export type RelateOperandIR = RefMarkIR & { selection: string; scope: string };
+
+/**
+ * A mean of positions, an operand of `align` alone (`mean([a, b])`): its
+ * anchor is the mean of the same anchor of its refs, which may be means
+ * themselves. It is no node: it has no ink and takes no room.
+ */
+export type MeanOperandIR = { type: "mean"; refs: AlignOperandIR[] };
+
+/** An operand of `align`: a `.relate()` operand or a mean of them. */
+export type AlignOperandIR = RelateOperandIR | MeanOperandIR;
 
 /**
  * One clause of a `.relate()` callback: a constraint over operands

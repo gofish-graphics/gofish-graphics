@@ -17,9 +17,9 @@ import { combine, byDepth, mount } from "./_shared";
 //   align. The nested distributes-on-θ compose into a single flat angular
 //   sequence (the bottom-up "flatten"): each node tiles one wedge of the disc.
 //
-// EMBEDDED-DIMENSION WEDGE. Each node is a rect whose θ-dimension (width, emX)
-// is measured in radians so it SWEEPS an arc, and whose r-dimension (height,
-// emY) is a radial band. thetaPerNode = 2π / N_total tiles the full circle when
+// EMBEDDED-DIMENSION WEDGE. Each node is a rect whose θ-dimension (width) is
+// a data weight so it SWEEPS an arc, and whose r-dimension (height, a data
+// weight too) is a radial band. thetaPerNode = 2π / N_total tiles the full circle when
 // summed by the edge-mode θ-distribute (spacing 0). RootHeight:rdepth → height
 // grows with reverse-depth (d.height): the root is the tallest wedge (reaching
 // furthest), leaves the shortest. Color:depth → byDepth() ramp, root darkest.
@@ -88,16 +88,14 @@ const clockTree = {
 // Wedge node: `w` (the θ extent) is a unit angular WEIGHT (every node an equal slot). The
 // coord is the single σ-scale-root: it sums the weights (N·σ) and fits them to
 // the angular budget, propagating one σ down through the nested distributes — so
-// the ring closes exactly with NO hand-set 2π/N. emX/emY make θ sweep an arc and
-// r a radial band. RootHeight:rdepth → height grows with d.height: root tallest.
+// the ring closes exactly with NO hand-set 2π/N. As data weights, θ sweeps an
+// arc and r is a radial band. RootHeight:rdepth → height grows with d.height: root tallest.
 // The height is a radial WEIGHT too, so the coord fits the tallest node to the
 // band between the inner radius and the rim.
 const node = (d: any) =>
   rect({
     w: datum(1),
     h: datum(d.height + 1),
-    emX: true,
-    emY: true,
     fill: byDepth()(d),
     stroke: "white",
     strokeWidth: 1.5,

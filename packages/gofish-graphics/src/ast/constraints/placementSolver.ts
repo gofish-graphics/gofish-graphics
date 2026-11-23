@@ -338,7 +338,8 @@ function reduceToAxisProblem<T>(
       continue;
     }
     if (fact.type === "anchor-mean") {
-      // `target.min + targetOffset = mean(operand.min + operandOffset)`.
+      // `target.min + targetOffset = Σ weight · (operand.min +
+      // operandOffset)`.
       const targetOffset = resolveOffset(fact.target.node, fact.target.anchor);
       const operandOffsets = fact.operands.map((o) =>
         resolveOffset(o.node, o.anchor)
@@ -352,9 +353,16 @@ function reduceToAxisProblem<T>(
       for (const o of fact.operands) participants.add(o.node);
       means.push({
         target: fact.target.node,
-        operands: fact.operands.map((o) => o.node),
+        operands: fact.operands.map((o) => ({
+          node: o.node,
+          weight: o.weight,
+        })),
         offset: A.sub(
-          A.scale(1 / operandOffsets.length, A.add(...(operandOffsets as T[]))),
+          A.add(
+            ...(operandOffsets as T[]).map((offset, i) =>
+              A.scale(fact.operands[i].weight, offset)
+            )
+          ),
           targetOffset
         ),
         owner: fact.owner,

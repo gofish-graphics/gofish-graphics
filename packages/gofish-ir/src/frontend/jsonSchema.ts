@@ -264,7 +264,15 @@ function buildConstraintDefs(): Record<string, unknown> {
       properties: {
         type: { const: descriptor.type },
         options,
-        refs: { type: "array", items: { $ref: "#/$defs/RelateOperandIR" } },
+        refs: {
+          type: "array",
+          items: {
+            $ref:
+              descriptor.type === "align"
+                ? "#/$defs/AlignOperandIR"
+                : "#/$defs/RelateOperandIR",
+          },
+        },
       },
     };
     refs.push({ $ref: `#/$defs/${defName}` });
@@ -801,6 +809,28 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       allOf: [
         { $ref: "#/$defs/RefMarkIR" },
         { required: ["scope"], properties: { selection: { type: "string" } } },
+      ],
+    },
+    MeanOperandIR: {
+      description:
+        "A mean of positions, an operand of align alone: its anchor is the mean of the same anchor of its refs. It has no ink and takes no room.",
+      type: "object",
+      required: ["type", "refs"],
+      properties: {
+        type: { const: "mean" },
+        refs: {
+          type: "array",
+          minItems: 1,
+          items: { $ref: "#/$defs/AlignOperandIR" },
+        },
+      },
+    },
+    AlignOperandIR: {
+      description:
+        "An operand of align: a .relate() operand or a mean of them.",
+      oneOf: [
+        { $ref: "#/$defs/RelateOperandIR" },
+        { $ref: "#/$defs/MeanOperandIR" },
       ],
     },
     ChannelValue: {

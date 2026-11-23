@@ -180,6 +180,35 @@ gf.layer([
 
 :::
 
+### Means of positions
+
+```ts
+mean([ref1, ref2, ...])
+```
+
+`mean` makes an operand of `Constraint.align` that is the mean of its operands' positions. It is no node: it has no ink and takes no room. The align puts it at the same point as its other operands, and reads it at the anchor it gives the mean's slot: under `"middle"` the mean of the operands' middles, under `"start"` the mean of their starts, under `"end"` the mean of their ends, and under `"baseline"` the mean of their origins. In a per-child array the mean takes one slot.
+
+```ts
+// A parent's middle at the mean of its children's middles.
+Constraint.align({ x: "middle" }, [parent, mean([first, last])]);
+
+// Two nodes at one mean, and a parent's start at the mean of the ends.
+Constraint.align({ x: "middle" }, [p, q, mean([a, b])]);
+Constraint.align({ x: ["start", "end"] }, [p, mean([a, b])]);
+
+// A mean of means weighs each inner mean as one operand: a / 2 + (b + c) / 4.
+Constraint.align({ x: "middle" }, [p, mean([a, mean([b, c])])]);
+```
+
+The mean is exact when the nodes it averages are placed together by exact constraints. When minimum gaps ([`Spacing.atLeast`](/js/api/spacing)) separate them, the solve places them first and then places the node aligned to the mean; that node cannot also be separated by minimum gaps, or placed together with only some of the nodes it averages, and either case throws.
+
+A mean is an operand of `Constraint.align` only. These throw:
+
+- a mean in `Constraint.distribute`, `position`, `nest`, `zAbove` or `zBelow`;
+- `"span"` or `"size"` on an align with a mean;
+- an align whose operands are all means;
+- `mean([])`.
+
 ## Constraint.distribute
 
 Stacks a set of children end-to-end along an axis, with optional spacing.

@@ -340,7 +340,6 @@ const sunburstNode = (d: any) =>
     w: d.width * leafTheta,
     h: bandHeight,
     emX: true,
-    emY: true,
     fill: polarGreens[Math.min(d.depth, polarGreens.length - 1)],
     stroke: "white",
     strokeWidth: 2,

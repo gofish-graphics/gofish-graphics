@@ -7,6 +7,7 @@ import {
   createMark,
   layer,
   line,
+  mean,
   rect,
   ref,
   spread,
@@ -15,8 +16,9 @@ import {
 
 // The two placement primitives of the user-space layouts proposal, through
 // the public API: a minimum gap (`Spacing.atLeast`, its slack placed by
-// `justify`) and a mean of positions (`Constraint.align({ x: "mean" })`).
-// Both spellings are PLACEHOLDERS, not signed off. No story computes a
+// `justify`) and a mean of positions (`mean([...])`, an operand of
+// `Constraint.align`). The `Spacing.atLeast` spelling is a PLACEHOLDER, not
+// signed off. No story computes a
 // position: every place comes from the solve. Not gallery-tagged.
 // Checked on 11-23: Dendrogram draws the same links as "User Space D3
 // Hierarchy/Cluster" (all 23, to the pixel), and TidyTree the same as "User
@@ -172,9 +174,9 @@ export const Dendrogram: StoryObj = {
     ])
       .relate((c) => [
         ...inner.map((n) =>
-          Constraint.align({ x: "mean" }, [
+          Constraint.align({ x: "middle" }, [
             c[n.path],
-            ...n.t.children!.map((_, i) => c[`${n.path}.${i}`]),
+            mean(n.t.children!.map((_, i) => c[`${n.path}.${i}`])),
           ])
         ),
         ...ns
@@ -278,10 +280,9 @@ const tidy = (t: Tree, path = "n"): any => {
         c[path],
         c[`${path}/kids`],
       ]),
-      Constraint.align({ x: "mean" }, [
+      Constraint.align({ x: "middle" }, [
         c[path],
-        c[kids[0]],
-        c[kids[kids.length - 1]],
+        mean([c[kids[0]], c[kids[kids.length - 1]]]),
       ]),
     ])
     .name(`${path}/sub`);

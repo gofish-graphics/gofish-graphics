@@ -9,6 +9,8 @@
 // shared edge is a position of the space, and the axis it lies on embeds
 // (`GoFishNode.resolveEmbedding`), whatever unit the mark's size is in.
 
+import type { GoFishAST } from "./_ast";
+import type { Interval } from "./dims";
 import type { GoFishNode } from "./_node";
 import { resolution } from "./_ref";
 import type { ConstraintSpec } from "./constraints";
@@ -17,7 +19,7 @@ import type { Gap } from "./constraints/gap";
 import {
   axisIndex,
   directSlot,
-  isPointAlign,
+  pointAlignOn,
   type AlignAnchor,
 } from "./constraints/shared";
 
@@ -70,17 +72,21 @@ const hugs = (node: GoFishNode, axis: 0 | 1): boolean =>
  *   does not read.
  * - **It lies on an edge of `node` that is shared.** An `align` at `start`
  *   or `end` puts that edge of each child on that edge of `node`, and a
- *   `span` puts both. A chain with a gap 0 or more starts at its first
- *   part's start and ends at its last part's end. Each holds only when the
+ *   `span` puts both. So does an `align` at any one anchor, `baseline`
+ *   too, of marks with one literal size and no position on the axis
+ *   ({@link literalSize}): they take one interval, which is the hull. A
+ *   chain with a gap 0 or more starts at its first part's start and ends
+ *   at its last part's end. Each holds only when the
  *   relation reaches every child and `node` has no size of its own on the
  *   axis, so its box is its children's hull: otherwise a child the
- *   relation misses, or `node`'s own size, may set its edge. A ring an
- *   elaboration pass put around its content (`_transparent`) is its
- *   content.
+ *   relation misses, or `node`'s own size, may set its edge. For the same
+ *   reason an only child lies on both edges of a `node` with no size of
+ *   its own, and a ring an elaboration pass put around its content
+ *   (`_transparent`) is its content.
  *
- * A center relation (`middle`, `baseline`, a pitch spacing) pins one point
- * of a child, not an edge, so it shares none. An operand that resolves
- * inside a child (a nested operand) is not read.
+ * Otherwise a center relation (`middle`, `baseline`, a pitch spacing) pins
+ * one point of a child, not an edge, so it shares none. An operand that
+ * resolves inside a child (a nested operand) is not read.
  */
 export function sharedEdgesOfChildren(
   node: GoFishNode,
@@ -95,6 +101,11 @@ export function sharedEdgesOfChildren(
     out[0] = [{ ...edges[0] }, { ...edges[1] }];
     return out;
   }
+  // An only child is its hull: where `node` has no size of its own, its
+  // edges are the child's.
+  if (out.length === 1)
+    for (const axis of [0, 1] as const)
+      if (hugs(node, axis)) out[0][axis] = { ...edges[axis] };
   if (node.constraints.length === 0) return out;
   const resolved = resolution(node);
   // Whether `slots` holds every child of `node`, and `node`'s box on `axis`
@@ -133,17 +144,27 @@ export function sharedEdgesOfChildren(
         const from = edges[axis];
         if (!from.start && !from.end) continue;
         if (!reachesEdgeOf(slots, axis)) continue;
+        const point = pointAlignOn(c, axis);
         const anchorAt = (k: number): AlignAnchor | "span" | undefined =>
           spec === "span"
             ? "span"
-            : isPointAlign(spec)
-              ? Array.isArray(spec)
-                ? spec[k]
-                : spec
+            : point !== undefined
+              ? Array.isArray(point)
+                ? point[k]
+                : point
               : undefined;
+        // Marks of one literal size put at one anchor, `baseline` too, take
+        // the same interval, which is then the hull: each lies on both.
+        const anchors = slots.map((_, k) => anchorAt(k));
+        const sizes = slots.map((i) =>
+          i === undefined ? undefined : literalSize(node.children[i], axis)
+        );
+        const coincide =
+          anchors.every((a) => a !== undefined && a === anchors[0]) &&
+          sizes.every((z) => z !== undefined && z === sizes[0]);
         slots.forEach((i, k) => {
           if (i === undefined) return;
-          const anchor = anchorAt(k);
+          const anchor = coincide ? "span" : anchors[k];
           const s = out[i][axis];
           if (from.start && (anchor === "start" || anchor === "span"))
             s.start = true;
@@ -154,3 +175,46 @@ export function sharedEdgesOfChildren(
   }
   return out;
 }
+
+/** Whether `node` places itself on `axis`: it has a position of its own. */
+const hasPosition = (node: GoFishNode, axis: 0 | 1): boolean =>
+  [
+    node.ownDims?.[axis],
+    (node.args?.dims as Interval<unknown>[] | undefined)?.[axis],
+  ].some(
+    (d) =>
+      d?.min !== undefined || d?.center !== undefined || d?.max !== undefined
+  );
+
+/**
+ * The mark whose box is `node`'s on `axis`: `node` itself when it is a
+ * mark, a ring's content, and the only child of a node with no size,
+ * position or relation of its own there, which is its child's hull and puts
+ * its child's origin at its own. Anything else is placed by what is in it.
+ */
+const markOf = (node: GoFishAST, axis: 0 | 1): GoFishNode | undefined => {
+  if (node.type === "ref") return undefined;
+  const n = node as GoFishNode;
+  if (n._transparent) return markOf(n.children[0], axis);
+  if (n.children.length === 0) return n;
+  const bare =
+    n.children.length === 1 &&
+    n.constraints.length === 0 &&
+    hugs(n, axis) &&
+    !hasPosition(n, axis);
+  return bare ? markOf(n.children[0], axis) : undefined;
+};
+
+/**
+ * `node`'s size on `axis` where its box there is a mark's ({@link markOf})
+ * with no position and a literal size in pixels: its box runs from its
+ * origin for that many pixels, so two such boxes put at one anchor are one
+ * interval.
+ */
+const literalSize = (node: GoFishAST, axis: 0 | 1): number | undefined => {
+  const mark = markOf(node, axis);
+  if (mark === undefined || hasPosition(mark, axis)) return undefined;
+  const size = (mark.args?.dims as Interval<unknown>[] | undefined)?.[axis]
+    ?.size;
+  return typeof size === "number" ? size : undefined;
+};

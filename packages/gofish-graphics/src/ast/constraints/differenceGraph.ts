@@ -173,9 +173,14 @@ function solveRelationComponents<T>(
   return { relative, componentOf, components, conflicts };
 }
 
-/** The mean of `xs` (at least one). */
-const meanOf = <T>(A: Arith<T>, xs: readonly T[]): T =>
-  A.scale(1 / xs.length, A.add(...xs));
+/** The weighted mean of `mean`'s operands, each read by `at`: `Σ weight ·
+ *  at(node)`, the weights summing to 1. */
+const meanOf = <T>(
+  A: Arith<T>,
+  mean: PlacementMean<T>,
+  at: (node: NodeId) => T
+): T =>
+  A.add(...mean.operands.map(({ node, weight }) => A.scale(weight, at(node))));
 
 /** The least of `xs` (at least one). */
 const minOf = <T>(A: Arith<T>, xs: readonly T[]): T =>
@@ -214,19 +219,20 @@ function rigidGroups<T>(
     for (let k = 0; k < pending.length; ) {
       const mean = pending[k];
       const groups = new Set(
-        mean.operands.map((node) => solved.componentOf.get(node))
+        mean.operands.map(({ node }) => solved.componentOf.get(node))
       );
       if (groups.size !== 1) {
         k++;
         continue;
       }
-      const rels = mean.operands.map((node) => solved.relative.get(node)!);
-      const at = A.add(meanOf(A, rels), mean.offset);
+      const rel = (node: NodeId) => solved.relative.get(node)!;
+      const first = mean.operands[0].node;
+      const at = A.add(meanOf(A, mean, rel), mean.offset);
       joined.push(
         relationFact(
-          anchorExpr(mean.operands[0], axis, "start"),
+          anchorExpr(first, axis, "start"),
           anchorExpr(mean.target, axis, "start"),
-          A.sub(at, rels[0]),
+          A.sub(at, rel(first)),
           mean.owner
         )
       );
@@ -722,18 +728,19 @@ function placeMeans<T>(
   while (left.length > 0) {
     const targets = new Set(left.map((m) => componentOf.get(m.target)));
     const k = left.findIndex((m) =>
-      m.operands.every((node) => !targets.has(componentOf.get(node)))
+      m.operands.every(({ node }) => !targets.has(componentOf.get(node)))
     );
     if (k < 0) {
       const mean = left[0];
       const own = mean.operands.some(
-        (node) => componentOf.get(node) === componentOf.get(mean.target)
+        ({ node }) => componentOf.get(node) === componentOf.get(mean.target)
       );
       throw new Error(
         own
           ? `${mean.owner} on ${axis}: "${mean.target}" is placed together ` +
             `with some of the nodes it is the mean of ` +
-            `(${mean.operands.join(", ")}), by exact constraints or minimum ` +
+            `(${mean.operands.map(({ node }) => node).join(", ")}), by ` +
+            `exact constraints or minimum ` +
             `gaps, but not with all of them. The mean is placed after its ` +
             `operands, so its target cannot also take part in placing them.`
           : `Means on ${axis} form a cycle: ${left
@@ -742,7 +749,7 @@ function placeMeans<T>(
       );
     }
     const [mean] = left.splice(k, 1);
-    const value = A.add(meanOf(A, mean.operands.map(at)), mean.offset);
+    const value = A.add(meanOf(A, mean, at), mean.offset);
     const component = componentOf.get(mean.target)!;
     const prior = offsets.get(component)!;
     if (!FALLBACKS.has(prior.owner)) {

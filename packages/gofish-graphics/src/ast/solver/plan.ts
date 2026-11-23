@@ -23,7 +23,14 @@ import {
   type Placement,
 } from "../constraints/claimPlacement";
 import { type ConstraintSpec } from "../constraints";
-import type { ResolvedOperands } from "../constraints/shared";
+import { axisIndex, type ResolvedOperands } from "../constraints/shared";
+import {
+  closesAround,
+  distributeChildrenInPlacementOrder,
+  distributePlacementAnchors,
+  type DistributeConstraint,
+} from "../constraints/distribute";
+import type { RelationAnchor } from "../constraints/placementFacts";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -441,6 +448,31 @@ export function buildPlan(
     plot[1].push(pLo);
     roomOn(plot);
   }
+  // A chain that closes around a closed axis (`closesAround`) lays one more
+  // gap, from its last part to its first part's next turn, so its room on
+  // the axis reaches that far: each of its forms reaches as far past the
+  // first part's start as the turn is long.
+  const turn = closingTurn(
+    node,
+    axis,
+    children,
+    constraints,
+    { operands, keyOf },
+    forms,
+    placement.boxes()
+  );
+  if (turn !== undefined) {
+    const [first, length] = turn;
+    const reachTo = (to: [Pwl.Value[], Pwl.Value[]], e?: Extent) => {
+      if (e !== undefined && to[0].length > 0)
+        to[0].push(Pwl.add(sub(first.origin, e.descent), length));
+    };
+    reachTo(box, first.forms.box);
+    reachTo(whole, first.forms.whole);
+    reachTo(plot, first.forms.plot ?? first.forms.box);
+    reachTo(plotWhole, first.forms.whole);
+    if (bare !== undefined) reachTo(bare, first.forms.bare ?? first.forms.box);
+  }
   const env = ([up, down]: [Pwl.Value[], Pwl.Value[]]) =>
     up.length === 0 ? undefined : Extent(Pwl.envelope(up), Pwl.envelope(down));
   const sBox = env(box);
@@ -469,6 +501,86 @@ export function buildPlan(
         ? undefined
         : scaleExtent(scale, env(plotWhole)!),
   };
+}
+
+/** A part of a chain where a plan places it: its data 0 in the layer's
+ *  frame and its forms about it. */
+type PlacedPart = { origin: Pwl.Value; forms: ChildForms; child: ClaimChild };
+
+/**
+ * The turn of the chain `node` lays along `axis`, when it closes around a
+ * closed axis (`closesAround`): its first part, where the plan places it,
+ * and the length from that part to its next turn, one lap on. The chain's
+ * last edge is an edge like the others (`distributePlacementAnchors`, read
+ * off the parts' plots as the chain lays them), from the last part to the
+ * first part's next turn, so the length is the last part's `from` anchor
+ * plus the gap, less the first part's `to` anchor: the parts and n gaps
+ * for `Spacing.box`, n distances for `Spacing.pitch`, and the parts and n
+ * minimum gaps for `Spacing.atLeast`. A stack places its parts by their
+ * data offsets with no edge between them, so it has none.
+ */
+function closingTurn(
+  node: GoFishNode,
+  axis: 0 | 1,
+  children: ClaimChild[],
+  constraints: readonly ConstraintSpec[],
+  { operands, keyOf }: ResolvedOperands,
+  forms: (ChildForms | undefined)[],
+  boxes: ReadonlyMap<number, { lo: Pwl.Value; hi: Pwl.Value }>
+): [PlacedPart, Pwl.Value] | undefined {
+  if (node.axisDir !== axis) return undefined;
+  const chain = constraints.find(
+    (c): c is DistributeConstraint =>
+      c.type === "distribute" && axisIndex(c.dir) === axis
+  );
+  if (chain === undefined || chain.glue || !closesAround(node, axis))
+    return undefined;
+  const parts = distributeChildrenInPlacementOrder(chain).flatMap(
+    (ref): PlacedPart[] => {
+      const op = operands.get(keyOf(ref));
+      const b = op?.direct ? boxes.get(op.child) : undefined;
+      const f = op && forms[op.child];
+      return b === undefined || f === undefined
+        ? []
+        : [
+            {
+              origin: Pwl.add(b.lo, f.box.descent),
+              forms: f,
+              child: children[op!.child],
+            },
+          ];
+    }
+  );
+  if (parts.length === 0) return undefined;
+  const anchorAt = (p: PlacedPart, anchor: RelationAnchor): Pwl.Value => {
+    const plot = p.forms.plot ?? p.forms.box;
+    const lo = sub(p.origin, plot.descent);
+    const hi = Pwl.add(p.origin, plot.ascent);
+    switch (anchor) {
+      case "start":
+        return lo;
+      case "end":
+        return hi;
+      case "middle":
+        return Pwl.scale(0.5, Pwl.add(lo, hi));
+      default:
+        // `baseline`: the part's own 0, or its start where it is placed
+        // whole (`ClaimChild.startBaseline`).
+        return p.child.startBaseline
+          ? sub(p.origin, p.forms.box.descent)
+          : p.origin;
+    }
+  };
+  const { from, to } = distributePlacementAnchors(chain);
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  return [
+    first,
+    sub(
+      Pwl.add(anchorAt(last, from), node.gapOf(chain, axis)),
+      anchorAt(first, to)
+    ),
+  ];
 }
 
 /** Where `parent` seats `child`'s data 0 on `axis` without solving its own

@@ -15,7 +15,6 @@ def node(d):
     if d["height"] == 0:
         return rect(
             w=datum(1),
-            em_x=True,
             h=BAND_HEIGHT,
             em_y=True,
             fill=by_depth(ICICLE_BLUES)(d),
@@ -23,7 +22,6 @@ def node(d):
             stroke_width=2,
         )
     return rect(
-        em_x=True,
         h=BAND_HEIGHT,
         em_y=True,
         fill=by_depth(ICICLE_BLUES)(d),

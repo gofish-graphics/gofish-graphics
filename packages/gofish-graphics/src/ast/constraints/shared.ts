@@ -2,6 +2,7 @@ import { GoFishNode, type Placeable } from "../_node";
 import type { GoFishAST } from "../_ast";
 import type { AxisMap } from "../domain";
 import { isToken, type Token } from "../createName";
+import { MeanOperand, type AlignOperand } from "./mean";
 
 /** Anything the constraint system can address by name: a GoFishNode, a
  *  GoFishRef proxy, or a structural view of either. */
@@ -21,21 +22,35 @@ export type AlignAnchor = Alignment | "baseline";
  *  `"size"` (equate lengths only; the target does not move) or `"span"`
  *  (equate both endpoints: position AND size). `"span"`/`"size"` are align-only
  *  — they name a relation the target has no intrinsic size for, not a point on
- *  a box, so `position`/`distribute` do not accept them. `"mean"` puts the
- *  first operand's middle at the mean of the other operands' middles (a
- *  parent at the mean of its children); PLACEHOLDER spelling, not signed
- *  off. */
-export type AlignValue = AlignAnchor | "span" | "size" | "mean";
+ *  a box, so `position`/`distribute` do not accept them. */
+export type AlignValue = AlignAnchor | "span" | "size";
 
-/** Whether an align spec puts its targets at point anchors on its axis: one
- *  anchor, or one per target. `"span"` and `"size"` are interval statistics
- *  that write an unbound target, so they place nothing at a point, and
- *  `"mean"` places one operand from all the others, not every operand at
- *  one point. */
+/** The point anchor (one, or one per operand) at which an align puts every
+ *  node it reads on `axis`, or undefined when it puts them at none. `"span"`
+ *  and `"size"` are interval statistics that write an unbound target, so
+ *  they place nothing at a point. An align with a mean among its operands
+ *  reads the nodes the mean averages (its `children`) without putting them
+ *  at its point, so it puts its nodes at none either. */
+export const pointAlignOn = (
+  c: {
+    x?: AlignValue | AlignAnchor[];
+    y?: AlignValue | AlignAnchor[];
+    operands: readonly AlignOperand[];
+  },
+  axis: 0 | 1
+): AlignAnchor | AlignAnchor[] | undefined => {
+  const spec = axis === 0 ? c.x : c.y;
+  if (!isPointAlign(spec)) return undefined;
+  return c.operands.some((o) => o instanceof MeanOperand) ? undefined : spec;
+};
+
+/** Whether an align value names point anchors (one, or one per operand),
+ *  not `"span"` or `"size"`. Whether the align puts its nodes at them is
+ *  {@link pointAlignOn}'s question. */
 export const isPointAlign = (
   spec: AlignValue | AlignAnchor[] | undefined
 ): spec is AlignAnchor | AlignAnchor[] =>
-  spec !== undefined && spec !== "span" && spec !== "size" && spec !== "mean";
+  spec !== undefined && spec !== "span" && spec !== "size";
 
 /**
  * A constraint operand: a handle on the nodes it means. A macro (an

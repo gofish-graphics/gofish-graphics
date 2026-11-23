@@ -38,6 +38,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/compose.ts
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
+  - packages/gofish-graphics/src/ast/constraints/mean.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
   - packages/gofish-graphics/src/ast/constraints/differenceGraph.ts
   - packages/gofish-graphics/src/ast/constraints/placementLowering.ts
@@ -1151,6 +1152,29 @@ first part's anchor, as its parent overlays it: an edge chain starts there,
 and a pitched chain reaches past it on both sides (a ridgeline's first peak
 rises above its first baseline).
 
+A chain that fills a closed axis closes around. A coordinate space declares
+which of its axes are closed (`SpaceDeclaration.closed`, from `closesOn` in
+`coord.tsx`): an axis that is periodic (`HasCycle`) and that the space lays
+its content out over one whole period, as the angle of a full-turn polar
+space is. The end of that axis is its start, so the last part of a chain
+that fills it neighbors its first, and the chain has n gaps between n
+parts, as `d3.pie` and `d3.chord` leave with their `padAngle`. The chain
+fills the axis when its room is the whole axis (`closesAround` in
+`distribute.ts`): from the chain up to the space, no node has a size of
+its own there, is a part of a chain along the axis, or is a scope of its
+own. So in a spread of groups, the outer chain closes and each group's
+inner chain stays open. The last edge is an edge like the others, from the
+last part to the first part's next turn, by the same anchors and gap, so
+the plan's claim reaches one lap past the first part (`closingTurn` in
+`solver/plan.ts`): the parts and n gaps under `Spacing.box` and
+`Spacing.atLeast`, and n distances under `Spacing.pitch`. The space fits
+that claim to its budget, one period, so data sizes along the angle fit
+2π less the n gaps, and an `fr` gap is one of n shares. Placement does not
+change: the parts start at the space's 0, and the last gap is what the fit
+leaves after the last part. A stack places its parts by their data
+offsets, with no edge between them, so it has no gap to add. A partial
+sweep is an open interval and keeps n − 1 gaps.
+
 A spread chain on y needs no paint-side handshake. The chain places each
 target's anchor in the spread's own axis order, and the target is read through
 that order like any child (see
@@ -1316,8 +1340,14 @@ group with no gap into it starting at 0. The greatest is the least solution of
 the mirrored problem, inside the least solution's span. The gaps' `justify`
 picks one, or their mean, and a cluster with a pinned group then moves as one
 so the pins hold. It needs only add, max and negate, so it runs in formulas
-like the rest of the solve. A **mean** (`anchor-mean`, from `Constraint.align({ x:
-"mean" })`) puts one anchor at the mean of others. When its operands are in one
+like the rest of the solve. A **mean** (`anchor-mean`) puts one anchor at the
+weighted mean of others. It comes from an align with a `mean([...])` operand
+(`constraints/mean.ts`): the mean is no node, so `lowerAlignPlacement` puts the
+align's first node at the mean of the same anchor of the nodes the mean
+averages, and a mean of means hands each inner mean's weight on to its own
+operands. A constraint's `children` are the nodes it reads, so an align's
+include those a mean averages; it puts them at no point (`pointAlignOn`), so the
+type passes do not join them, and only `align` takes a mean. When its operands are in one
 group it is an exact relation and joins that group (`rigidGroups`). When they
 are in several, it is no difference of two positions, so the graph cannot
 hold it: it is placed after its operands, in an ordered pass (`placeMeans`),

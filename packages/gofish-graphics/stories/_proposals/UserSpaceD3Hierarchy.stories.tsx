@@ -370,13 +370,12 @@ export const PieSpaced: StoryObj = {
   },
 };
 
-// The same with the space's sweep one gap short of the circle, so the gap
-// that closes the circle is the n-th.
+// The angle of a full-turn clock space is closed, so a spread that fills it
+// leaves n gaps, the last between the last slice and the first, as d3 does.
 export const PieSpacedClosed: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    const coord = Coord.clock({ centralAngle: 2 * Math.PI - PAD });
-    chart(browsers, { coord, w: W, h: H })
+    chart(browsers, { coord: Coord.clock(), w: W, h: H })
       .flow(spread({ by: "name", dir: "x", spacing: PAD }))
       .mark(rect({ w: "value", fill: "name" }))
       .render(container);
@@ -408,7 +407,7 @@ const rowTotal = (row: number[]) => row.reduce((a, b) => a + b, 0);
 /** The groups a gap apart around the circle, each its sub-arcs end to end.
  *  WALL: a stack inside a spread along the same axis is "flexible" (it has
  *  no size of its own), so each group would get an equal share; `w` gives it
- *  its row total. The sweep is one gap short of 2π, as in PieSpacedClosed. */
+ *  its row total. */
 const chordArcs = () =>
   spread(
     { dir: "x", spacing: CHORD_PAD, y: INNER },
@@ -422,8 +421,7 @@ const chordArcs = () =>
     )
   );
 
-const chordSpace = () =>
-  Coord.clock({ centralAngle: 2 * Math.PI - CHORD_PAD });
+const chordSpace = () => Coord.clock();
 
 export const Chord: StoryObj = {
   render: () => {

@@ -26,13 +26,13 @@ import { initializeContainer } from "../helper";
 //
 // EMBEDDED-DIMENSION WEDGE. A sunburst wedge SWEEPS through θ, so the node's
 // θ-dimension is EMBEDDED in the polar transform: the rect's WIDTH is measured
-// in θ-units (radians) with emX:true, so its width sweeps an arc rather than
-// being a flat pixel span. Its r-dimension (height, emY:true) is the ring
+// in θ-units (a data weight, or unsized), so its width sweeps an arc rather
+// than being a flat pixel span. Its r-dimension (height, emY:true) is the ring
 // thickness. This is the hard "embedded vs non-embedded dimension" case:
 //   - LEAVES carry an explicit θ-width = leafTheta (their angular share).
 //   - INTERNAL nodes get NO width — nest grows the parent's θ-width to its
-//     children's combined extent. Both axes are emY/emX so the rect lives in
-//     polar space.
+//     children's combined extent. Both sizes are lengths of the polar space,
+//     so the rect lives in it.
 // Because nest sums leaf widths up the tree and the leaves tile exactly, the
 // total angular extent works out to the 2π budget: N_leaves * leafTheta = 2π.
 //
@@ -84,14 +84,13 @@ const bandHeight = 42; // radial thickness of one ring
 
 // Wedge node: leaves carry a unit angular WEIGHT (`w`, the θ extent) that the coord sums
 // and fits to the budget; internal nodes leave θ unsized so nest grows them to
-// their children's combined arc. emX/emY make θ sweep an arc and r the ring
-// thickness. No hand-set 2π/N — the ring auto-fits.
+// their children's combined arc. Both sweep an arc on θ, and emY makes r the
+// ring thickness. No hand-set 2π/N — the ring auto-fits.
 const node = (d: any) =>
   d.height === 0
     ? rect({
         w: datum(1),
         h: bandHeight,
-        emX: true,
         emY: true,
         fill: byDepth()(d),
         stroke: "white",
@@ -99,7 +98,6 @@ const node = (d: any) =>
       })
     : rect({
         h: bandHeight,
-        emX: true,
         emY: true,
         fill: byDepth()(d),
         stroke: "white",

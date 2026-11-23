@@ -304,6 +304,15 @@ starts at 0, like a pie's, does not move. The rule is a property of the scope,
 so every reader of it agrees (the children's frame and the scope dump): `fitAxis` passes it to `solveScope` as the scope's
 `dataZero: "start"`, and `solveScope` seats data 0 at the box's low edge.
 
+**A closed axis.** A periodic axis whose budget is one whole period (θ of a
+coord with a full-turn `centralAngle`) is closed: its end is its start
+(`closesOn`). The coord declares it on its space (`SpaceDeclaration.closed`),
+next to its axis names, so a node inside can read it. A chain that fills a
+closed axis lays one more gap, after its last part, and its claim includes
+it, so the fit leaves room for n gaps (see
+[Underlying space](/internals/core/underlying-space)). The fit itself does
+not change. A partial sweep is not closed.
+
 **`HasZero`: literal offsets are distances from 0.** On an axis whose 0 is a
 fixed point (the polar center), the content's data starts at 0, whatever
 value it starts at: a radius of 30 to 90 runs from the center, with no hole the author

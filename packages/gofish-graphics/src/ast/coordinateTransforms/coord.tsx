@@ -72,9 +72,31 @@ export type AxisTraits = {
    * The axis is periodic: one `period`, in coordinate units, is one full
    * turn (2π for a polar angle). Coordinate 0 is a fixed angle (the polar
    * baseline angle), and data 0 sits there, whatever the data range, so a
-   * centered stack centers on the baseline angle.
+   * centered stack centers on the baseline angle. When the space lays its
+   * content out over one whole period ({@link closesOn}), the axis is
+   * closed: its end is its start.
    */
   HasCycle?: { period: number };
+};
+
+/**
+ * Whether axis `axis` of the space `t` is closed: it is periodic
+ * (`HasCycle`) and the space's budget on it, the room its content is laid
+ * out in, is one whole period. A polar angle with the default full-turn
+ * `centralAngle` is closed; a partial sweep is an open interval. Along a
+ * closed axis the end of the room is its start, so a chain that fills it
+ * leaves a gap after its last part too (`closesAround` in distribute.ts).
+ */
+export const closesOn = (t: CoordinateTransform, axis: 0 | 1): boolean => {
+  const period = t.axisTraits?.[axis]?.HasCycle?.period;
+  // Equal up to rounding: a sweep written in degrees (`360 * (Math.PI / 180)`)
+  // can differ from 2π in its last bit, and it is still one full turn.
+  const size = t.domain[axis].size;
+  return (
+    period !== undefined &&
+    size !== undefined &&
+    Math.abs(size - period) <= 1e-9 * period
+  );
 };
 
 /**
@@ -1038,6 +1060,7 @@ export const coord = createNodeOperator(
     coordNode._space = {
       aliases: coordTransform.aliases,
       type: coordTransform.type,
+      closed: [closesOn(coordTransform, 0), closesOn(coordTransform, 1)],
     };
     // The coord's own box lives in its parent's space, so its `dims` option
     // resolves against the parent's names (the hook's `outer` scope).

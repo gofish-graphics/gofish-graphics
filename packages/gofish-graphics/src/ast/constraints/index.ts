@@ -54,6 +54,8 @@ import {
   type KeyOf,
 } from "./shared";
 import { RelateOperand, type RelateEnv } from "./relate";
+import { MeanOperand, type AlignOperand } from "./mean";
+export { mean, MeanOperand, type AlignOperand } from "./mean";
 export type { ResolvedOperand } from "../_ref";
 export { SlotOperand, NodeOperand, childSlots } from "./shared";
 
@@ -127,34 +129,73 @@ export type ConstraintSpec =
 // --- Factory ---
 
 export const Constraint = {
-  align(options: AlignOptions, children: ConstraintRef[]): AlignConstraint {
-    return createAlignConstraint(options, children);
+  align(options: AlignOptions, operands: AlignOperand[]): AlignConstraint {
+    return createAlignConstraint(options, operands);
   },
   distribute(
     options: DistributeOptions,
     children: ConstraintRef[]
   ): DistributeConstraint {
-    return createDistributeConstraint(options, children);
+    return createDistributeConstraint(
+      options,
+      nodeOperands("distribute", children)
+    );
   },
   position(
     options: PositionOptions,
     children: ConstraintRef[]
   ): PositionConstraint {
-    return createPositionConstraint(options, children);
+    return createPositionConstraint(
+      options,
+      nodeOperands("position", children)
+    );
   },
   zAbove(a: ConstraintRef, b: ConstraintRef): ZAboveConstraint {
+    nodeOperands("zAbove", [a, b]);
     return createZAboveConstraint(a, b);
   },
   zBelow(a: ConstraintRef, b: ConstraintRef): ZBelowConstraint {
+    nodeOperands("zBelow", [a, b]);
     return createZBelowConstraint(a, b);
   },
   nest(
     options: NestOptions,
     children: [ConstraintRef, ConstraintRef]
   ): NestConstraint {
+    nodeOperands("nest", children);
     return createNestConstraint(options, children);
   },
 };
+
+/** Why each constraint but `align` takes no mean of positions: what it does
+ *  with an operand that a position does not have. */
+const NO_MEAN: Record<string, string> = {
+  distribute:
+    "distribute lays its operands one after another, each a part of its " +
+    "sequence that takes room along `dir` (the parts make the layer's " +
+    "space there), and a mean is a position that takes no room",
+  position: "position places a node, and a mean is placed by its operands",
+  nest: "nest sizes one node to hold another, and a mean has no size",
+  zAbove: "z-order orders what paints, and a mean paints nothing",
+  zBelow: "z-order orders what paints, and a mean paints nothing",
+};
+
+/** `children`, checked to hold no mean of positions: a mean is an operand
+ *  of `align` alone ({@link NO_MEAN} says why). */
+function nodeOperands<C extends readonly unknown[]>(
+  type: string,
+  children: C
+): C {
+  const i = children.findIndex((c) => c instanceof MeanOperand);
+  if (i >= 0)
+    throw new Error(
+      `Constraint.${type}: operand ${i + 1} is ${
+        (children[i] as MeanOperand).name
+      }, a mean of positions, which only Constraint.align takes: ` +
+        `${NO_MEAN[type]}. Align a node to the mean instead.`
+    );
+  return children;
+}
 
 // --- Resolution ---
 
@@ -200,12 +241,25 @@ export function validateOperands(
   specs: ConstraintSpec[],
   layer: GoFishNode
 ): void {
-  for (const c of specs) {
-    c.children.forEach((ref: ConstraintRef | undefined, i: number) => {
+  // Each operand as written, and where it is: an align's means are walked
+  // into, so an operand inside one reads as "operand 2 of the mean at
+  // operand 3".
+  const check = (
+    c: ConstraintSpec,
+    operands: readonly unknown[],
+    where: (i: number) => string
+  ): void =>
+    operands.forEach((ref, i) => {
+      if (ref instanceof MeanOperand)
+        return check(
+          c,
+          ref.operands,
+          (j) => `operand ${j + 1} of the mean at ${where(i)}`
+        );
       if (isOperand(ref)) return;
       const names = [...namesIn(layer).keys()];
       throw new Error(
-        `Constraint.${c.type}: operand ${i + 1} is ${
+        `Constraint.${c.type}: ${where(i)} is ${
           ref === undefined ? "undefined" : JSON.stringify(ref)
         }, not an operand. A constraint's operands are the ones a .relate() ` +
           `callback receives, one per name of a node inside its layer ` +
@@ -215,7 +269,12 @@ export function validateOperands(
           }.`
       );
     });
-  }
+  for (const c of specs)
+    check(
+      c,
+      c.type === "align" ? c.operands : c.children,
+      (i) => `operand ${i + 1}`
+    );
 }
 
 /**

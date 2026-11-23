@@ -21,7 +21,7 @@ import {
 } from "../ast/marks/chart";
 import type { AxesOptions, LegendOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
-import { RelateOperand } from "../ast/constraints";
+import { RelateOperand, mean, type AlignOperand } from "../ast/constraints";
 import type {
   RelateClause,
   RelateEnv,
@@ -125,9 +125,12 @@ export function constraintFromIR(
   c: Frontend.ConstraintIR,
   ctx: IRContext
 ): unknown {
-  const operands = c.refs.map((r) =>
-    relateOperandFor(r.scope, r.selection, ctx)
-  );
+  // An align's operand may be a mean of positions (`MeanOperandIR`).
+  const operandFor = (r: Frontend.AlignOperandIR): AlignOperand =>
+    r.type === "mean"
+      ? mean(r.refs.map(operandFor))
+      : relateOperandFor(r.scope, r.selection, ctx);
+  const operands = (c.refs as Frontend.AlignOperandIR[]).map(operandFor);
   // CONSTRAINT_FACTORIES ties each constraint's wire options to its factory.
   const spec = rebuild("constraint", c.type, c.options as Record<string, any>, {
     children: operands,

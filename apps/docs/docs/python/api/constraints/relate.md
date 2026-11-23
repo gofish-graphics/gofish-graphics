@@ -196,6 +196,37 @@ Constraint.align([a, b], x=["middle", "start"])
 Constraint.align([b, c], x=["end", "start"])
 ```
 
+### Means of positions
+
+```python
+mean([ref1, ref2, ...])
+```
+
+`mean` makes an operand of `Constraint.align` that is the mean of its operands' positions. It is no node: it has no ink and takes no room. The align puts it at the same point as its other refs, and reads it at the anchor it gives the mean's slot: under `"middle"` the mean of the operands' middles, under `"start"` the mean of their starts, under `"end"` the mean of their ends, and under `"baseline"` the mean of their origins. In a per-ref list the mean takes one slot.
+
+```python
+from gofish import Constraint, mean
+
+# A parent's middle at the mean of its children's middles.
+Constraint.align([parent, mean([first, last])], x="middle")
+
+# Two refs at one mean, and a parent's start at the mean of the ends.
+Constraint.align([p, q, mean([a, b])], x="middle")
+Constraint.align([p, mean([a, b])], x=["start", "end"])
+
+# A mean of means weighs each inner mean as one operand: a / 2 + (b + c) / 4.
+Constraint.align([p, mean([a, mean([b, c])])], x="middle")
+```
+
+The mean is exact when the nodes it averages are placed together by exact constraints. When minimum gaps ([`Spacing.at_least`](/python/api/spacing)) separate them, the solve places them first and then places the node aligned to the mean; that node cannot also be separated by minimum gaps, or placed together with only some of the nodes it averages, and either case throws.
+
+A mean is an operand of `Constraint.align` only. These throw:
+
+- a mean in `Constraint.distribute`, `position`, `nest`, `z_above` or `z_below`;
+- `"span"` or `"size"` on an align with a mean;
+- an align whose operands are all means;
+- `mean([])`.
+
 ## Constraint.distribute
 
 Stacks a set of refs end-to-end along an axis, with optional spacing.

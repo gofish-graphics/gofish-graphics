@@ -124,8 +124,7 @@ export const Rose: StoryObj<Args> = {
         derive((d) => d.map((d) => ({ ...d, Death: Math.sqrt(d.Death) })))
       )
       .mark(
-        /* TODO: remove emX wart */
-        rect({ w: (Math.PI * 2) / 12, emX: true, h: "Death", fill: "Type" })
+        rect({ w: (Math.PI * 2) / 12, h: "Death", fill: "Type" })
       )
       .render(container);
 

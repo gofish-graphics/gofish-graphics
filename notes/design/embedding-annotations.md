@@ -47,10 +47,17 @@ with its width as ink. Shared edges pass down to a child that lies on them: `ali
 and a ring's content, only where the relation reaches every child and the node has no
 size of its own on the axis (so its edge is its children's hull). That is how a
 sunburst leaf, aligned at the start of its siblings' stack, shares the edge that stack
-shares with the parent ring. Not handled: a center relation (`middle`, `baseline`)
-whose children happen to fill the node (the Nightingale rose's month wedges keep
-`emX` for this reason), a nested operand, and a glued stack with negative parts (its
-tail is its end).
+shares with the parent ring. Two more rules (11-23): an only child lies on both edges
+of a node with no size of its own (gotree's `layer([c])` wrappers), and marks of one
+literal size with no position of their own, put at one anchor by an `align` (`middle`
+and `baseline` too), take one interval, the hull, so each lies on both edges. With
+these the rose, the hierarchical sector chart and the node-link sunburst's radius no
+longer hand-set the flag. Not handled: a center relation whose children fill the node
+only because their sizes happen to add up (the node-link sunburst's θ), a pixel band
+set apart by a gap (icicle, tyre, sector and sunburst rings, violin and tornado θ), a
+hand-placed wedge with literal x/y (multilevel silhouette, outside-in), a nested
+operand, and a glued stack with negative parts (its tail is its end). Those keep
+`emX`/`emY`.
 
 > **point / line / area = the number of axes whose edges are coordinate-space positions
 > (via Route A or Route B).**

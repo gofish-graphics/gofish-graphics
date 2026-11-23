@@ -2,15 +2,15 @@
  * Minimum gaps and means of positions in the placement solve. A minimum gap
  * (`Spacing.atLeast`) is solved after the exact facts: they make rigid
  * groups, and the gaps separate the groups by the longest path over them,
- * with the slack placed by `justify`. A mean (`Constraint.align({ x: "mean"
- * })`) is an exact relation when its operands are in one group, and is
- * placed after its operands otherwise. The least, greatest and centered
+ * with the slack placed by `justify`. A mean (`mean([...])`, an operand of
+ * `Constraint.align`) is an exact relation when its operands are in one
+ * group, and is placed after its operands otherwise. The least, greatest and centered
  * solutions are checked against `solveSeparations`, the reference of the
  * "Proposals/User Space Separation" stories, copied here as the oracle.
  * Run: `tsx src/tests/minimumGap.test.ts` (wired into `pnpm test` as
  * `test:minimum-gap`).
  */
-import { Constraint, type ConstraintSpec } from "../ast/constraints";
+import { Constraint, mean, type ConstraintSpec } from "../ast/constraints";
 import {
   solveAxisProblem,
   type AxisProblem,
@@ -146,10 +146,11 @@ const throws = (f: () => unknown, pattern: RegExp): string | undefined => {
 // ─── Problems as a layer's constraints ──────────────────────────────────
 
 const ref = (name: string) => ({ name });
-type Box = { name: string; size: Pwl.Value };
-const box = (name: string, size: number, px = 0): Box => ({
+type Box = { name: string; size: Pwl.Value; baseline?: number };
+const box = (name: string, size: number, px = 0, baseline?: number): Box => ({
   name,
   size: Pwl.affine(size, px),
+  baseline,
 });
 
 const placeable = <T>(
@@ -172,7 +173,9 @@ const placeable = <T>(
           ? size
           : anchor === "center"
             ? A.scale(0.5, size)
-            : undefined;
+            : child.baseline === undefined
+              ? undefined
+              : A.fromValue(Pwl.constant(child.baseline));
     },
     spaceOn: () => UNDEFINED,
   };
@@ -218,7 +221,9 @@ const near = (a: number | undefined, b: number) =>
   a !== undefined && Math.abs(a - b) < 1e-9;
 
 async function main() {
-  console.log("\n# the least, greatest and centered solutions = solveSeparations");
+  console.log(
+    "\n# the least, greatest and centered solutions = solveSeparations"
+  );
   {
     const random = seeded(7);
     let misses = 0;
@@ -337,7 +342,11 @@ async function main() {
         ),
       /cycle: \{[abc]\} → \{[abc]\} → \{[abc]\} → \{[abc]\}/
     );
-    check("throws", message !== undefined && !message.startsWith("wrong"), message);
+    check(
+      "throws",
+      message !== undefined && !message.startsWith("wrong"),
+      message
+    );
     check(
       "names the cycle's gaps, not the one into it",
       message !== undefined && !message.includes("gap z→a"),
@@ -389,13 +398,22 @@ async function main() {
     // The end keeps each group inside the least solution's span, by its
     // size: a wide last item ends where the least solution ends.
     const sized = solve(
-      problem(["a", "b", "w"], [], [["a", "b", 10], ["a", "w", 2]], "end", {
-        sizes: new Map([
-          ["a", 0],
-          ["b", 30],
-          ["w", 5],
-        ]),
-      })
+      problem(
+        ["a", "b", "w"],
+        [],
+        [
+          ["a", "b", 10],
+          ["a", "w", 2],
+        ],
+        "end",
+        {
+          sizes: new Map([
+            ["a", 0],
+            ["b", 30],
+            ["w", 5],
+          ]),
+        }
+      )
     );
     check(
       "end: a group ends where the least solution ends",
@@ -497,7 +515,11 @@ async function main() {
             misses.push(`${justify} σ=${sigma} ${name}: ${min}`);
         }
       }
-      check(`${justify}: values in σ agree with numbers`, misses.length === 0, misses);
+      check(
+        `${justify}: values in σ agree with numbers`,
+        misses.length === 0,
+        misses
+      );
     }
     // At σ = 10, x has slack: a ends at 20, c starts at 20 + 4 + 34 + 4.
     const center = layout(
@@ -531,10 +553,13 @@ async function main() {
         { dir: "x", spacing: pitch(DX, { at: "middle" }) },
         leaves.map((l) => r(l.name))
       ),
-      Constraint.align({ x: "mean" }, [r("p01"), r("l0"), r("l1")]),
-      Constraint.align({ x: "mean" }, [r("p012"), r("p01"), r("l2")]),
-      Constraint.align({ x: "mean" }, [r("p34"), r("l3"), r("l4")]),
-      Constraint.align({ x: "mean" }, [r("root"), r("p012"), r("p34")]),
+      Constraint.align({ x: "middle" }, [r("p01"), mean([r("l0"), r("l1")])]),
+      Constraint.align({ x: "middle" }, [r("p012"), mean([r("p01"), r("l2")])]),
+      Constraint.align({ x: "middle" }, [r("p34"), mean([r("l3"), r("l4")])]),
+      Constraint.align({ x: "middle" }, [
+        r("root"),
+        mean([r("p012"), r("p34")]),
+      ]),
     ];
     const at = layout([...parents, ...leaves], constraints);
     // clusterX of the stories: a leaf its index, a parent the mean of its
@@ -559,14 +584,22 @@ async function main() {
 
     // A mean across groups: leaves pushed apart by minimum gaps (each its
     // own group), the parent placed after them at the mean of its middles.
-    const kids = [box("p", 0, 10), box("a", 0, 10), box("b", 0, 30), box("c", 0, 10)];
+    const kids = [
+      box("p", 0, 10),
+      box("a", 0, 10),
+      box("b", 0, 30),
+      box("c", 0, 10),
+    ];
     const across = layout(kids, [
       Constraint.distribute({ dir: "x", spacing: atLeast(5) }, [
         r("a"),
         r("b"),
         r("c"),
       ]),
-      Constraint.align({ x: "mean" }, [r("p"), r("a"), r("b"), r("c")]),
+      Constraint.align({ x: "middle" }, [
+        r("p"),
+        mean([r("a"), r("b"), r("c")]),
+      ]),
     ]);
     // a [0, 10], b [15, 45], c [50, 60]: middles 5, 30, 55, mean 30.
     check(
@@ -591,7 +624,7 @@ async function main() {
               r("p"),
               r("q"),
             ]),
-            Constraint.align({ x: "mean" }, [r("p"), r("a"), r("c")]),
+            Constraint.align({ x: "middle" }, [r("p"), mean([r("a"), r("c")])]),
           ]
         ),
       /separated from other nodes by minimum gaps/
@@ -613,7 +646,7 @@ async function main() {
             r("b"),
             r("c"),
           ]),
-          Constraint.align({ x: "mean" }, [r("p"), r("a"), r("c")]),
+          Constraint.align({ x: "middle" }, [r("p"), mean([r("a"), r("c")])]),
         ]),
       /placed together with some of the nodes it is the mean of/
     );
@@ -627,7 +660,17 @@ async function main() {
     const pinned = solveAxisProblem(numbers, "x", {
       ...problem(["p", "a", "b"], [["a", "b", 10]], []),
       pins: [{ node: "p", value: 3, owner: "pin p" }],
-      means: [{ target: "p", operands: ["a", "b"], offset: 0, owner: "mean" }],
+      means: [
+        {
+          target: "p",
+          operands: [
+            { node: "a", weight: 0.5 },
+            { node: "b", weight: 0.5 },
+          ],
+          offset: 0,
+          owner: "mean",
+        },
+      ],
     });
     check(
       "a mean over one group joins the target to it (the pin moves both)",
@@ -636,6 +679,184 @@ async function main() {
         pinned.positions.get("b") === 8,
       [...pinned.positions]
     );
+  }
+
+  console.log("\n# a mean reads the anchor the align puts its operands at");
+  {
+    // a [0, 10] and b [20, 50] in one group (a box gap of 10), c [60, 70];
+    // p is 4 wide and q 8. a's origin is 2 past its start, b's 6, p's 1.
+    const r = (n: string) => ref(n);
+    const kids = [
+      box("a", 0, 10, 2),
+      box("b", 0, 30, 6),
+      box("c", 0, 10, 4),
+      box("p", 0, 4, 1),
+      box("q", 0, 8),
+    ];
+    const row = Constraint.distribute({ dir: "x", spacing: 10 }, [
+      r("a"),
+      r("b"),
+      r("c"),
+    ]);
+    const at = (c: ConstraintSpec) => layout(kids, [row, c]);
+    const pAt = (anchor: "start" | "middle" | "end" | "baseline") =>
+      at(Constraint.align({ x: anchor }, [r("p"), mean([r("a"), r("b")])])).get(
+        "p"
+      );
+    check(
+      "start: p's start at the mean of starts (10)",
+      near(pAt("start"), 10),
+      pAt("start")
+    );
+    check(
+      "middle: p's middle at the mean of middles (20)",
+      near(pAt("middle"), 18),
+      pAt("middle")
+    );
+    check(
+      "end: p's end at the mean of ends (30)",
+      near(pAt("end"), 26),
+      pAt("end")
+    );
+    check(
+      "baseline: p's origin at the mean of origins (2 and 26: 14)",
+      near(pAt("baseline"), 13),
+      pAt("baseline")
+    );
+
+    // One anchor per operand: the mean's slot names the anchor it averages.
+    const perOperand = at(
+      Constraint.align({ x: ["start", "end"] }, [
+        r("p"),
+        mean([r("a"), r("b")]),
+      ])
+    );
+    check(
+      'x: ["start", "end"]: p\'s start at the mean of ends (30)',
+      near(perOperand.get("p"), 30),
+      [...perOperand]
+    );
+
+    // Several nodes at one mean.
+    const several = at(
+      Constraint.align({ x: "middle" }, [
+        r("p"),
+        r("q"),
+        mean([r("a"), r("b")]),
+      ])
+    );
+    check(
+      "p's and q's middles both at the mean of middles (20)",
+      near(several.get("p"), 18) && near(several.get("q"), 16),
+      [...several]
+    );
+
+    // A mean of means weighs each inner mean as one operand: middles 5, 35,
+    // 65 give 5 / 2 + (35 + 65) / 4 = 27.5.
+    const nested = at(
+      Constraint.align({ x: "middle" }, [
+        r("p"),
+        mean([r("a"), mean([r("b"), r("c")])]),
+      ])
+    );
+    check(
+      "a nested mean weighs its operands' share",
+      near(nested.get("p"), 25.5),
+      [...nested]
+    );
+
+    // The same in σ, against numbers at each σ.
+    const sized = [
+      box("a", 1, 10),
+      box("b", 2),
+      box("c", 0, 6),
+      box("p", 0, 4),
+    ];
+    const cs = [
+      Constraint.distribute({ dir: "x", spacing: 3 }, [r("a"), r("b"), r("c")]),
+      Constraint.align({ x: "middle" }, [
+        r("p"),
+        mean([r("a"), mean([r("b"), r("c")])]),
+      ]),
+    ];
+    const symbolic = solveIn(values, sized, cs, (v) => v);
+    const misses: string[] = [];
+    for (const sigma of [0, 1, 10]) {
+      const numeric = layout(sized, cs, sigma);
+      for (const [name, min] of numeric) {
+        const s = symbolic.cells.get(name);
+        if (s === undefined || Math.abs(Pwl.at(s.min, sigma) - min) > 1e-9)
+          misses.push(`σ=${sigma} ${name}: ${min}`);
+      }
+    }
+    check(
+      "a nested mean in σ agrees with numbers",
+      misses.length === 0,
+      misses
+    );
+  }
+
+  console.log("\n# what a mean is not");
+  {
+    const r = (n: string) => ref(n);
+    const errors: [string, () => unknown, RegExp][] = [
+      [
+        "distribute takes no mean",
+        () =>
+          Constraint.distribute({ dir: "x", spacing: 10 }, [
+            mean([r("a"), r("b")]) as never,
+            r("c"),
+          ]),
+        /Constraint\.distribute: operand 1 is mean\(a, b\).*only Constraint\.align takes.*takes no room/,
+      ],
+      [
+        "position takes no mean",
+        () => Constraint.position({ x: 3 }, [mean([r("a")]) as never]),
+        /Constraint\.position: operand 1 is mean\(a\)/,
+      ],
+      [
+        "span with a mean",
+        () => Constraint.align({ x: "span" }, [r("p"), mean([r("a"), r("b")])]),
+        /"span" on x .* mean\(a, b\) is a position, not a node/,
+      ],
+      [
+        "size with a mean",
+        () => Constraint.align({ y: "size" }, [r("p"), mean([r("a")])]),
+        /"size" on y/,
+      ],
+      [
+        "only means",
+        () =>
+          Constraint.align({ x: "middle" }, [
+            mean([r("a"), r("b")]),
+            mean([r("c")]),
+          ]),
+        /every operand .* is a mean/,
+      ],
+      ["an empty mean", () => mean([]), /at least one operand/],
+      [
+        "an anchor array counts the operands, a mean as one",
+        () =>
+          layout(
+            [box("p", 0, 4), box("a", 0, 10), box("b", 0, 10)],
+            [
+              Constraint.align({ x: ["start"] }, [
+                r("p"),
+                mean([r("a"), r("b")]),
+              ]),
+            ]
+          ),
+        /anchor array length 1 must match number of operands 2/,
+      ],
+    ];
+    for (const [what, f, pattern] of errors) {
+      const message = throws(f, pattern);
+      check(
+        what,
+        message !== undefined && !message.startsWith("wrong"),
+        message
+      );
+    }
   }
 
   report();

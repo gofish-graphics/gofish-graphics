@@ -28,7 +28,6 @@ def node(d):
     if d["height"] == 0:
         return rect(
             w=datum(1),
-            em_x=True,
             h=(d["height"] + 1) * BAND,
             em_y=True,
             fill=by_depth(TYRE_BLUES)(d),
@@ -36,7 +35,6 @@ def node(d):
             stroke_width=2,
         )
     return rect(
-        em_x=True,
         h=(d["height"] + 1) * BAND,
         em_y=True,
         fill=by_depth(TYRE_BLUES)(d),

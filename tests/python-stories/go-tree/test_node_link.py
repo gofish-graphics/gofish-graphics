@@ -234,7 +234,6 @@ def sunburst_node(d):
         w=d["width"] * LEAF_THETA,
         h=BAND_HEIGHT,
         em_x=True,
-        em_y=True,
         fill=by_depth(POLAR_GREENS)(d),
         stroke="white",
         stroke_width=2,

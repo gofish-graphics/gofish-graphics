@@ -27,7 +27,6 @@ def story_rose_radius():
         .mark(
             rect(
                 w=(math.pi * 2) / 6,
-                em_x=True,
                 fill="lake",
                 dims={"r": {"size": lambda d: math.sqrt(d["count"])}},
             )

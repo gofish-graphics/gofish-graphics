@@ -77,15 +77,17 @@ export type AnchorMinGapFact<T = number> = {
   chain?: boolean;
 };
 
-/** A mean of positions: `target`'s anchor is at the mean of the
- *  `operands`' anchors (a parent at the mean of its children). A linear
+/** A mean of positions: `target`'s anchor is at the weighted mean of the
+ *  `operands`' anchors, `Σ weight · anchor`, whose weights sum to 1 (a
+ *  parent at the mean of its children; a mean of means weighs each inner
+ *  mean as one operand). From an align with a `mean(...)` operand. A linear
  *  equation the difference graph holds only in part: see `solveAxisProblem`
  *  in differenceGraph.ts. */
 export type AnchorMeanFact = {
   type: "anchor-mean";
   axis: Axis;
   target: AnchorRef;
-  operands: AnchorRef[];
+  operands: (AnchorRef & { weight: number })[];
   owner: string;
 };
 
@@ -198,7 +200,7 @@ export type PlacementMinGapRequest<T = number> = PlacementRelationRequest<T> & {
 export type PlacementMeanRequest = {
   axis: Axis;
   target: { key: NodeId; anchor: RelationAnchor };
-  operands: { key: NodeId; anchor: RelationAnchor }[];
+  operands: { key: NodeId; anchor: RelationAnchor; weight: number }[];
   owner: string;
 };
 
@@ -257,11 +259,11 @@ export type PlacementMinGap<T = number> = {
   chain?: boolean;
 };
 
-/** A mean reduced to `min`-anchored form: `target.min = mean(operand.min)
- *  + offset`. */
+/** A mean reduced to `min`-anchored form: `target.min = Σ weight ·
+ *  operand.min + offset`, the weights summing to 1. */
 export type PlacementMean<T = number> = {
   target: NodeId;
-  operands: NodeId[];
+  operands: { node: NodeId; weight: number }[];
   offset: T;
   owner: string;
 };
