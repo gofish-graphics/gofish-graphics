@@ -125,6 +125,53 @@ Names worth borrowing: ggplot2 names its stages in user code (`after_stat`, `aft
 
 Not verified: several details in the search came from memory (exact SwiftUI signatures, Racket and Lean mechanics). One claim needs checking before it is cited: that a `Length` is exactly the "partially static data" of Yallop, von Glehn and Kammar (ICFP 2018). The paper is real. Applying it to piecewise-linear values is a reading.
 
+### Scheduling: what the attribute-grammar layout work says
+
+Superconductor (Meyerovich, Torok, Atkinson and Bodik, 2013) and the papers around it treat layout as passes over a tree, where each pass runs top-down or bottom-up and computes a fixed set of values per node. The user writes what each value depends on, and a tool finds and checks the order of passes, which they call the schedule.
+
+- **A fixed number of ordered passes is well supported.** Meyerovich's thesis finds that "sequences of 3-5 traversals often suffice for data visualizations and 9 for CSS". Superconductor's own treemap is five alternating passes over 94,000 nodes.
+- **Measure, solve, place has an exact precedent.** The thesis stages memory allocation the same way: a bottom-up pass of requests, one global allocation, then a top-down pass of responses. Our solve step is the global step in the middle. It has no form in their schedule language.
+- **Never iterating is their rule too.** They reject cyclic dependencies outright. Where CSS would need a fixed point, they copy what browsers do and pick a value.
+
+Our stages in their schedule notation (`parPost` is a bottom-up pass, `parPre` a top-down one, `;` runs one after the other):
+
+<!-- id: p-schedule -->
+
+```text
+parPost Node { meaning } ;                 resolve what each axis means
+parPost Node { size(scale) } ;             measure: user `measure` code runs here
+[ solve the scale, once per scope ] ;      not a traversal
+parPre  Node { x, y, w, h }                place
+  { layout -> body ;                       user `layout` body runs here
+              parPost { size(scale') } ;   and the same schedule runs again
+              [ solve scale' ] ;           on the tree it returned
+              parPre  { x, y, w, h } }
+```
+
+What this literature says we should not overclaim, or have not solved:
+
+- **A pass that creates nodes is what everyone avoids.** Spineless Traversal assumes "the tree structure itself does not change during layout". The traversal-fusion systems require a tree whose shape is read-only. Meyerovich moved CSS's generated boxes into a separate pass before layout, and tables needed a hand-declared dependency. Higher-order attribute grammars do allow it, but the thesis associates them with scheduling at run time. So the nested run is not settled by citing them. What keeps ours simple is narrower: the returned tree uses the same node kinds and the same fixed schedule, so the schedule stays static and is only recursive.
+- **Text that wraps is the hard case.** Its height depends on a width that is only assigned in the last pass. CSS handles this by always computing widths before heights, which is why a sidebar whose width follows from its height cannot be written in CSS. A parent cannot size itself to wrapped text across a `layout` node that reports no size. Label avoidance is similar, and they needed speculation with a fallback for the equivalent (floats).
+- **Fixed passes grew in practice.** Servo's first layout engine began with four traversals, grew to seven plus passes "added to address bugs", and its 2020 rewrite dropped the fixed-pass design for recursive traversals over two trees.
+- **Fusing the nested run into the outer one does not apply.** Fusion works on a tree that exists up front, and the nested tree does not exist until the outer pass reaches the node.
+- **Incremental layout is not free.** The incremental engines rely on a stable tree and a fixed order of fields. A `layout` body regenerates its tree, so it would need keyed reuse, and a solve is global, so any size change dirties its whole scope.
+
+Our rules as the static checks those systems make:
+
+| Our rule                                   | Their check                                                |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| Marks exist before the body runs           | the tree does not change during layout                     |
+| No scale shared across a `layout` boundary | only interface attributes of a nested region are scheduled |
+| A `layout` node reports no size            | a parent that reads it has an unsatisfied dependency       |
+| A length does not leave its nested run     | a type check                                               |
+| Never loop back                            | cyclic dependencies are rejected                           |
+
+Their checkers analyze declared reads and writes. JavaScript closures cannot be analyzed that way, so GoFish has to enforce the same rules through the shape of the API: in the measure pass, pixel values do not exist to be read. Their error is the model for ours: name the first pass that fails and the value it could not get, e.g. "computation of a node's x attribute fails due to a read-before-write on its parent node's x attribute".
+
+Naming: in this literature a "visit" is one entry into one node, a "traversal" or "pass" is one sweep over the tree, and the "schedule" is the passes and their order. So our stages are passes, and "visit" should not be used for them.
+
+Not obtained, so not verified here: Kastens (1980), Vogt, Swierstra and Kuiper (1989), TreeFuser, Medea and the Cassius papers. What is said about them comes from the papers that cite them.
+
 `layout` in use, a treemap that reads its box (the squarify plan and drawing are below, under "Squarify, as nested stacks"):
 
 ![squarify as nested stacks](img/tiling-stacks-squarify.png)
@@ -746,11 +793,13 @@ The needs in the kernels table repeat, and they are the steps of the layout prot
 
 | Step | SwiftUI `Layout` | Compose `Layout` | Typst | `layout(size => ...)` and `measure(content)`, both returning content | the protocol as two functions that return the language itself. The model for the proposed spelling |
 | Compose `SubcomposeLayout`, Flutter `LayoutBuilder` | children built during layout, from the constraints | both refuse size questions through the builder. The model for `layout` and for its rule that it asks for no room |
-| Higher-order attribute grammars (Vogt, Swierstra, Kuiper 1989) | an attribute computes a new tree, which is then attributed | the formal version of the nested second run, with the condition that the new tree cannot feed back into what defined it |
+| Higher-order attribute grammars (Vogt, Swierstra, Kuiper 1989) | an attribute computes a new tree, which is then attributed | the nearest formal treatment of the nested second run, with the condition that the new tree cannot feed back into what defined it. It is associated with scheduling at run time, so it does not settle ours |
 | Lightweight Modular Staging (Scala) | `Rep[T]` against `T` | the type says when a value is known, and using it too early is a type error. The model for `Length` against a number |
 | CSS container queries | `container-type`, then a query on the container's size | a size query needs containment, so the container's size cannot depend on its contents |
 | Typst `context`, LaTeX reruns | layout that reads its own results | settled by repeating layout, up to five attempts in Typst. The model GoFish avoids by solving once |
 | Build Systems à la Carte (2018), selective functors (2019) | tasks with dependencies known up front, or found while running | the three-way split of `measure`, `choose` and `layout` |
+| Superconductor and its schedule synthesis (Meyerovich, Bodik and others, 2010 to 2013) | an attribute grammar, plus an optional sketch of the schedule | a synthesized and checked schedule of `parPre` and `parPost` passes. A five-pass treemap, nine passes for CSS. The model for our fixed passes and for naming the first failing pass in an error |
+| Spineless Traversal (2025), Servo | passes over a tree that does not change during layout | incremental layout depends on a stable tree and a fixed order of fields. Servo's fixed passes grew from four to seven and were dropped in its rewrite. The cautions for a pass that creates nodes |
 | --------------------------------- | --------------------------------------------------------- | ------------------------------------------------- | --------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Read the space offered | `proposal` in `sizeThatFits`, `bounds` in `placeSubviews` | `constraints` | `layout(size => ...)` | `layout(size, scales, children, node, shape)` | `layout(({ w, h, shape }) => node)` |
 | Measure a child before placing it | `subview.sizeThatFits(proposal)` | `measurable.measure(constraints)`, once per child | `measure(content)` | `child.layout(size, scales)` returns its `dims` and `geometry()` | `measure(child)` |

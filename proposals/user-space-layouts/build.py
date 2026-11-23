@@ -17,7 +17,7 @@ md = (here / "proposal.md").read_text()
 page = (here / "page.html").read_text()
 base = (here.parent / "voronoi-treemap" / "index.html").read_text()
 
-LANG = {"ts": "typescript", "js": "javascript", "python": "python"}
+LANG = {"ts": "typescript", "js": "javascript", "python": "python", "text": "plaintext"}
 blocks = {
     name: (LANG[lang], code)
     for name, lang, code in re.findall(

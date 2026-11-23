@@ -438,6 +438,146 @@
       </div>
 
       <div class="card">
+        <h3>Scheduling: what the attribute-grammar layout work says</h3>
+        <p class="note">
+          <a
+            href="https://datavis.cs.columbia.edu/files/papers/superconductor.pdf"
+            >Superconductor</a
+          >
+          (Meyerovich, Torok, Atkinson and Bodik, 2013) and the papers around it
+          treat layout as passes over a tree, where each pass runs top-down or
+          bottom-up and computes a fixed set of values per node. The user writes
+          what each value depends on, and a tool finds and checks the order of
+          passes, which they call the schedule.
+        </p>
+        <ul class="tight">
+          <li>
+            <b>A fixed number of ordered passes is well supported.</b>
+            Meyerovich's
+            <a
+              href="https://www2.eecs.berkeley.edu/Pubs/TechRpts/2013/EECS-2013-242.pdf"
+              >thesis</a
+            >
+            finds that "sequences of 3-5 traversals often suffice for data
+            visualizations and 9 for CSS". Superconductor's own treemap is five
+            alternating passes over 94,000 nodes.
+          </li>
+          <li>
+            <b>Measure, solve, place has an exact precedent.</b> The thesis
+            stages memory allocation the same way: a bottom-up pass of requests,
+            one global allocation, then a top-down pass of responses. Our solve
+            step is the global step in the middle. It has no form in their
+            schedule language.
+          </li>
+          <li>
+            <b>Never iterating is their rule too.</b> They reject cyclic
+            dependencies outright. Where CSS would need a fixed point, they copy
+            what browsers do and pick a value.
+          </li>
+        </ul>
+        <p class="label">Our stages in their schedule notation</p>
+        {{code:p-schedule}}
+        <p class="note">
+          <code>parPost</code> is a bottom-up pass, <code>parPre</code> a
+          top-down one, and <code>;</code> runs one after the other (<a
+            href="https://lmeyerov.github.io/projects/pbrowser/pubfiles/ppopp13.pdf"
+            >Meyerovich and others, 2013</a
+          >).
+        </p>
+        <p class="label">What we should not overclaim, or have not solved</p>
+        <ul class="tight">
+          <li>
+            <b>A pass that creates nodes is what everyone avoids.</b>
+            <a href="https://arxiv.org/abs/2411.10659">Spineless Traversal</a>
+            assumes "the tree structure itself does not change during layout".
+            The traversal-fusion systems require a tree whose shape is
+            read-only. Meyerovich moved CSS's generated boxes into a separate
+            pass before layout. Higher-order attribute grammars do allow it, but
+            the thesis associates them with scheduling at run time. So the
+            nested run is not settled by citing them. What keeps ours simple is
+            narrower: the returned tree uses the same node kinds and the same
+            fixed schedule, so the schedule stays static and is only recursive.
+          </li>
+          <li>
+            <b>Text that wraps is the hard case.</b> Its height depends on a
+            width that is only assigned in the last pass. CSS handles this by
+            always computing widths before heights. A parent cannot size itself
+            to wrapped text across a <code>layout</code> node that reports no
+            size. Label avoidance is similar.
+          </li>
+          <li>
+            <b>Fixed passes grew in practice.</b>
+            <a
+              href="https://github.com/servo/servo/wiki/Servo-Layout-Engines-Report"
+              >Servo's</a
+            >
+            first layout engine began with four traversals, grew to seven plus
+            passes "added to address bugs", and its 2020 rewrite dropped the
+            fixed-pass design.
+          </li>
+          <li>
+            <b>Fusing the nested run into the outer one does not apply.</b>
+            Fusion works on a tree that exists up front.
+          </li>
+          <li>
+            <b>Incremental layout is not free.</b> The incremental engines rely
+            on a stable tree and a fixed order of fields. A
+            <code>layout</code> body regenerates its tree, so it would need
+            keyed reuse, and a solve is global, so any size change dirties its
+            whole scope.
+          </li>
+        </ul>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Our rule</th>
+                <th>Their check</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Marks exist before the body runs</td>
+                <td>The tree does not change during layout.</td>
+              </tr>
+              <tr>
+                <td>No scale shared across a <code>layout</code> boundary</td>
+                <td>
+                  Only interface attributes of a nested region are scheduled.
+                </td>
+              </tr>
+              <tr>
+                <td>A <code>layout</code> node reports no size</td>
+                <td>A parent that reads it has an unsatisfied dependency.</td>
+              </tr>
+              <tr>
+                <td>A length does not leave its nested run</td>
+                <td>A type check.</td>
+              </tr>
+              <tr>
+                <td>Never loop back</td>
+                <td>Cyclic dependencies are rejected.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Their checkers analyze declared reads and writes. JavaScript closures
+          cannot be analyzed that way, so GoFish has to enforce the same rules
+          through the shape of the API: in the measure pass, pixel values do not
+          exist to be read. Their error is the model for ours: name the first
+          pass that fails and the value it could not get.
+        </p>
+        <p class="note">
+          Naming: in this literature a "visit" is one entry into one node, a
+          "pass" is one sweep over the tree, and the "schedule" is the passes
+          and their order. So our stages are passes. Not obtained, so not
+          verified here: Kastens (1980), Vogt, Swierstra and Kuiper (1989),
+          TreeFuser, Medea and the Cassius papers.
+        </p>
+      </div>
+
+      <div class="card">
         <h3>
           <code>layout</code>: a treemap that reads its box
           <span class="tag sketch">sketch</span>
@@ -1979,6 +2119,24 @@
     <h2>Precedent</h2>
     <div class="prec">
       <div class="pc">
+        <h4>Superconductor and its schedule synthesis (2010 to 2013)</h4>
+        <p>
+          Layout as an attribute grammar, with a synthesized and checked
+          schedule of <code>parPre</code> and <code>parPost</code> passes. A
+          five-pass treemap; nine passes for CSS. The model for our fixed passes
+          and for naming the first failing pass in an error.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Spineless Traversal (2025), Servo</h4>
+        <p>
+          Incremental layout that depends on a tree that does not change during
+          layout and a fixed order of fields. Servo's fixed passes grew from
+          four to seven and were dropped in its rewrite. The cautions for a pass
+          that creates nodes.
+        </p>
+      </div>
+      <div class="pc">
         <h4>Compose SubcomposeLayout, Flutter LayoutBuilder</h4>
         <p>
           Children are built during layout, from the constraints. Both refuse
@@ -1990,8 +2148,10 @@
         <h4>Higher-order attribute grammars (1989)</h4>
         <p>
           An attribute computes a new tree, which is then attributed by the
-          earlier visits. The formal version of the nested second run, with the
-          condition that the new tree cannot feed back into what defined it.
+          earlier visits. The nearest formal treatment of the nested second run,
+          with the condition that the new tree cannot feed back into what
+          defined it. It is associated with scheduling at run time, so it does
+          not settle ours.
         </p>
       </div>
       <div class="pc">
