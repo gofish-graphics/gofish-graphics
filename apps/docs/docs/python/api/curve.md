@@ -127,4 +127,6 @@ on the screen. It can overshoot between two points.
 `Curve.orthogonal(bend="auto")` infers the bend axis from the endpoint geometry
 instead. `Curve.arc()` bulges up by default; `direction="down"` flips it. A
 `ribbon` cannot use `Curve.arc()` or `Curve.perfect_arrows()`: each edge of a
-band runs along the connection axis, and these two bow away from the line between their ends.
+band runs along the connection axis, and these two bow away from the line
+between their ends. Nor can it use `Curve.orthogonal(bend="auto")`, which picks
+a bend axis for each edge on its own.

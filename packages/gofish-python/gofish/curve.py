@@ -102,15 +102,15 @@ def arc(*, direction: Optional[str] = None) -> Dict[str, Any]:
 
 @bare_kind("Curve")
 def perfect_arrows(*, bow: Optional[float] = None, stretch: Optional[float] = None, stretch_min: Optional[float] = None, stretch_max: Optional[float] = None, pad_start: Optional[float] = None, pad_end: Optional[float] = None, flip: Optional[bool] = None, straights: Optional[bool] = None) -> Dict[str, Any]:
-    """Box-to-box arc from the perfect-arrows library.
+    """Arc from the perfect-arrows library: from box to box, or from point to point between a line's `source` and `target`.
 
     Args:
         bow: Baseline curvature. 0 is a straight line. Default 0.
         stretch: How much the bow grows as the endpoints get closer, and shrinks as they get farther apart. Default 0.25.
         stretch_min: Distance in pixels below which stretch has its full effect. Default 50.
         stretch_max: Distance in pixels above which stretch has no effect. Default 420.
-        pad_start: Gap in pixels between the source box and the start of the arc. Default 0.
-        pad_end: Gap in pixels between the end of the arc and the target box. Default 20.
+        pad_start: Gap in pixels between the source box and the start of the arc. A line with `source` or `target` is not padded at either end. Default 0.
+        pad_end: Gap in pixels between the end of the arc and the target box. A line with `source` or `target` is not padded at either end. Default 20.
         flip: Flip which side the arc bows toward. Default false.
         straights: Allow a straight line when the endpoints are axis-aligned, instead of forcing a slight bow. Default true.
     """

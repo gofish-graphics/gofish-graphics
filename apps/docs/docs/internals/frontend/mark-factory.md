@@ -519,13 +519,22 @@ so a route reads an anchored end the same way. `line` is one open edge, from
 `source` to `target` when they are given. Its curve routes the edge between
 them, and an anchored line with no curve is straight, a default of `line` for
 node-link edges and ropes: the omitted curve smooths only a line through its
-marks' centers. A sequence curve threads each edge through one knot per
-operand. The edge leaves the first operand at its `source` point, enters the
-last at its `target` point, and passes each operand between midway between
-where it enters it (`target`) and leaves it (`source`), so a line given only
-`source` threads each mark's `source` point. Over a continuous connection axis
-the curve's parameter is each knot's position on that axis, the end knots'
-included.
+marks' centers. With only `source` or only `target`, a pairwise route
+attaches the omitted end at the nearest point of the other operand. A sequence
+curve threads each edge through one knot per operand, which sits midway
+between where the edge enters the operand (`target`) and leaves it
+(`source`), for the first and last operand too. So a line given only `source`
+threads each mark's `source` point, a line from the middle of each mark's end
+side to the middle of the next one's start side threads the centers, and a
+ribbon's edges pass each operand at the middle of its near and far sides. Over
+a continuous connection axis the curve's parameter is each knot's position on
+that axis, which for a ribbon and an unanchored line is the operand's center.
+Whether a threaded curve should pass both the enter and the leave point of
+each operand (two knots per operand) is open: it would make an anchored smooth
+line start and end on its anchors, and a smooth band follow each operand's side
+across its width.
+Consecutive pairs are drawn as one path where each pair's routed path ends
+where the next pair's starts.
 The connector itself has no default discrete curve: `line` passes a straight
 one and `ribbon` a bezier. `ribbon` is two edges, from the far face of each
 operand to the near face of the next along `dir`, closed into a filled region.

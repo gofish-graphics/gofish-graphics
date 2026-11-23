@@ -29,7 +29,7 @@ import {
 import type { Dimensions } from "../dims";
 import type { Curve } from "../../families/curve";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
-import { getBoxToBoxArrow } from "perfect-arrows";
+import { getArrow, getBoxToBoxArrow } from "perfect-arrows";
 import { Frontend } from "gofish-ir";
 import {
   SMOOTH_CURVES,
@@ -286,12 +286,37 @@ const arcRouter: Router = (b0, b1, { opts }) => {
   return [arcBezier(M, r, a0, aMid), arcBezier(M, r, aMid, a1)];
 };
 
+/** Whether a box has no extent: a point a connector attaches at. */
+const isPoint = (b: Dimensions): boolean => b[0].size === 0 && b[1].size === 0;
+
+/** The perfect-arrows options as gofish-ir declares their defaults, which
+ *  `getArrow` does not share with `getBoxToBoxArrow`. */
+const PERFECT_ARROWS_DEFAULTS = Object.fromEntries(
+  Object.entries(Frontend.STRATEGIES.Curve.kinds.perfectArrows.params).map(
+    ([name, param]) => [name, param.default]
+  )
+);
+
 /**
- * Box-to-box arrow arc via the `perfect-arrows` library. Returns just the arc
- * path; an arrowhead, if wanted, is a separate decoration (the `arrow`
- * operator draws its own on this route).
+ * Arrow arc via the `perfect-arrows` library. Between two whole boxes it is
+ * the box-to-box arc, which starts and ends on the boxes' sides, padded.
+ * Between two points (a connector's anchored ends, as zero-size boxes, which
+ * `getBoxToBoxArrow` cannot route) it is the point-to-point arc, with the
+ * same options but no padding, so it starts and ends on the points. Returns
+ * just the arc path; an arrowhead, if wanted, is a separate decoration (the
+ * `arrow` operator draws its own on this route).
  */
 export const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
+  if (isPoint(b0) && isPoint(b1)) {
+    const [p0, p1] = [centerPoint(b0), centerPoint(b1)];
+    const [sx, sy, cx, cy, ex, ey] = getArrow(p0[0], p0[1], p1[0], p1[1], {
+      ...PERFECT_ARROWS_DEFAULTS,
+      ...opts,
+      padStart: 0,
+      padEnd: 0,
+    });
+    return [quadratic([sx, sy], [cx, cy], [ex, ey])];
+  }
   const [sx, sy, cx, cy, ex, ey] = getBoxToBoxArrow(
     b0[0].min!,
     b0[1].min!,

@@ -4,6 +4,7 @@ import {
   evenStep,
   reversePath,
   samePoint,
+  segmentEnds,
   mapPathPoints,
   pathBounds,
   transformPath,
@@ -249,19 +250,11 @@ const atPoint = (p: Point): Attachment => [
   { min: p[1], center: p[1], max: p[1], size: 0 },
 ];
 
-/** Whether an edge entering an operand where `a` is leaves it where `b` is,
- *  so the paths on either side meet: the same whole box, or the same point
- *  to within rounding (an operand with no extent between the two points, as
- *  an area's zero-width points are). */
+/** Whether a path that ends at `p` and one that starts at `q` meet: the
+ *  same point to within rounding. */
 const EPS = 1e-6;
-const samePlace = (a: Attachment, b: Attachment): boolean => {
-  if (a === b) return true;
-  if (a.some((d) => d.size !== 0) || b.some((d) => d.size !== 0)) {
-    return false;
-  }
-  const [p, q] = [centerPoint(a), centerPoint(b)];
-  return Math.abs(p[0] - q[0]) < EPS && Math.abs(p[1] - q[1]) < EPS;
-};
+const meetAt = (p: Point, q: Point): boolean =>
+  Math.abs(p[0] - q[0]) < EPS && Math.abs(p[1] - q[1]) < EPS;
 
 /** What a connector draws from its edges' paths, given each edge's own
  *  start and end: open, the paths themselves; closed, the one region
@@ -605,29 +598,28 @@ export const connect = createNodeOperator(
 
           // A *sequence* curve (`monotone`, `smooth`, `step`, `catmullRom`)
           // threads each edge through the whole run as one spline, one knot
-          // per operand, bypassing the pairwise routes. An edge leaves the
-          // first operand at its `source` point, enters the last at its
-          // `target` point, and passes each operand between midway between
-          // where it enters it (`target`) and where it leaves it (`source`).
-          // An omitted end attaches as near the other end as the box allows,
+          // per operand, bypassing the pairwise routes. Every operand, the
+          // first and last included, has its knot midway between where the
+          // edge enters it (`target`) and where it leaves it (`source`). An
+          // omitted end attaches as near the other end as the box allows,
           // which on the same operand is the other end's own point; with
           // neither given, both are the operand's center. So a line through
           // its marks' centers threads the centers, a line given only
-          // `source` threads each mark's `source` point, and a ribbon runs
-          // from the far face of its first operand to the near face of its
-          // last, through the middle of each operand between, so a
-          // continuous stacked area curves like its line-chart sibling.
+          // `source` threads each mark's `source` point, and a ribbon's two
+          // edges pass each operand at the middle of its near and far sides,
+          // so a continuous stacked area curves like its line-chart sibling.
+          // TODO: should a threaded curve pass through both the enter and
+          // the leave point of each operand (two knots per operand)? Then an
+          // anchored smooth line would start and end on its anchors, and a
+          // smooth band would follow each operand's side across its width.
           const sequence = sequenceCurve(resolvedCurveName);
           if (sequence !== undefined) {
-            const last = childPlaceables.length - 1;
             const knotsOf = (a: EdgeAnchors) =>
               childPlaceables.map(({ dims: b }, j): Point => {
                 const at = (f: Point | undefined): Point =>
                   f === undefined ? centers[j] : pointOn(b, f);
                 const enter = at(a.target ?? a.source);
                 const leave = at(a.source ?? a.target);
-                if (last > 0 && j === 0) return leave;
-                if (last > 0 && j === last) return enter;
                 return [(enter[0] + leave[0]) / 2, (enter[1] + leave[1]) / 2];
               });
             const knots = anchors.map(knotsOf);
@@ -670,8 +662,8 @@ export const connect = createNodeOperator(
             // it; the smooth curves do not need it.
             //
             // Read from position, an edge's parameter is where each of its
-            // knots is on the connection axis, so the end knots, on the end
-            // operands' faces, are read where they are.
+            // knots is on the connection axis: for a ribbon and an unanchored
+            // line, the operands' centers on that axis.
             const dataKnots = (k: Point[]): RunParameter | undefined => {
               const time = runKnots(timeKnots);
               if (time !== undefined) {
@@ -744,14 +736,18 @@ export const connect = createNodeOperator(
             // but where adjacent pairs share an exact endpoint, rendering
             // them as separate <path>s lets antialiasing open hairline ~0.5px
             // seams off the pixel grid. One path per run is gap-proof by
-            // construction. The edges meet at operand i+1 when each enters it
-            // where the next pair's leaves it: the whole operand (a line
-            // through centers), or the same point (an area's zero-width
-            // points; bar-like operands with real width genuinely don't share
-            // an edge and stay separate).
+            // construction. The edges meet at operand i+1 when each of pair
+            // i's paths ends where pair i+1's starts: a line through centers,
+            // or a band over an area's zero-width points. Bar-like operands
+            // with real width, and a route that stops short of the box (a
+            // padded perfect-arrows arc), genuinely don't share an edge and
+            // stay separate.
             const meets = (i: number): boolean =>
-              attachments[i].every((ends, e) =>
-                samePlace(ends[1], attachments[i + 1][e][0])
+              routed.every((paths) =>
+                meetAt(
+                  segmentEnds(paths[i][paths[i].length - 1])[1],
+                  segmentEnds(paths[i + 1][0])[0]
+                )
               );
             let from = 0;
             for (let i = 0; i < attachments.length; i++) {
@@ -780,14 +776,12 @@ export const connect = createNodeOperator(
           // above leaves one open edge.)
           let timeRun: TimeRun | undefined;
           if (timeKnots !== undefined) {
-            const ends = (seg: Path[number]): [number, number][] =>
-              seg.type === "line" ? seg.points : [seg.start, seg.end];
             const threads = steps[0].every(({ segments }, i) => {
               if (sequence === undefined && segments.length !== 1) {
                 return false;
               }
-              const [start] = ends(segments[0]);
-              const [, end] = ends(segments[segments.length - 1]);
+              const [start] = segmentEnds(segments[0]);
+              const [, end] = segmentEnds(segments[segments.length - 1]);
               return (
                 samePoint(start, centers[i]) && samePoint(end, centers[i + 1])
               );

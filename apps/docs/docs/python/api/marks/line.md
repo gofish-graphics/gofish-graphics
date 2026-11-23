@@ -48,10 +48,16 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 out, a line over a continuous axis uses `Curve.monotone()`, and any other line
 uses `Curve.linear()`. A line with `source` or `target` runs between those
 anchor points, routed by `curve`, and is straight when `curve` is left out.
-With `Curve.step()`, `Curve.monotone()`, `Curve.smooth()` or
-`Curve.catmull_rom()`, an anchored line leaves the first mark at its `source`
-point, enters the last mark at its `target` point, and passes each mark between
-them midway between the two. The
+A curve that routes each pair of marks (`Curve.linear()`, `Curve.bezier()`,
+`Curve.orthogonal()`, `Curve.arc()` or `Curve.perfect_arrows()`) runs from the
+`source` point to the `target` point, and with only one of them it attaches the
+other end at the nearest point of the other mark. A curve that threads the
+whole run (`Curve.step()`, `Curve.monotone()`, `Curve.smooth()` or
+`Curve.catmull_rom()`) passes each mark, the first and last included, midway
+between its `target` and `source` points. With only one of them it passes every
+mark at that point. So `source=["end", "middle"], target=["start", "middle"]`
+passes the marks' centers, and `source=["middle", "end"],
+target=["middle", "end"]` passes the middle of each mark's `end` side on y. The
 [`Curve`](/python/api/curve#curves-through-data) page compares the curves.
 
 ## Shape form

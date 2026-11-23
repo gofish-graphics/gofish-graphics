@@ -1,8 +1,9 @@
 /**
  * The connector form of `line` and `ribbon` (`graphicalOperators/connect.tsx`):
  * an anchored line is routed by its curve between its anchor points, and is
- * straight when it has none; a sequence curve given one end threads that
- * end's point on each mark; a ribbon takes only a curve that draws a band
+ * straight when it has none; consecutive pairs are one path only where their
+ * routes meet; a sequence curve passes each mark midway between where its
+ * edge enters and leaves it; a ribbon takes only a curve that draws a band
  * edge (`drawsBandEdge` in `routers.ts`).
  * Run: `tsx src/tests/connector.test.ts` (wired into `pnpm test` as
  * `test:connector`).
@@ -153,6 +154,91 @@ async function main() {
     );
   }
 
+  console.log("\n# an anchored perfect-arrows line runs between its anchors");
+  {
+    const pathEnds = (d: string): [Point, Point] | undefined => {
+      const cmds = commands(d);
+      const last = cmds[cmds.length - 1]?.args ?? [];
+      return cmds.length > 1 && cmds[0].op === "M"
+        ? [cmds[0].args as Point, [last[last.length - 2], last[last.length - 1]]]
+        : undefined;
+    };
+    try {
+      const { rects, paths } = await drawn(anchored(Curve.perfectArrows()));
+      const [from, to] = anchorsOf(rects);
+      const ends = paths.length === 1 ? pathEnds(paths[0].d) : undefined;
+      check(
+        "with both anchors, it starts and ends on them",
+        ends !== undefined && close(ends[0], from) && close(ends[1], to),
+        paths.map((p) => p.d)
+      );
+    } catch (e) {
+      check("with both anchors, it lays out", false, (e as Error).message);
+    }
+    try {
+      const { rects, paths } = await drawn(
+        layer([
+          rect({ x: 0, y: 0, w: 80, h: 40, fill: "#ccc" }).name("a"),
+          rect({ x: 200, y: 120, w: 80, h: 40, fill: "#ccc" }).name("b"),
+        ]).relate(({ a, b }: any) => [
+          line(
+            {
+              source: ["end", "middle"],
+              stroke: "black",
+              curve: Curve.perfectArrows(),
+            },
+            [a, b]
+          ),
+        ])
+      );
+      const [from] = anchorsOf(rects);
+      const b = [...rects].sort((r, s) => r.x - s.x)[1];
+      // The omitted end is the point of b nearest the source point.
+      const nearest: Point = [
+        Math.min(Math.max(from[0], b.x), b.x + b.w),
+        Math.min(Math.max(from[1], b.y), b.y + b.h),
+      ];
+      const ends = paths.length === 1 ? pathEnds(paths[0].d) : undefined;
+      check(
+        "with only source, it starts on it and ends at b's nearest point",
+        ends !== undefined && close(ends[0], from) && close(ends[1], nearest),
+        paths.map((p) => p.d)
+      );
+    } catch (e) {
+      check("with only source, it lays out", false, (e as Error).message);
+    }
+  }
+
+  console.log(
+    "\n# a perfect-arrows line over three marks draws one arc per pair"
+  );
+  {
+    const { rects, paths } = await drawn(
+      layer([
+        rect({ x: 0, y: 0, w: 40, h: 40, fill: "#ccc" }).name("a"),
+        rect({ x: 120, y: 100, w: 40, h: 40, fill: "#ccc" }).name("b"),
+        rect({ x: 260, y: 0, w: 40, h: 40, fill: "#ccc" }).name("c"),
+      ]).relate(({ a, b, c }: any) => [
+        line({ stroke: "black", curve: Curve.perfectArrows() }, [a, b, c]),
+      ])
+    );
+    const sorted = [...rects].sort((r, s) => r.x - s.x);
+    const on = (p: Point, r: any) =>
+      p[0] >= r.x - 1e-6 &&
+      p[0] <= r.x + r.w + 1e-6 &&
+      p[1] >= r.y - 1e-6 &&
+      p[1] <= r.y + r.h + 1e-6;
+    const starts = paths.map((p) => commands(p.d)[0].args as Point);
+    check(
+      "two paths, each starting on its own mark",
+      paths.length === 2 &&
+        paths.every((p) => commands(p.d).filter((c) => c.op === "M").length === 1) &&
+        on(starts[0], sorted[0]) &&
+        on(starts[1], sorted[1]),
+      paths.map((p) => p.d)
+    );
+  }
+
   console.log("\n# a sequence curve with one end given threads that end");
   {
     // An omitted `target` is the `source` point itself on each mark, so the
@@ -190,11 +276,9 @@ async function main() {
   }
 
   console.log(
-    "\n# an anchored sequence curve leaves the first mark and enters the last"
+    "\n# a sequence curve passes each mark midway between where it enters and leaves"
   );
   {
-    // Three boxes along x; the edge leaves each at the middle of its right
-    // side and enters each at the middle of its left side.
     const through = (anchors: object) =>
       layer([
         rect({ x: 0, y: 0, w: 40, h: 40, fill: "#ccc" }).name("a"),
@@ -218,29 +302,45 @@ async function main() {
         ? [cmds[0].args as Point, end(cmds[1].args), end(cmds[2].args)]
         : [];
     };
+    const sortedCenters = (rects: any[]): Point[] =>
+      [...rects]
+        .sort((r, s) => r.x - s.x)
+        .map((r): Point => [r.x + r.w / 2, r.y + r.h / 2]);
     {
+      // It leaves each mark at the middle of its right side and enters each
+      // at the middle of its left side: midway between is the center, the
+      // first and last mark included.
       const { rects, paths } = await drawn(
         through({ source: ["end", "middle"], target: ["start", "middle"] })
       );
-      const [a, b, c] = [...rects].sort((r, s) => r.x - s.x);
+      const centers = sortedCenters(rects);
       const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
-      // The middle mark is passed midway between where the edge enters and
-      // leaves it: its center.
       check(
-        "it starts at the first mark's source point, passes the middle " +
-          "mark's center, and ends at the last mark's target point",
-        knots.length === 3 &&
-          close(knots[0], [a.x + a.w, a.y + a.h / 2]) &&
-          close(knots[1], [b.x + b.w / 2, b.y + b.h / 2]) &&
-          close(knots[2], [c.x, c.y + c.h / 2]),
+        "anchored at facing sides, it threads every mark's center",
+        knots.length === 3 && knots.every((k, i) => close(k, centers[i])),
+        paths.map((p) => p.d)
+      );
+    }
+    {
+      // It enters and leaves each mark at the middle of the same side, so
+      // it threads that point on every mark.
+      const { rects, paths } = await drawn(
+        through({ source: ["middle", "end"], target: ["middle", "end"] })
+      );
+      const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
+      // A layer's y reads top-down, so `end` on y is the bottom.
+      const bottoms = [...rects]
+        .sort((r, s) => r.x - s.x)
+        .map((r): Point => [r.x + r.w / 2, r.y + r.h]);
+      check(
+        "anchored at the same side, it threads that side's middle on every mark",
+        knots.length === 3 && knots.every((k, i) => close(k, bottoms[i])),
         paths.map((p) => p.d)
       );
     }
     {
       const { rects, paths } = await drawn(through({}));
-      const centers = [...rects]
-        .sort((r, s) => r.x - s.x)
-        .map((r): Point => [r.x + r.w / 2, r.y + r.h / 2]);
+      const centers = sortedCenters(rects);
       const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
       check(
         "unanchored, it threads the marks' centers",
@@ -248,6 +348,39 @@ async function main() {
         paths.map((p) => p.d)
       );
     }
+  }
+
+  console.log("\n# a smooth ribbon passes each mark at the middle of its sides");
+  {
+    // The marks overlap along x, so their facing sides are out of order
+    // along it; the middles are not.
+    const { rects, paths } = await drawn(
+      layer([
+        rect({ x: 0, y: 0, w: 60, h: 40, fill: "#ccc" }).name("a"),
+        rect({ x: 30, y: 60, w: 60, h: 40, fill: "#ccc" }).name("b"),
+        rect({ x: 60, y: 20, w: 60, h: 40, fill: "#ccc" }).name("c"),
+      ]).relate(({ a, b, c }: any) => [
+        ribbon({ curve: Curve.monotone(), fill: "steelblue" }, [a, b, c]),
+      ])
+    );
+    const [a, b, c] = [...rects].sort((r, s) => r.x - s.x);
+    const cmds = paths.length === 1 ? commands(paths[0].d) : [];
+    const endOf = (i: number): Point => {
+      const args = cmds[i]?.args ?? [];
+      return [args[args.length - 2], args[args.length - 1]];
+    };
+    // Near edge forward (M, C, C), then across at c, far edge back.
+    // A layer's y reads top-down, so `start` on y is the top.
+    check(
+      "the near edge threads the top middle of every mark, smoothly",
+      cmds.length > 3 &&
+        cmds[1].op === "C" &&
+        cmds[2].op === "C" &&
+        close(endOf(0), [a.x + a.w / 2, a.y]) &&
+        close(endOf(1), [b.x + b.w / 2, b.y]) &&
+        close(endOf(2), [c.x + c.w / 2, c.y]),
+      paths.map((p) => p.d)
+    );
   }
 
   console.log("\n# a ribbon takes only a curve that draws a band edge");

@@ -163,4 +163,6 @@ up by default; `{ direction: "down" }` flips it. A line threaded through the
 keyframes of a `time.sequence` cannot use `Curve.orthogonal()`, `Curve.arc()` or
 `Curve.perfectArrows()`. A `ribbon` cannot use `Curve.arc()` or
 `Curve.perfectArrows()`: each edge of a band runs along the connection axis,
-and these two bow away from the line between their ends.
+and these two bow away from the line between their ends. Nor can it use
+`Curve.orthogonal({ bend: "auto" })`, which picks a bend axis for each edge on
+its own.

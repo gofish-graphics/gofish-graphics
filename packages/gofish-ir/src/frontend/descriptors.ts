@@ -805,7 +805,7 @@ export const STRATEGIES = {
         },
       },
       perfectArrows: {
-        doc: "Box-to-box arc from the perfect-arrows library.",
+        doc: "Arc from the perfect-arrows library: from box to box, or from point to point between a line's `source` and `target`.",
         params: {
           bow: {
             type: t.number,
@@ -830,12 +830,12 @@ export const STRATEGIES = {
           padStart: {
             type: t.number,
             default: 0,
-            doc: "Gap in pixels between the source box and the start of the arc.",
+            doc: "Gap in pixels between the source box and the start of the arc. A line with `source` or `target` is not padded at either end.",
           },
           padEnd: {
             type: t.number,
             default: 20,
-            doc: "Gap in pixels between the end of the arc and the target box.",
+            doc: "Gap in pixels between the end of the arc and the target box. A line with `source` or `target` is not padded at either end.",
           },
           flip: {
             type: t.boolean,
@@ -2329,7 +2329,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       curve: {
         type: t.ref("Curve"),
-        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). With `source` or `target`, the curve routes the line between the anchor points; a curve that threads the whole run (Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom()) leaves the first mark at its `source` point, enters the last mark at its `target` point, and passes each mark between them midway between the two. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(); a line with `source` or `target` is Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.',
+        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). With `source` or `target`, the curve routes the line between the anchor points. A curve that routes each pair of marks (Curve.linear(), Curve.bezier(), Curve.orthogonal(), Curve.arc() or Curve.perfectArrows()) attaches an omitted end at the point of the other mark nearest the given one. A curve that threads the whole run (Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom()) passes each mark, the first and last included, midway between its `target` and `source` points: with only one of them it passes every mark at that point, and with `source: ["end", "middle"]` and `target: ["start", "middle"]` it passes the centers of the marks. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(); a line with `source` or `target` is Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
