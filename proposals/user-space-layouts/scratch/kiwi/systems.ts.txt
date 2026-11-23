@@ -1,0 +1,319 @@
+// Head to head on the per-layer placement systems the engine actually solves.
+//
+// Every call of `solveAxisProblem` (differenceGraph.ts) during a real render
+// is recorded with its tape. Each recorded system is then solved again, out
+// of the render:
+//   ours-num : solveAxisProblem in plain numbers (`arith.numbers`), with
+//              every formula evaluated at a fixed sigma.
+//   ours-pwl : solveAxisProblem in `arith.values` (Pwl in sigma), the
+//              symbolic form the claim walk works in (without the Tape).
+//   kiwi     : the same equalities in @lume/kiwi (all `required`), the
+//              component gauge (which origin a floating group takes) stated
+//              as kiwi constraints, see `gauge` below.
+//   kiwi-s   : kiwi with sigma as an edit variable, the offsets stated as
+//              `slope*sigma + intercept` (only where every formula is affine);
+//              re-solve = suggestValue(sigma) + updateVariables, against
+//              ours = evaluating the Pwl positions at the new sigma.
+import * as kiwi from "@lume/kiwi";
+import { kb, renderOnce, specs, Pwl, arith, dg, median, q } from "./common";
+
+const { Solver, Variable, Expression, Constraint, Operator, Strength } = kiwi as any;
+
+type Rec = { axis: string; problem: any; freeOrigin: any; tape: any };
+let recs: Rec[] = [];
+kb.record = (A, axis, problem, freeOrigin) => {
+  const tape = kb.tape;
+  if (!tape || A !== tape.arith) throw new Error("solveAxisProblem outside a tape");
+  recs.push({ axis, problem, freeOrigin, tape });
+};
+
+// ---- convert a recorded system to Pwl / numbers ----
+const toVal = (r: Rec, f: any): any => r.tape.claim[f];
+function mapProblem(r: Rec, conv: (v: any) => any) {
+  const p = r.problem;
+  return {
+    problem: {
+      relations: p.relations.map((x: any) => ({ ...x, offset: conv(toVal(r, x.offset)) })),
+      pins: p.pins.map((x: any) => ({ ...x, value: conv(toVal(r, x.value)) })),
+      participantFacts: p.participantFacts,
+      participants: p.participants,
+      chainAnchors: p.chainAnchors
+        ? new Map([...p.chainAnchors].map(([k, v]: any) => [k, conv(toVal(r, v))]))
+        : undefined,
+    },
+    freeOrigin: r.freeOrigin && {
+      value: conv(toVal(r, r.freeOrigin.value)),
+      baselines: new Map([...r.freeOrigin.baselines].map(([k, v]: any) => [k, conv(toVal(r, v))])),
+      stated: r.freeOrigin.stated,
+    },
+  };
+}
+
+// ---- kiwi model of one numeric system ----
+// Equalities: x_to - x_from = offset (required); pins x = value (required).
+// Gauge: a component with no pin takes, in our engine's order, the free
+// origin (its shared baseline seated at freeOrigin.value), the sequence
+// origin (the first chain source at -chainAnchor), or the normalized origin
+// (its minimum at 0). kiwi has no notion of components, so the model finds
+// them (union-find) and states the gauge as: a required pin for the first
+// two, and `x >= 0` (required) + `x == 0` (weak) on every member for the
+// third, which makes the minimum 0. That is the rule written out again; it
+// is counted in kiwi's time.
+function kiwiSolve(axisName: string, P: any, FO: any) {
+  const solver = new Solver();
+  const vars = new Map<string, any>();
+  const V = (n: string) => {
+    let v = vars.get(n);
+    if (!v) vars.set(n, (v = new Variable(n)));
+    return v;
+  };
+  // Relations are added after every pin and gauge (PINS_FIRST, default),
+  // which is 3-4x faster in kiwi than relations first (scripts/order.ts).
+  const deferred: any[] = [];
+  const parent = new Map<string, string>();
+  const find = (a: string): string => {
+    let r = a;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    let c = a;
+    while (parent.get(c) !== r) { const n = parent.get(c)!; parent.set(c, r); c = n; }
+    return r;
+  };
+  for (const n of P.participants) { V(n); parent.set(n, n); }
+  // relative offsets for the gauge rule (needed only to pick free origin).
+  for (const rel of P.relations) {
+    const a = rel.from.node, b = rel.to.node;
+    V(a); V(b);
+    if (!parent.has(a)) parent.set(a, a);
+    if (!parent.has(b)) parent.set(b, b);
+    parent.set(find(a), find(b));
+    deferred.push(
+      new Constraint(new Expression(V(b), [-1, V(a)]), Operator.Eq, rel.offset, Strength.required)
+    );
+  }
+  const pinned = new Set<string>();
+  for (const pin of P.pins) {
+    if (!parent.has(pin.node)) continue;
+    pinned.add(find(pin.node));
+    solver.addConstraint(new Constraint(V(pin.node), Operator.Eq, pin.value, Strength.required));
+  }
+  const comps = new Map<string, string[]>();
+  for (const n of parent.keys()) {
+    const r = find(n);
+    (comps.get(r) ?? comps.set(r, []).get(r)!).push(n);
+  }
+  const gauges: Record<string, number> = { pin: 0, free: 0, sequence: 0, normalized: 0 };
+  const gaugePins: { node: string; kind: "free" | "sequence" }[] = [];
+  // For the free-origin rule we need each member's position relative to the
+  // component: solve the component's equalities first with a temporary
+  // gauge? No: our rule only needs whether the baselines agree, which needs
+  // relative positions. We get them from kiwi itself: add a weak x==0 on one
+  // member, solve, read, then replace. To keep it simple and exact, compute
+  // relative positions by BFS here (what our solver does).
+  const adj = new Map<string, [string, number][]>();
+  for (const rel of P.relations) {
+    (adj.get(rel.from.node) ?? adj.set(rel.from.node, []).get(rel.from.node)!).push([rel.to.node, rel.offset]);
+    (adj.get(rel.to.node) ?? adj.set(rel.to.node, []).get(rel.to.node)!).push([rel.from.node, -rel.offset]);
+  }
+  for (const [root, members] of comps) {
+    if (pinned.has(root)) { gauges.pin++; continue; }
+    const rel = new Map<string, number>([[members[0], 0]]);
+    const queue = [members[0]];
+    while (queue.length) {
+      const c = queue.shift()!;
+      for (const [n, d] of adj.get(c) ?? []) if (!rel.has(n)) { rel.set(n, rel.get(c)! + d); queue.push(n); }
+    }
+    // free origin
+    let done = false;
+    if (FO) {
+      const holdsSpread = P.relations.some((r: any) => r.chain === true && find(r.from.node) === root);
+      const states = members.some((n) => FO.stated?.has(n) === true);
+      if (!(holdsSpread && !states)) {
+        let shared: number | undefined, ok = true, node: string | undefined;
+        for (const n of members) {
+          const off = FO.baselines.get(n);
+          if (off === undefined) continue;
+          const at = rel.get(n)! + off;
+          if (shared === undefined) { shared = at; node = n; }
+          else if (Math.abs(shared - at) > 1e-6) { ok = false; break; }
+        }
+        if (ok && shared !== undefined) {
+          solver.addConstraint(new Constraint(V(node!), Operator.Eq, FO.value - FO.baselines.get(node!), Strength.required));
+          gauges.free++;
+          gaugePins.push({ node: node!, kind: "free" });
+          done = true;
+        }
+      }
+    }
+    if (done) continue;
+    const out = new Set<string>(), inc = new Set<string>();
+    for (const r of P.relations) {
+      if (!r.chain || find(r.from.node) !== root) continue;
+      out.add(r.from.node); inc.add(r.to.node);
+    }
+    const origin = [...out].filter((n) => !inc.has(n)).sort()[0];
+    if (origin !== undefined) {
+      solver.addConstraint(new Constraint(V(origin), Operator.Eq, -(P.chainAnchors?.get(origin) ?? 0), Strength.required));
+      gauges.sequence++;
+      gaugePins.push({ node: origin, kind: "sequence" });
+      continue;
+    }
+    for (const n of members) {
+      solver.addConstraint(new Constraint(V(n), Operator.Ge, 0, Strength.required));
+      solver.addConstraint(new Constraint(V(n), Operator.Eq, 0, Strength.weak));
+    }
+    gauges.normalized++;
+  }
+  for (const c of deferred) solver.addConstraint(c);
+  solver.updateVariables();
+  const out = new Map<string, number>();
+  for (const [n, v] of vars) out.set(n, v.value());
+  return { out, gauges, gaugePins, nVars: vars.size, solver };
+}
+
+// σ-variable kiwi model, only for systems whose formulas are all affine and
+// whose gauge is pins / sequence (no normalized-origin min) — we reuse the
+// numeric gauge decision.
+function kiwiSigma(Ppwl: any) {
+  const solver = new Solver();
+  const sigma = new Variable("sigma");
+  solver.addEditVariable(sigma, Strength.strong);
+  solver.suggestValue(sigma, 1);
+  const vars = new Map<string, any>();
+  const V = (n: string) => vars.get(n) ?? vars.set(n, new Variable(n)).get(n);
+  const lin = (v: any) => {
+    if (v.kind !== "affine") return undefined;
+    return v;
+  };
+  for (const rel of Ppwl.relations) {
+    const a = lin(rel.offset);
+    if (!a) return undefined;
+    solver.addConstraint(new Constraint(
+      new Expression(V(rel.to.node), [-1, V(rel.from.node)], [-a.slope, sigma]), Operator.Eq, a.intercept, Strength.required));
+  }
+  for (const pin of Ppwl.pins) {
+    const a = lin(pin.value);
+    if (!a) return undefined;
+    solver.addConstraint(new Constraint(new Expression(V(pin.node), [-a.slope, sigma]), Operator.Eq, a.intercept, Strength.required));
+  }
+  return { solver, sigma, vars };
+}
+
+const near = (a: number, b: number) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+
+function timeit(fn: () => void, minMs = 200, minReps = 20) {
+  for (let i = 0; i < 5; i++) fn();
+  const xs: number[] = [];
+  const t0 = performance.now();
+  while (xs.length < minReps || performance.now() - t0 < minMs) {
+    const t = performance.now();
+    fn();
+    xs.push(performance.now() - t);
+    if (xs.length > 20000) break;
+  }
+  return { med: median(xs), p10: q(xs, 0.1), p90: q(xs, 0.9), n: xs.length };
+}
+
+const SIG = 1.37; // any fixed sigma: the structure, not the value, is under test
+const rows: any[] = [];
+const only = process.argv[2];
+for (const name of Object.keys(specs)) {
+  if (only && !name.includes(only)) continue;
+  recs = [];
+  await renderOnce(name);
+  const sysRecs = recs;
+  recs = [];
+  kb.record = undefined; // stop recording while we re-solve
+  let nRel = 0, nPin = 0, nPart = 0, maxPart = 0, agreeAll = true, disagreements: string[] = [];
+  const gaugeTotals: Record<string, number> = { pin: 0, free: 0, sequence: 0, normalized: 0 };
+  let affineSystems = 0, piecewiseSystems = 0;
+  const numSystems = sysRecs.map((r) => mapProblem(r, (v) => Pwl.at(v, SIG)));
+  const pwlSystems = sysRecs.map((r) => mapProblem(r, (v) => v));
+  // check agreement + stats
+  numSystems.forEach((s, i) => {
+    const P = s.problem;
+    nRel += P.relations.length; nPin += P.pins.length; nPart += P.participants.size;
+    maxPart = Math.max(maxPart, P.participants.size);
+    const ours = dg.solveAxisProblem(arith.numbers, sysRecs[i].axis, P, s.freeOrigin);
+    const k = kiwiSolve(sysRecs[i].axis, P, s.freeOrigin);
+    for (const g in k.gauges) gaugeTotals[g] += k.gauges[g];
+    for (const [n, x] of ours.positions) {
+      const y = k.out.get(n);
+      if (y === undefined || !near(x, y)) {
+        agreeAll = false;
+        if (disagreements.length < 3) disagreements.push(`${n}: ours ${x} kiwi ${y}`);
+      }
+    }
+    if (ours.conflicts.length) disagreements.push(`conflicts in ours: ${ours.conflicts.length}`);
+    const allAffine = [...pwlSystems[i].problem.relations.map((r: any) => r.offset), ...pwlSystems[i].problem.pins.map((p: any) => p.value)].every((v: any) => v.kind === "affine");
+    if (allAffine) affineSystems++; else piecewiseSystems++;
+  });
+  // timings over the whole spec's systems (sum over every layer-axis)
+  const tOursNum = timeit(() => { numSystems.forEach((s, i) => dg.solveAxisProblem(arith.numbers, sysRecs[i].axis, s.problem, s.freeOrigin)); });
+  const tOursPwl = timeit(() => { pwlSystems.forEach((s, i) => dg.solveAxisProblem(arith.values, sysRecs[i].axis, s.problem, s.freeOrigin)); });
+  const tKiwi = timeit(() => { numSystems.forEach((s, i) => kiwiSolve(sysRecs[i].axis, s.problem, s.freeOrigin)); });
+
+  // re-solve at a new sigma: kiwi-s (suggestValue) vs ours (Pwl.at on the
+  // symbolic positions ours-pwl already produced).
+  const oursPwlSolved = pwlSystems.map((s, i) => dg.solveAxisProblem(arith.values, sysRecs[i].axis, s.problem, s.freeOrigin).positions);
+  // Only systems with all-pin gauge (pins/sequence) can go into kiwi-s
+  // without the min rule; we model kiwi-s on systems whose numeric gauge was
+  // pin-only (sequence origins are also pins, added below).
+  const ks: any[] = [];
+  let ksAgree = true, ksSkipped = 0;
+  pwlSystems.forEach((s, i) => {
+    const m = kiwiSigma(s.problem);
+    if (!m) { ksSkipped++; return; }
+    // add the gauge for unpinned components as sigma-free pins taken from
+    // the sequence origin rule only; skip systems that need free/normalized.
+    const k = kiwiSolve(sysRecs[i].axis, numSystems[i].problem, numSystems[i].freeOrigin);
+    if (k.gauges.normalized) { ksSkipped++; return; }
+    const P = s.problem;
+    const FO = s.freeOrigin;
+    const Vm = (o: string) => m.vars.get(o) ?? m.vars.set(o, new Variable(o)).get(o);
+    for (const g of k.gaugePins) {
+      const val = g.kind === "sequence"
+        ? Pwl.negate(P.chainAnchors?.get(g.node) ?? Pwl.ZERO)
+        : Pwl.add(FO.value, Pwl.negate(FO.baselines.get(g.node)));
+      if (val.kind !== "affine") { ksSkipped++; return; }
+      m.solver.addConstraint(new Constraint(new Expression(Vm(g.node), [-val.slope, m.sigma]), Operator.Eq, val.intercept, Strength.required));
+    }
+    m.solver.updateVariables();
+    ks.push({ ...m, i });
+  });
+  let sigmaNow = SIG;
+  for (const m of ks) { m.solver.suggestValue(m.sigma, 2.5); m.solver.updateVariables(); }
+  for (const m of ks) for (const [n, v] of m.vars) {
+    const ours = oursPwlSolved[m.i].get(n);
+    if (ours !== undefined && !near(Pwl.at(ours, 2.5), v.value())) ksAgree = false;
+  }
+  const tKiwiResolve = timeit(() => { sigmaNow = sigmaNow === 2.5 ? 1.7 : 2.5; for (const m of ks) { m.solver.suggestValue(m.sigma, sigmaNow); m.solver.updateVariables(); } });
+  const tOursResolve = timeit(() => { sigmaNow = sigmaNow === 2.5 ? 1.7 : 2.5; for (const m of ks) for (const v of oursPwlSolved[m.i].values()) Pwl.at(v, sigmaNow); });
+
+  const row = {
+    spec: name,
+    systems: sysRecs.length,
+    participants: nPart,
+    maxParticipants: maxPart,
+    relations: nRel,
+    pins: nPin,
+    affineSystems,
+    piecewiseSystems,
+    gauges: gaugeTotals,
+    agree: agreeAll,
+    disagreements,
+    oursNum: tOursNum,
+    oursPwl: tOursPwl,
+    kiwi: tKiwi,
+    ratioKiwiOverOursNum: tKiwi.med / tOursNum.med,
+    resolveSystems: ks.length,
+    resolveSkipped: ksSkipped,
+    resolveAgree: ksAgree,
+    kiwiResolve: tKiwiResolve,
+    oursResolve: tOursResolve,
+  };
+  rows.push(row);
+  console.log(JSON.stringify(row));
+  kb.record = (A, axis, problem, freeOrigin) => { recs.push({ axis, problem, freeOrigin, tape: kb.tape }); };
+}
+const fs = await import("node:fs");
+fs.writeFileSync("/Users/jmp/.claude/jobs/a4ed3dcc/tmp/kiwi-bench/results-systems.json", JSON.stringify(rows, null, 1));

@@ -1,0 +1,7 @@
+const G = "/Users/jmp/.claude/jobs/a4ed3dcc/tmp/kiwi-bench/clean/packages/gofish-graphics/src";
+const lib = await import(G + "/lib");
+const { chart, spread, rect } = lib as any;
+const data = Array.from({ length: 5 }, (_, i) => ({ c: "c" + i, v: i + 1 }));
+const node = chart(data).flow(spread({ by: "c", dir: "x" })).mark(rect({ h: "v" }));
+const dl: any = await node.toDisplayList({ w: 400, h: 300 });
+console.log(JSON.stringify(dl).slice(0, 2500));

@@ -1,0 +1,171 @@
+// A whole-chart model in kiwi: placement and the fit to the room as ONE
+// linear program, which is what "just use Cassowary" would mean. Done for
+// the two spec families whose layout is all linear: a bar chart (spread of
+// bars, data heights) and stacked bars (spread of stacks).
+//
+// Variables: per bar x, w, y, h; one sigma for y. Required constraints:
+//   x_0 = 0, x_{i+1} = x_i + w_i + gap, w_i = w_0, x_{n-1} + w_{n-1} = W
+//   h_i = sigma * v_i (bar) or the stack's running sums (stacked)
+//   every column's top <= H, sigma * D <= H (D: the y domain's nice max)
+// and one weak constraint sigma = 1e6 (pull sigma up: the largest sigma that
+// fits, which is our engine's rule for a claim that rises).
+// W and H are edit variables: a resize is suggestValue + updateVariables.
+//
+// Inputs taken from our render, because they come from steps that are not
+// the solve: the plot room W, H (canvas less axis chrome, which needs text
+// measurement), the gap (the spread's default spacing), and D (domain
+// inference rounds the domain to a nice number).
+import * as kiwi from "@lume/kiwi";
+import { renderOnce, specs, median, q } from "./common";
+const { Solver, Variable, Expression, Constraint, Operator, Strength } = kiwi as any;
+
+const near = (a: number, b: number) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+
+function oursLayout(dl: any) {
+  const rects = dl.items.filter((i: any) => i.kind === "rect" && i.role === "node");
+  const axis = dl.items
+    .filter((i: any) => i.kind === "rect" && i.role === "overlay" && i.w === 1)
+    .sort((a: any, b: any) => b.h - a.h)[0];
+  return { rects, axisTop: axis.y, axisH: axis.h };
+}
+
+type Model = { solver: any; W: any; H: any; read: () => number[][] };
+
+function buildBars(vals: number[][], gap: number, D: number, W0: number, H0: number): Model {
+  // vals[c] = the stacked values of column c (one value for a bar chart)
+  const s = new Solver();
+  const W = new Variable("W"), H = new Variable("H"), sigma = new Variable("sigma");
+  s.addEditVariable(W, Strength.strong);
+  s.addEditVariable(H, Strength.strong);
+  s.suggestValue(W, W0);
+  s.suggestValue(H, H0);
+  const n = vals.length;
+  const x = vals.map((_, i) => new Variable("x" + i));
+  const w = vals.map((_, i) => new Variable("w" + i));
+  const req = (e: any, op: any, r: any) => s.addConstraint(new Constraint(e, op, r, Strength.required));
+  req(x[0], Operator.Eq, 0);
+  for (let i = 0; i + 1 < n; i++) req(new Expression(x[i + 1], [-1, x[i]], [-1, w[i]]), Operator.Eq, gap);
+  for (let i = 1; i < n; i++) req(new Expression(w[i], [-1, w[0]]), Operator.Eq, 0);
+  req(new Expression(x[n - 1], w[n - 1], [-1, W]), Operator.Eq, 0);
+  // y measured up from the baseline: lo_cj, h_cj
+  const lo: any[][] = [], h: any[][] = [];
+  vals.forEach((col, c) => {
+    lo.push([]); h.push([]);
+    col.forEach((v, j) => {
+      const L = new Variable(`lo${c}_${j}`), Hh = new Variable(`h${c}_${j}`);
+      lo[c].push(L); h[c].push(Hh);
+      req(new Expression(Hh, [-v, sigma]), Operator.Eq, 0);
+      if (j === 0) req(L, Operator.Eq, 0);
+      else req(new Expression(L, [-1, lo[c][j - 1]], [-1, h[c][j - 1]]), Operator.Eq, 0);
+    });
+    const last = col.length - 1;
+    req(new Expression(lo[c][last], h[c][last], [-1, H]), Operator.Le, 0);
+  });
+  req(new Expression([D, sigma], [-1, H]), Operator.Le, 0);
+  s.addConstraint(new Constraint(sigma, Operator.Eq, 1e6, Strength.weak));
+  s.updateVariables();
+  return {
+    solver: s, W, H,
+    read: () => vals.flatMap((col, c) => col.map((_, j) => [x[c].value(), w[c].value(), lo[c][j].value(), h[c][j].value()])),
+  };
+}
+
+function compare(name: string, dl: any, model: Model, ncol: number) {
+  const { rects, axisTop, axisH } = oursLayout(dl);
+  const base = axisTop + axisH;
+  // ours in the model's frame: x from the first bar, y up from the baseline
+  const x0 = Math.min(...rects.map((r: any) => r.x));
+  // order rects as the model does: by column (x), then from the baseline up
+  const ordered = [...rects].sort((a: any, b: any) => a.x - b.x || b.y - a.y);
+  const ours = ordered.map((r: any) => [r.x - x0, r.w, base - (r.y + r.h), r.h]);
+  const k = model.read();
+  let worst = 0;
+  for (let i = 0; i < ours.length; i++)
+    for (let d = 0; d < 4; d++) worst = Math.max(worst, Math.abs(ours[i][d] - k[i][d]));
+  return { worst, n: ours.length };
+}
+
+function timeit(fn: () => void, minMs = 300, minReps = 10) {
+  for (let i = 0; i < 3; i++) fn();
+  const xs: number[] = [];
+  const t0 = performance.now();
+  while (xs.length < minReps || performance.now() - t0 < minMs) {
+    const t = performance.now();
+    fn();
+    xs.push(performance.now() - t);
+    if (xs.length > 5000) break;
+  }
+  return { med: median(xs), p10: q(xs, 0.1), p90: q(xs, 0.9), n: xs.length };
+}
+
+async function timeRender(name: string, size: any, reps: number) {
+  for (let i = 0; i < 2; i++) await renderOnce(name, size);
+  const xs: number[] = [];
+  for (let i = 0; i < reps; i++) xs.push((await renderOnce(name, size)).total);
+  return { med: median(xs), p10: q(xs, 0.1), p90: q(xs, 0.9), n: xs.length };
+}
+
+const cases: { name: string; size: any; size2: any; vals: () => number[][] }[] = [];
+const barVals = (n: number) => Array.from({ length: n }, (_, i) => [1 + ((i * 37) % 97)]);
+const stackVals = (n: number) =>
+  Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => 1 + ((i * 7 + j * 13) % 11)));
+cases.push({ name: "bars-20", size: { w: 800, h: 400 }, size2: { w: 900, h: 450 }, vals: () => barVals(20) });
+cases.push({ name: "bars-200", size: { w: 2000, h: 400 }, size2: { w: 2200, h: 450 }, vals: () => barVals(200) });
+cases.push({ name: "bars-2000", size: { w: 20000, h: 400 }, size2: { w: 22000, h: 450 }, vals: () => barVals(2000) });
+cases.push({ name: "stacked-20x20", size: { w: 800, h: 400 }, size2: { w: 900, h: 450 }, vals: () => stackVals(20) });
+cases.push({ name: "stacked-50x50", size: { w: 800, h: 400 }, size2: { w: 900, h: 450 }, vals: () => stackVals(50) });
+
+const only = process.argv[2];
+const rows: any[] = [];
+for (const c of cases) {
+  if (only && !c.name.includes(only)) continue;
+  const vals = c.vals();
+  const r1 = await renderOnce(c.name, c.size);
+  const { rects, axisH } = oursLayout(r1.dl);
+  const xs = [...new Set(rects.map((r: any) => r.x))].sort((a: any, b: any) => a - b) as number[];
+  const first = rects.find((r: any) => r.x === xs[0]);
+  const gap = xs[1] - xs[0] - first.w;
+  const W = xs[xs.length - 1] + first.w - xs[0];
+  // nice domain max: H / sigma_ours (domain inference, not the solve)
+  const r0 = rects.find((r: any) => r.x === xs[0] && Math.abs(r.y + r.h - (oursLayout(r1.dl).axisTop + axisH)) < 1e-6);
+  const D = Math.round((axisH * vals[0][0]) / r0.h);
+  const m = buildBars(vals, gap, D, W, axisH);
+  const cmp1 = compare(c.name, r1.dl, m, vals.length);
+  // resize: ours renders again; kiwi suggests the new room
+  const r2 = await renderOnce(c.name, c.size2);
+  const L2 = oursLayout(r2.dl);
+  const xs2 = [...new Set(L2.rects.map((r: any) => r.x))].sort((a: any, b: any) => a - b) as number[];
+  const W2 = xs2[xs2.length - 1] + L2.rects.find((r: any) => r.x === xs2[0]).w - xs2[0];
+  m.solver.suggestValue(m.W, W2);
+  m.solver.suggestValue(m.H, L2.axisH);
+  m.solver.updateVariables();
+  const cmp2 = compare(c.name, r2.dl, m, vals.length);
+  const big = /2000|50x50/.test(c.name);
+  const kCold = timeit(() => buildBars(vals, gap, D, W, axisH), 300, big ? 5 : 20);
+  let flip = false;
+  const kResize = timeit(() => {
+    flip = !flip;
+    m.solver.suggestValue(m.W, flip ? W2 : W);
+    m.solver.suggestValue(m.H, flip ? L2.axisH : axisH);
+    m.solver.updateVariables();
+  });
+  const oursFull = await timeRender(c.name, c.size2, big ? 8 : 20);
+  const row = {
+    spec: c.name,
+    rects: cmp1.n,
+    gap, W, H: axisH, D,
+    worstDiffPx: cmp1.worst,
+    worstDiffAfterResizePx: cmp2.worst,
+    roomAfterResize: { W: W2, H: L2.axisH },
+    kiwiCold: kCold,
+    kiwiResize: kResize,
+    oursFullRender: oursFull,
+    oursPlacementInRender: r2.placement,
+    oursTapeEvalInRender: r2.evaluate,
+    oursSigmaInRender: r2.scale,
+  };
+  rows.push(row);
+  console.log(JSON.stringify(row));
+}
+const fs = await import("node:fs");
+fs.writeFileSync("/Users/jmp/.claude/jobs/a4ed3dcc/tmp/kiwi-bench/results-global.json", JSON.stringify(rows, null, 1));

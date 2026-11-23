@@ -1,0 +1,75 @@
+GoFish solver vs @lume/kiwi 0.4.4 (Cassowary). Measured 2026-11-23.
+Machine: Apple M1 Pro, 32 GB. Node v26.10.0, tsx. Source: a clean worktree of
+commit 3e627a536 with the timers in instrumentation.diff.txt (not the live
+worktree). Medians; [p10-p90] in brackets. Raw: results-*.json, *.log.
+
+How to rerun: git worktree add <dir>/clean 3e627a536; pnpm install there;
+git apply instrumentation.diff.txt; npm install in this folder (package.json);
+drop the .txt suffixes; fix the paths in common.ts; run from
+clean/packages/gofish-graphics:
+  NODE_PATH=<this>/node_modules ./node_modules/.bin/tsx <this>/shares.ts
+
+1. Time shares of a full headless render (spec build + toDisplayList, no SVG paint)
+spec            total ms              placement  tape-eval  sigma
+bars-20           8.6 [6.4-11.5]        10.9%      5.2%     0.1%
+bars-200         35.1 [32.1-41.3]       11.5%      5.9%     0.0%
+bars-2000       406 [379-445]           12.4%      6.4%     0.0%
+stacked-20x20    59.1 [57.1-62.5]       16.7%      2.0%     0.0%
+stacked-50x50   313 [308-341]           17.8%      1.9%     0.0%
+grid-20x20       62.7 [61.3-73.0]       14.2%      5.9%     0.0%
+grid-50x50      358 [326-422]           14.0%      6.3%     0.0%
+scatter-10k     765 [723-845]           17.7%      4.1%     0.0%
+tree-d4           6.3 [5.2-9.2]         11.0%      2.7%     0.1%
+tree-d7          48.9 [46.0-56.4]       14.5%      2.8%     0.0%
+placement = solvePlacementCells in the claim walk (lowering + box closure +
+difference graph, run in Tape formulas). tape-eval = formula.evaluate in
+layout. sigma = ScopeRegistry fit/solveFixed/solveScope/... (Pwl.fill).
+
+2. The same per-layer systems, out of the render (sum over all layer-axis systems)
+spec          systems  vars   ours-num ms   ours-pwl  kiwi ms            kiwi/ours  re-solve kiwi / ours ms
+bars-20          68     208     0.112        0.158     0.39                3.5x       0.0100 / 0.0010
+bars-200         68    1288     0.459        0.717     4.65               10x         0.033 / 0.0061
+bars-2000        68   12088     4.78         8.58    829 [805-1326]      173x         1.01 / 0.059
+stacked-20x20   160    1026     0.456        0.761     5.56               12x         0.029 / 0.0038
+stacked-50x50   256    5370     2.22         4.44     62.6                28x         0.114 / 0.018
+grid-20x20      180    2614     1.08         1.82      5.22                4.8x       0.085 / 0.015
+grid-50x50      420   15514     8.08        14.2      54.6                 6.8x       2.26 / 0.099
+scatter-10k     108   20152    15.2         22.1    4143                 273x         0.98 / 0.10
+tree-d4         124     122     0.135        0.181     0.32                2.4x       0.010 / 0.0006
+tree-d7        1020    1018     1.17         1.63      2.86                2.4x       0.078 / 0.0069
+All systems: kiwi positions equal ours within 1e-6 (relative). Re-solve:
+sigma changed, kiwi suggestValue+updateVariables vs Pwl.at on our symbolic
+positions; systems with a normalized-origin gauge skipped (min rule).
+
+3. Whole chart as one kiwi LP (placement + fit to room), vs our full render
+spec           rects  kiwi cold ms        kiwi resize ms   ours full render ms   max |diff| px
+bars-20          20      0.232               0.003             7.75                2.8e-13
+bars-200        200     18.5                 0.047            34.7                 1.8e-12
+bars-2000      2000   5960 [5623-7976]       1.83            500                   6.8e-10
+stacked-20x20   400     20.6                 0.044            73.9                 1.1e-13
+stacked-50x50  2500    924                   0.63            352                   3.4e-13
+
+4. Kiwi cost of one chain x_{i+1} = x_i + 10 (order.ts), ms
+n      relations first   pins first   one pin
+500         38              19           7
+1000       156              54          57
+2000      1064             291         304
+4000      5393            1420        1722
+Quadratic: each required equality leaves a marker term in the rows downstream.
+
+5. Errors
+gofish: Constraint placement conflict on x: position[1] asserts 200, but position[0] implies 100
+gofish: Constraint placement conflict on x: position[1] asserts 290, but position[0] implies 20   (pin, pin, distribute)
+kiwi:   unsatisfiable constraint   (both cases; no constraint named)
+kiwi with strong pins: no error, silently a=0 b=30
+
+6. Overflow (bars-200 at w=800; fixed gaps 1592 px > room)
+ours: warns, bars 4 px wide, graphic overflows (drawn span 2392 px)
+kiwi, room required: bar width -4.21 (negative)
+kiwi, room strong + w >= 0: bar width 0
+
+7. Size
+kiwi: 1670 source lines; 12.5 kB minified, 3.8 kB gzipped.
+ours: differenceGraph+placementSolver+bbox 953 lines (672 code);
+pwl+arith+formula+plotForms 820 (552 code); lowering (facts, align,
+distribute, lowerers) 1761 (1200 code); claim walk/plan/scopes 2303 (1474 code).

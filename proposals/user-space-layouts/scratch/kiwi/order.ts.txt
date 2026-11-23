@@ -1,0 +1,23 @@
+// How kiwi's cost on a chain depends on the order constraints are added.
+import * as kiwi from "@lume/kiwi";
+const { Solver, Variable, Expression, Constraint, Operator, Strength } = kiwi as any;
+for (const n of [500, 1000, 2000, 4000]) {
+  for (const order of ["relations-first", "pins-first", "relations-only+1pin"]) {
+    const t0 = performance.now();
+    const s = new Solver();
+    const xs = Array.from({ length: n }, (_, i) => new Variable("x" + i));
+    const rel = () => {
+      for (let i = 0; i + 1 < n; i++)
+        s.addConstraint(new Constraint(new Expression(xs[i + 1], [-1, xs[i]]), Operator.Eq, 10, Strength.required));
+    };
+    const pins = (all: boolean) => {
+      for (let i = 0; i < (all ? n : 1); i++)
+        s.addConstraint(new Constraint(xs[i], Operator.Eq, 10 * i, Strength.required));
+    };
+    if (order === "relations-first") { rel(); pins(true); }
+    else if (order === "pins-first") { pins(true); rel(); }
+    else { rel(); pins(false); }
+    s.updateVariables();
+    console.log(n, order, (performance.now() - t0).toFixed(1), "ms", xs[n - 1].value());
+  }
+}

@@ -1,0 +1,30 @@
+// When the fixed parts overfill the room: our rule vs kiwi.
+// bars-200 at w = 800: 199 gaps of 8 px = 1592 px > the ~732 px plot room.
+import * as kiwi from "@lume/kiwi";
+import { renderOnce } from "./common";
+const { Solver, Variable, Expression, Constraint, Operator, Strength } = kiwi as any;
+const r = await renderOnce("bars-200", { w: 800, h: 400 });
+const rects = r.dl.items.filter((i: any) => i.kind === "rect" && i.role === "node").sort((a: any, b: any) => a.x - b.x);
+const W = 800 - rects[0].x; // the plot room on x: canvas less the y axis chrome
+console.log("ours: bar w", rects[0].w, "gap", rects[1].x - rects[0].x - rects[0].w, "drawn span", rects.at(-1).x + rects.at(-1).w - rects[0].x, "room", W);
+for (const mode of ["required room", "strong room, w >= 0"]) {
+  const s = new Solver();
+  const n = 200;
+  const x = Array.from({ length: n }, (_, i) => new Variable("x" + i));
+  const w = Array.from({ length: n }, (_, i) => new Variable("w" + i));
+  const R = (e: any, op: any, v: any, st = Strength.required) => s.addConstraint(new Constraint(e, op, v, st));
+  try {
+    R(x[0], Operator.Eq, 0);
+    for (let i = 0; i + 1 < n; i++) R(new Expression(x[i + 1], [-1, x[i]], [-1, w[i]]), Operator.Eq, 8);
+    for (let i = 1; i < n; i++) R(new Expression(w[i], [-1, w[0]]), Operator.Eq, 0);
+    if (mode === "required room") R(new Expression(x[n - 1], w[n - 1]), Operator.Eq, W);
+    else {
+      for (const v of w) R(v, Operator.Ge, 0);
+      R(new Expression(x[n - 1], w[n - 1]), Operator.Eq, W, Strength.strong);
+    }
+    s.updateVariables();
+    console.log(`kiwi (${mode}): bar w`, w[0].value(), "span", x[n - 1].value() + w[n - 1].value());
+  } catch (e: any) {
+    console.log(`kiwi (${mode}): ${e.message}`);
+  }
+}

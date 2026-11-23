@@ -1,0 +1,184 @@
+// Shared harness: loads GoFish from the clean worktree copy, installs timers.
+export const G =
+  "/Users/jmp/.claude/jobs/a4ed3dcc/tmp/kiwi-bench/clean/packages/gofish-graphics/src";
+
+export type KB = {
+  placement: number;
+  placementCalls: number;
+  evaluate: number;
+  evaluateCalls: number;
+  scale: number;
+  scaleCalls: number;
+  tape?: any;
+  record?: (A: any, axis: string, problem: any, freeOrigin: any) => void;
+};
+
+export const kb: KB = {
+  placement: 0,
+  placementCalls: 0,
+  evaluate: 0,
+  evaluateCalls: 0,
+  scale: 0,
+  scaleCalls: 0,
+};
+(globalThis as any).__KB = kb;
+(globalThis as any).__GOFISH_PERF__ = { enabled: true, current: null };
+
+export const lib: any = await import(G + "/lib");
+const scopes: any = await import(G + "/ast/solver/scopes");
+export const Pwl: any = await import(G + "/ast/solver/pwl");
+export const arith: any = await import(G + "/ast/solver/arith");
+export const dg: any = await import(G + "/ast/constraints/differenceGraph");
+
+// Time the scale solve: every ScopeRegistry method that solves a sigma,
+// outermost call only.
+let depth = 0;
+for (const m of [
+  "fitGlyphs",
+  "glyphSigma",
+  "solveFixed",
+  "equalizeFixed",
+  "fit",
+  "solveScope",
+  "equalizeMeasure",
+]) {
+  const orig = scopes.ScopeRegistry.prototype[m];
+  scopes.ScopeRegistry.prototype[m] = function (...args: any[]) {
+    if (depth > 0) return orig.apply(this, args);
+    depth++;
+    const t0 = performance.now();
+    try {
+      return orig.apply(this, args);
+    } finally {
+      kb.scale += performance.now() - t0;
+      kb.scaleCalls++;
+      depth--;
+    }
+  };
+}
+
+export const reset = () => {
+  kb.placement = kb.evaluate = kb.scale = 0;
+  kb.placementCalls = kb.evaluateCalls = kb.scaleCalls = 0;
+};
+
+export const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+export const q = (xs: number[], p: number) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(p * s.length))];
+};
+
+// ---------- specs ----------
+const { chart, spread, stack, scatter, rect, circle, layer, Constraint } = lib;
+
+export const specs: Record<string, () => any> = {};
+
+const bars = (n: number) => () => {
+  const data = Array.from({ length: n }, (_, i) => ({
+    c: "c" + String(i).padStart(5, "0"),
+    v: 1 + ((i * 37) % 97),
+  }));
+  return chart(data)
+    .flow(spread({ by: "c", dir: "x" }))
+    .mark(rect({ h: "v" }));
+};
+for (const n of [20, 200, 2000]) specs[`bars-${n}`] = bars(n);
+
+const stacked = (n: number) => () => {
+  const data: any[] = [];
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++)
+      data.push({
+        c: "c" + String(i).padStart(3, "0"),
+        s: "s" + String(j).padStart(3, "0"),
+        v: 1 + ((i * 7 + j * 13) % 11),
+      });
+  return chart(data)
+    .flow(spread({ by: "c", dir: "x" }), stack({ by: "s", dir: "y" }))
+    .mark(rect({ h: "v" }));
+};
+for (const n of [20, 50]) specs[`stacked-${n}x${n}`] = stacked(n);
+
+// Rows of bar charts: a spread along y of spreads along x, data heights.
+const grid = (n: number) => () => {
+  const data: any[] = [];
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++)
+      data.push({
+        r: "r" + String(i).padStart(3, "0"),
+        c: "c" + String(j).padStart(3, "0"),
+        v: 1 + ((i * 5 + j * 3) % 9),
+      });
+  return chart(data)
+    .flow(spread({ by: "r", dir: "y" }), spread({ by: "c", dir: "x" }))
+    .mark(rect({ h: "v" }));
+};
+for (const n of [20, 50]) specs[`grid-${n}x${n}`] = grid(n);
+
+specs["scatter-10k"] = () => {
+  let s = 1;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const data = Array.from({ length: 10000 }, (_, i) => ({
+    id: i,
+    x: rnd() * 100,
+    y: rnd() * 50,
+  }));
+  return chart(data)
+    .flow(scatter({ by: "id", x: "x", y: "y" }))
+    .mark(circle({ r: 2 }));
+};
+
+// A constraint-heavy layer: the box tree of UserSpaceTrees (TreeBoxes), on a
+// complete binary tree. Each internal node is a layer whose node and kids
+// are related by Constraint.distribute (y) and Constraint.align (x).
+const boxTree = (depth: number, path = "n"): any => {
+  const node = rect({ w: 12, h: 12, fill: "steelblue" }).name(path);
+  if (depth === 0) return node;
+  const kids = spread({ dir: "x", spacing: 4, alignment: "start" }, [
+    boxTree(depth - 1, path + "0"),
+    boxTree(depth - 1, path + "1"),
+  ]).name(path + "/kids");
+  return layer([node, kids]).relate((c: any) => [
+    Constraint.distribute({ dir: "y", spacing: 20 }, [c[path], c[path + "/kids"]]),
+    Constraint.align({ x: "middle" }, [c[path], c[path + "/kids"]]),
+  ]);
+};
+for (const d of [4, 7]) specs[`tree-d${d}`] = () => layer([boxTree(d)]);
+
+/** A canvas each spec fits in without overflow warnings. */
+export const sizeOf = (name: string) => {
+  if (name === "bars-200") return { w: 2000, h: 400 };
+  if (name === "bars-2000") return { w: 20000, h: 400 };
+  if (name === "stacked-50x50") return { w: 800, h: 400 };
+  if (name === "grid-20x20") return { w: 1000, h: 1000 };
+  if (name === "grid-50x50") return { w: 2000, h: 2500 };
+  if (name === "tree-d4") return { w: 800, h: 400 };
+  if (name === "tree-d7") return { w: 2400, h: 400 };
+  return { w: 800, h: 400 };
+};
+
+/** One full headless render (spec construction + toDisplayList), with the
+ *  breakdown. */
+export async function renderOnce(name: string, size = sizeOf(name)) {
+  reset();
+  const t0 = performance.now();
+  const node = specs[name]();
+  const dl: any = await node.toDisplayList(size);
+  const total = performance.now() - t0;
+  const labels = { ...((globalThis as any).__GOFISH_PERF__.current?.labels ?? {}) };
+  return {
+    total,
+    placement: kb.placement,
+    placementCalls: kb.placementCalls,
+    evaluate: kb.evaluate,
+    evaluateCalls: kb.evaluateCalls,
+    scale: kb.scale,
+    scaleCalls: kb.scaleCalls,
+    labels,
+    dl,
+  };
+}

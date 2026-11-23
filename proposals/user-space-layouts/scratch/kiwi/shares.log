@@ -1,0 +1,10 @@
+bars-20        total 8.6 ms [6.4-11.5]  placement 0.94 (10.9%)  tape-eval 0.45 (5.2%)  sigma 0.01 (0.1%)  | claims 3.3 layout 1.7 resolve 0.2 axes 1.2 lower 0.0
+bars-200       total 35.1 ms [32.1-41.3]  placement 4.02 (11.5%)  tape-eval 2.08 (5.9%)  sigma 0.01 (0.0%)  | claims 16.8 layout 8.8 resolve 0.7 axes 3.4 lower 0.0
+bars-2000      total 406.2 ms [379.0-444.8]  placement 50.53 (12.4%)  tape-eval 26.10 (6.4%)  sigma 0.02 (0.0%)  | claims 254.3 layout 75.3 resolve 8.2 axes 30.7 lower 0.0
+stacked-20x20  total 59.1 ms [57.1-62.5]  placement 9.87 (16.7%)  tape-eval 1.20 (2.0%)  sigma 0.01 (0.0%)  | claims 19.2 layout 5.4 resolve 14.2 axes 14.5 lower 0.0
+stacked-50x50  total 312.5 ms [308.1-340.7]  placement 55.52 (17.8%)  tape-eval 5.78 (1.9%)  sigma 0.02 (0.0%)  | claims 95.1 layout 27.6 resolve 77.2 axes 79.3 lower 0.0
+grid-20x20     total 62.7 ms [61.3-73.0]  placement 8.89 (14.2%)  tape-eval 3.67 (5.9%)  sigma 0.01 (0.0%)  | claims 33.4 layout 13.9 resolve 1.4 axes 6.7 lower 0.0
+grid-50x50     total 358.3 ms [325.8-422.4]  placement 50.24 (14.0%)  tape-eval 22.59 (6.3%)  sigma 0.02 (0.0%)  | claims 181.6 layout 79.3 resolve 7.1 axes 40.9 lower 0.0
+scatter-10k    total 764.7 ms [722.7-844.7]  placement 135.59 (17.7%)  tape-eval 31.40 (4.1%)  sigma 0.02 (0.0%)  | claims 385.2 layout 123.1 resolve 39.6 axes 50.5 lower 0.0
+tree-d4        total 6.3 ms [5.2-9.2]  placement 0.69 (11.0%)  tape-eval 0.17 (2.7%)  sigma 0.01 (0.1%)  | claims 2.6 layout 0.8 resolve 0.5 axes 0.1 lower 0.0
+tree-d7        total 48.9 ms [46.0-56.4]  placement 7.10 (14.5%)  tape-eval 1.38 (2.8%)  sigma 0.01 (0.0%)  | claims 23.3 layout 6.4 resolve 3.6 axes 0.7 lower 0.0

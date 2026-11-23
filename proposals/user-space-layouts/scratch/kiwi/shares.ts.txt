@@ -1,0 +1,45 @@
+// Where the time goes in a full headless render (spec construction +
+// toDisplayList: domain inference, axes, embedding, claim walk, layout,
+// display-list lowering; no SVG paint).
+import { renderOnce, specs, median, q } from "./common";
+const only = process.argv[2];
+const rows: any[] = [];
+for (const name of Object.keys(specs)) {
+  if (only && !name.includes(only)) continue;
+  const big = /2000|50x50|10k/.test(name);
+  for (let i = 0; i < 3; i++) await renderOnce(name); // warm-up
+  const reps = big ? 10 : 30;
+  const runs: any[] = [];
+  for (let i = 0; i < reps; i++) {
+    const r = await renderOnce(name);
+    delete r.dl;
+    runs.push(r);
+  }
+  const m = (f: (r: any) => number) => median(runs.map(f));
+  const total = m((r) => r.total);
+  const row = {
+    spec: name,
+    reps,
+    total,
+    totalP10: q(runs.map((r) => r.total), 0.1),
+    totalP90: q(runs.map((r) => r.total), 0.9),
+    placement: m((r) => r.placement),
+    placementCalls: runs[0].placementCalls,
+    evaluate: m((r) => r.evaluate),
+    scale: m((r) => r.scale),
+    scaleCalls: runs[0].scaleCalls,
+    resolve: m((r) => r.labels.resolve ?? 0),
+    axes: m((r) => r.labels.axes ?? 0),
+    embed: m((r) => r.labels.embed ?? 0),
+    claims: m((r) => r.labels.claims ?? 0),
+    layout: m((r) => r.labels.solve ?? 0),
+    lower: m((r) => r.labels.lower ?? 0),
+    other: m((r) => r.total - r.placement - r.evaluate - r.scale),
+  };
+  rows.push(row);
+  console.log(
+    `${name.padEnd(14)} total ${total.toFixed(1)} ms [${row.totalP10.toFixed(1)}-${row.totalP90.toFixed(1)}]  placement ${row.placement.toFixed(2)} (${((100 * row.placement) / total).toFixed(1)}%)  tape-eval ${row.evaluate.toFixed(2)} (${((100 * row.evaluate) / total).toFixed(1)}%)  sigma ${row.scale.toFixed(2)} (${((100 * row.scale) / total).toFixed(1)}%)  | claims ${row.claims.toFixed(1)} layout ${row.layout.toFixed(1)} resolve ${row.resolve.toFixed(1)} axes ${row.axes.toFixed(1)} lower ${row.lower.toFixed(1)}`
+  );
+}
+const fs = await import("node:fs");
+fs.writeFileSync("/Users/jmp/.claude/jobs/a4ed3dcc/tmp/kiwi-bench/results-shares.json", JSON.stringify(rows, null, 1));

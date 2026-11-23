@@ -1,0 +1,9 @@
+{
+  "name": "kiwi-bench",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lume/kiwi": "0.4.4",
+    "tsx": "*"
+  }
+}

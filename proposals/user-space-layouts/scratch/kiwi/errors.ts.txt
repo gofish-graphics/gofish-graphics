@@ -1,0 +1,60 @@
+// A conflicting system, through each solver's public API.
+import * as kiwi from "@lume/kiwi";
+import { lib } from "./common";
+const { Solver, Variable, Expression, Constraint: KC, Operator, Strength } = kiwi as any;
+const { layer, rect, Constraint } = lib;
+
+const tryRender = async (label: string, mk: () => any) => {
+  try {
+    await mk().toDisplayList({ w: 400, h: 200 });
+    console.log(`[gofish] ${label}: no error`);
+  } catch (e: any) {
+    console.log(`[gofish] ${label}: ${e.message}`);
+  }
+};
+
+// 1. Two pins that disagree on one anchor.
+await tryRender("two pins on a's start", () =>
+  layer([rect({ w: 20, h: 20 }).name("a"), rect({ w: 20, h: 20 }).name("b")]).relate((c: any) => [
+    Constraint.position({ x: 100 }, [c.a]),
+    Constraint.position({ x: 200 }, [c.a]),
+  ])
+);
+// 2. A cycle that disagrees: a pinned, b pinned, and a distribute between them.
+await tryRender("pin a, pin b, distribute a b by 10", () =>
+  layer([rect({ w: 20, h: 20 }).name("a"), rect({ w: 20, h: 20 }).name("b")]).relate((c: any) => [
+    Constraint.position({ x: 0 }, [c.a]),
+    Constraint.position({ x: 300 }, [c.b]),
+    Constraint.distribute({ dir: "x", spacing: 10 }, [c.a, c.b]),
+  ])
+);
+
+const k = (label: string, f: (s: any) => void) => {
+  const s = new Solver();
+  try {
+    f(s);
+    s.updateVariables();
+    console.log(`[kiwi] ${label}: no error`);
+  } catch (e: any) {
+    console.log(`[kiwi] ${label}: ${e.message}`);
+  }
+};
+k("two pins on a's start", (s) => {
+  const a = new Variable("a.x");
+  s.addConstraint(new KC(a, Operator.Eq, 100, Strength.required));
+  s.addConstraint(new KC(a, Operator.Eq, 200, Strength.required));
+});
+k("pin a, pin b, distribute a b by 10", (s) => {
+  const a = new Variable("a.x"), b = new Variable("b.x");
+  s.addConstraint(new KC(a, Operator.Eq, 0, Strength.required));
+  s.addConstraint(new KC(b, Operator.Eq, 300, Strength.required));
+  s.addConstraint(new KC(new Expression(b, [-1, a]), Operator.Eq, 30, Strength.required));
+});
+k("same, as strong (not required) pins", (s) => {
+  const a = new Variable("a.x"), b = new Variable("b.x");
+  s.addConstraint(new KC(a, Operator.Eq, 0, Strength.strong));
+  s.addConstraint(new KC(b, Operator.Eq, 300, Strength.strong));
+  s.addConstraint(new KC(new Expression(b, [-1, a]), Operator.Eq, 30, Strength.required));
+  s.updateVariables();
+  console.log(`[kiwi]   strong pins: silently a=${a.value()} b=${b.value()}`);
+});

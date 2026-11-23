@@ -1,0 +1,31 @@
+import { renderOnce, specs } from "./common";
+const only = process.argv[2];
+for (const name of Object.keys(specs)) {
+  if (only && !name.includes(only)) continue;
+  try {
+    const r = await renderOnce(name);
+    const items = r.dl.items;
+    const rects = items.filter((i: any) => i.kind === "rect" && i.role === "node");
+    console.log(
+      name,
+      "items",
+      items.length,
+      "nodeRects",
+      rects.length,
+      JSON.stringify(rects.slice(0, 3).map((r: any) => [r.x, r.y, r.w, r.h])),
+      "total",
+      r.total.toFixed(1),
+      "place",
+      r.placement.toFixed(2),
+      r.placementCalls,
+      "scale",
+      r.scale.toFixed(2),
+      r.scaleCalls,
+      "eval",
+      r.evaluate.toFixed(2),
+      JSON.stringify(Object.fromEntries(Object.entries(r.labels).map(([k, v]: any) => [k, +v.toFixed(1)])))
+    );
+  } catch (e: any) {
+    console.log(name, "ERROR", e.message.slice(0, 300));
+  }
+}

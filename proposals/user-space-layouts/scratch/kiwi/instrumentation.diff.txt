@@ -1,0 +1,65 @@
+diff --git a/packages/gofish-graphics/src/ast/constraints/claimPlacement.ts b/packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
+index f4cdc58db..5d1ecbeaa 100644
+--- a/packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
++++ b/packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
+@@ -752,6 +752,7 @@ export function placeByClaims(
+   // The layer's box on the axis, which layout lays it out in: a discrete
+   // position divides it.
+   const box = tape.input("size", Pwl.ZERO);
++  if ((globalThis as any).__KB) (globalThis as any).__KB.tape = tape;
+   const solvedAxis = solvePlacementCells(
+     T,
+     onAxis as PlacementConstraint[],
+diff --git a/packages/gofish-graphics/src/ast/constraints/differenceGraph.ts b/packages/gofish-graphics/src/ast/constraints/differenceGraph.ts
+index e1d3030d2..771c9f667 100644
+--- a/packages/gofish-graphics/src/ast/constraints/differenceGraph.ts
++++ b/packages/gofish-graphics/src/ast/constraints/differenceGraph.ts
+@@ -170,6 +170,8 @@ export function solveAxisProblem<T>(
+   problem: AxisProblem<T>,
+   freeOrigin?: FreeOriginInput<T>
+ ): { positions: Map<NodeId, T>; conflicts: PlacementConflict[] } {
++  const KB = (globalThis as any).__KB;
++  KB?.record?.(A, axis, problem, freeOrigin);
+   const { relative, componentOf, components, conflicts } =
+     solveRelationComponents(A, axis, problem);
+ 
+diff --git a/packages/gofish-graphics/src/ast/constraints/placementSolver.ts b/packages/gofish-graphics/src/ast/constraints/placementSolver.ts
+index f3059426c..1b760a989 100644
+--- a/packages/gofish-graphics/src/ast/constraints/placementSolver.ts
++++ b/packages/gofish-graphics/src/ast/constraints/placementSolver.ts
+@@ -422,7 +422,13 @@ export type RigidAttachment<T = number> = { container: string; gap: [T, T] };
+  * and axis, and layout writes back what it evaluates to
+  * (`claimPlacement.ts`, `layer`).
+  */
+-export function solvePlacementCells<T>(
++export function solvePlacementCells<T>(...args: Parameters<typeof solvePlacementCellsImpl<T>>): readonly [SolvedAxis<T>, SolvedAxis<T>] {
++  const KB = (globalThis as any).__KB;
++  if (!KB) return solvePlacementCellsImpl<T>(...args);
++  const t0 = performance.now();
++  try { return solvePlacementCellsImpl<T>(...args); } finally { KB.placement += performance.now() - t0; KB.placementCalls++; }
++}
++function solvePlacementCellsImpl<T>(
+   A: Arith<T>,
+   constraints: PlacementConstraint[],
+   keyOf: KeyOf,
+diff --git a/packages/gofish-graphics/src/ast/solver/formula.ts b/packages/gofish-graphics/src/ast/solver/formula.ts
+index 7517ecefe..417df54ec 100644
+--- a/packages/gofish-graphics/src/ast/solver/formula.ts
++++ b/packages/gofish-graphics/src/ast/solver/formula.ts
+@@ -146,6 +146,16 @@ export function evaluate(
+   tape: Tape,
+   sigma: number,
+   read: (key: string) => number | undefined
++): Float64Array {
++  const KB = (globalThis as any).__KB;
++  if (!KB) return evaluateImpl(tape, sigma, read);
++  const t0 = performance.now();
++  try { return evaluateImpl(tape, sigma, read); } finally { KB.evaluate += performance.now() - t0; KB.evaluateCalls++; }
++}
++function evaluateImpl(
++  tape: Tape,
++  sigma: number,
++  read: (key: string) => number | undefined
+ ): Float64Array {
+   const t = tape;
+   const n = t.op.length;

@@ -1,0 +1,17 @@
+import subprocess, re, sys
+files = {
+  "placement (difference graph)": ["constraints/differenceGraph.ts", "constraints/placementSolver.ts", "constraints/bbox.ts"],
+  "placement lowering (facts from align/distribute/position)": ["constraints/placementFacts.ts", "constraints/placementLowering.ts", "constraints/placementProgramLowerer.ts", "constraints/align.ts", "constraints/distribute.ts"],
+  "symbolic sigma solve": ["solver/pwl.ts", "solver/arith.ts", "solver/formula.ts", "solver/plotForms.ts"],
+  "claim walk / plans / scopes": ["constraints/claimPlacement.ts", "solver/plan.ts", "solver/scopes.ts"],
+}
+root = "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal"
+for group, fs in files.items():
+  tot = code = 0
+  for f in fs:
+    src = subprocess.run(["git", "-C", root, "show", "HEAD:packages/gofish-graphics/src/ast/" + f], capture_output=True, text=True).stdout
+    lines = src.splitlines()
+    tot += len(lines)
+    code += sum(1 for l in lines if l.strip() and not re.match(r"\s*(//|\*|/\*)", l))
+    print(f"  {f}: {len(lines)} lines, {sum(1 for l in lines if l.strip() and not re.match(r'\s*(//|\*|/\*)', l))} code")
+  print(f"{group}: {tot} lines, {code} code lines")
