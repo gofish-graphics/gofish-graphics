@@ -40,6 +40,11 @@ import {
   isLabelPlaceConstraint,
   type LabelPlaceConstraint,
 } from "../labels/placeStep";
+import {
+  applyTooltipPlacement,
+  isTooltipPlaceConstraint,
+  type TooltipPlaceConstraint,
+} from "../tooltip/place";
 import { namesIn } from "../_ref";
 import {
   NodeOperand,
@@ -116,7 +121,8 @@ export type ConstraintSpec =
   | NestConstraint
   | GridConstraint
   | OverlapConstraint
-  | LabelPlaceConstraint;
+  | LabelPlaceConstraint
+  | TooltipPlaceConstraint;
 
 // --- Factory ---
 
@@ -367,4 +373,9 @@ export function applyConstraints(
   for (const constraint of constraints)
     if (isLabelPlaceConstraint(constraint))
       applyLabelPlacement(constraint, keyToPlaceable, keyOf, sizes);
+
+  // A tooltip's box reads where its mark and the chart's marks landed.
+  for (const constraint of constraints)
+    if (isTooltipPlaceConstraint(constraint))
+      applyTooltipPlacement(constraint, keyToPlaceable, keyOf);
 }

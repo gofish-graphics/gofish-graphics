@@ -31,8 +31,35 @@ class Operator:
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
         # repeated calls append rather than overwrite. Mirrors JS
-        # createOperator.ts's `labelState` array.
+        # createOperator.ts's `groupModifiers` list.
         self._labels: List[dict] = []
+        # The layer name each group the operator makes is filed under
+        # (``.name()``), or None.
+        self._name: Optional[str] = None
+
+    def _copy(self) -> "Operator":
+        """A copy of this operator with the calls chained on it (its name,
+        labels and translate)."""
+        new_op = type(self)(self.op_type, **self.kwargs)
+        new_op._labels = list(self._labels)
+        new_op._translate = self._translate
+        new_op._name = self._name
+        return new_op
+
+    def name(self, name: str) -> "Operator":
+        """Name each group this operator makes (traversal form).
+
+        Mirrors JS ``spread({ by: "site", dir: "x" }).name("sites")``: every
+        node a split leaf produces is filed under ``name``, so
+        ``chart(select_all("sites"))`` gets one ref per group, and a ref's
+        ``datum`` is that group's rows.
+
+        Returns:
+            New Operator (same subclass as self) with the name set.
+        """
+        new_op = self._copy()
+        new_op._name = name
+        return new_op
 
     def translate(
         self,
@@ -46,8 +73,7 @@ class Operator:
         it offsets the arranged result without merging ``x`` / ``y`` into the
         operator's own channel grammar.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._labels = list(self._labels)
+        new_op = self._copy()
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
@@ -81,8 +107,7 @@ class Operator:
         Returns:
             New Operator (same subclass as self) with the label appended.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._translate = self._translate
+        new_op = self._copy()
         new_op._labels = [*self._labels, _label_spec(accessor, options)]
         return new_op
 
@@ -95,6 +120,8 @@ class Operator:
         }
         if self._translate:
             d["translate"] = self._translate
+        if self._name is not None:
+            d["name"] = self._name
         if self._labels:
             # A mark a label avoids (`avoiding=select_all(...)`) is its IR.
             d["label"] = [_marks_in_options(s, payload) for s in self._labels]
@@ -142,6 +169,14 @@ class DeriveOperator(Operator):
             "not a layout operator with per-group leaves to label. Chain "
             ".label() on the layout operator (stack/spread/group/scatter/"
             "table/treemap) instead."
+        )
+
+    def name(self, *args, **kwargs) -> "DeriveOperator":
+        """`derive(fn)` makes no groups to name (see :meth:`label`)."""
+        raise NotImplementedError(
+            "derive(fn) does not support .name() — it's a data transform "
+            "that makes no groups. Name the layout operator "
+            "(stack/spread/group/scatter/table/treemap), or the mark."
         )
 
     def to_dict(self, payload: "_Payload") -> dict:
@@ -583,12 +618,14 @@ class Mark(_Root):
         # Set by `.hidden()`: laid out, paints nothing. Mirrors JS
         # `node._hidden` (`.hidden(value)`).
         self._hidden: Any = None
+        # Set by `.tooltip()`: True, or the list of fields the box shows.
+        self._tooltip: Union[None, bool, List[str]] = None
         self._translate: Optional[dict] = None
 
     def _write_meta(self, d: dict, payload: "_Payload") -> dict:
         """Write the modifiers every mark IR carries into ``d``: its
         ``name``, ``zOrder`` and ``hidden`` (a function crosses as an
-        accessor) and ``translate``. The JS side applies them after building the mark
+        accessor), ``tooltip`` and ``translate``. The JS side applies them after building the mark
         (``withMarkMeta`` in fromJSON.ts). Parallel to ``_copy_meta``."""
         if self._name is not None:
             d["name"] = (
@@ -598,6 +635,8 @@ class Mark(_Root):
             d["zOrder"] = _wire_accessors(self._z_order, payload)
         if self._hidden is not None:
             d["hidden"] = _wire_accessors(self._hidden, payload)
+        if self._tooltip is not None:
+            d["tooltip"] = self._tooltip
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -612,6 +651,7 @@ class Mark(_Root):
         target._key = self._key
         target._z_order = self._z_order
         target._hidden = self._hidden
+        target._tooltip = self._tooltip
         target._translate = self._translate
         return target
 
@@ -716,6 +756,35 @@ class Mark(_Root):
         )
         self._copy_meta(new_mark)
         new_mark._hidden = _PendingAccessor(value) if _is_function(value) else value
+        return new_mark
+
+    def tooltip(self, fields: Optional[List[str]] = None) -> "Mark":
+        """Show a box that describes the mark under the pointer. Mirrors JS
+        ``mark.tooltip(fields)``.
+
+        With no ``fields``, the box shows every field with one value on the
+        mark, and a size or position channel's field with the value it
+        draws. With ``fields``, it shows exactly those, in order::
+
+            rect(w="share").tooltip(["path", "n", "share"])
+
+        Returns:
+            New Mark (same subclass as self) with the tooltip set.
+
+        Raises:
+            TypeError: ``fields`` is a ``str``, which would read as a list of
+                its letters; one field is a list of one, ``["lake"]``.
+        """
+        if isinstance(fields, str):
+            raise TypeError(
+                f".tooltip() takes a list of field names, not a str: "
+                f'write .tooltip(["{fields}"]) for one field.'
+            )
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._tooltip = True if fields is None else list(fields)
         return new_mark
 
     def translate(
@@ -884,6 +953,10 @@ _REF_HAS_NO_HIDDEN = (
     "A ref names a node that another mark drew, so it cannot hide it: call "
     ".hidden() on the mark that draws the node."
 )
+_REF_HAS_NO_TOOLTIP = (
+    "A ref names a node that another mark drew: call .tooltip() on the mark "
+    "that draws the node."
+)
 
 
 class _InputRef(Mark):
@@ -940,6 +1013,9 @@ class _InputRef(Mark):
 
     def hidden(self, value: Any = True) -> "Mark":
         raise TypeError(_REF_HAS_NO_HIDDEN)
+
+    def tooltip(self, fields: Any = None) -> "Mark":
+        raise TypeError(_REF_HAS_NO_TOOLTIP)
 
     def to_dict(self, payload: "_Payload") -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
@@ -1924,6 +2000,9 @@ class _RefProxy(Mark):
 
     def hidden(self, value: Any = True) -> "Mark":
         raise TypeError(_REF_HAS_NO_HIDDEN)
+
+    def tooltip(self, fields: Any = None) -> "Mark":
+        raise TypeError(_REF_HAS_NO_TOOLTIP)
 
     def to_dict(self, payload: "_Payload") -> dict:
         # `select_all(...)` is a plural chart-data selector, so it has no

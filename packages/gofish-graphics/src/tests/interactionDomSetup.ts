@@ -33,6 +33,7 @@ const copy = [
   "WheelEvent",
   "customElements",
   "getComputedStyle",
+  "XMLSerializer",
 ] as const;
 
 for (const key of copy) {

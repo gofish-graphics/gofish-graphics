@@ -2,7 +2,7 @@
 // @wiki Axes — /internals/frontend/axes
 // </gofish-wiki>
 
-import { GoFishNode } from "../_node";
+import { breadthFirst, GoFishNode } from "../_node";
 import { Rect } from "../shapes/rect";
 import { Text, estimateTextDimensions } from "../shapes/text";
 import { FALLBACK_FONT_FAMILY } from "../shapes/fontUtils";
@@ -15,7 +15,6 @@ import {
   type ConstraintRef,
 } from "../constraints/shared";
 import {
-  breadthFirst,
   fmtNum,
   wrapPreservingIdentity,
   type RingConstraints,

@@ -32,6 +32,32 @@ export function cross(
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
+/** The convex hull of `pts` (Andrew's monotone chain), winding positive
+ *  ({@link signedArea2}) from its leftmost corner. */
+export const convexHull = (pts: readonly PlanePoint[]): PlanePoint[] => {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const lower: PlanePoint[] = [];
+  for (const q of p) {
+    while (
+      lower.length >= 2 &&
+      cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0
+    )
+      lower.pop();
+    lower.push(q);
+  }
+  const upper: PlanePoint[] = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (
+      upper.length >= 2 &&
+      cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0
+    )
+      upper.pop();
+    upper.push(q);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+};
+
 /** The distance from (x, y) to the segment from (ax, ay) to (bx, by). */
 export const segDist = (
   x: number,

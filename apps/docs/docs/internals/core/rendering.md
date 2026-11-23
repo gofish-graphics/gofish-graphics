@@ -146,6 +146,10 @@ alongside the labeled mark's own fragment (`lowerLabelItems`); a label is now
 (`src/ast/labels/elaborate.tsx`, the same technique `elaborateChrome` uses for tick
 labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
+A tooltip's box is lowered the same way, after the labels
+(`src/ast/tooltip/tooltip.ts`): by the time the tree is lowered, it is an
+`enclose` of texts on the render root, painted last, with a circle on the
+point of a line's focused row.
 
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` draws only its children, which `bake` lowers directly, so it reaches
@@ -226,7 +230,13 @@ The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group` and
 `composite`. The first five are leaf primitives in absolute pixels with resolved
 `style` (fill/stroke/opacity/…, already mapped through the color scales; a
 label's halo sets `paintOrder: "stroke"` and `strokeLinejoin: "round"`, which
-both backends write as SVG attributes). The last two carry structure the
+both backends write as SVG attributes; a tooltip's box and marker set
+`pointerEvents: "none"`, written as `pointer-events`, so it is no pointer
+target). Any item may carry a `title`, a mark's `.tooltip()` text, which a
+static drawing writes as the item's SVG `<title>` child (a composite's, as the
+first child of its group), made in the SVG namespace, since a browser shows
+no HTML `<title>` inside an svg; a live chart, which draws its tooltip as
+marks, writes none. The last two carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
@@ -391,8 +401,8 @@ signal during resolve), three things change; when it is absent — the common ca
   patches only that attribute — no re-lower, no re-layout. A `"text"` slot
   overrides text content while the box keeps its measured size, and a slot named
   after one of the item's own geometry fields (`x`, `y`, `w`, `h`, `cx`, `cy`,
-  `rx`, `ry`, `d`) overrides that field, which is how a mark moves without being
-  laid out again — see [Reactivity](/internals/frontend/reactivity). What the
+  `rx`, `ry`, `d`, a group's `transform`) overrides that field, which is how a
+  mark moves without being laid out again — see [Reactivity](/internals/frontend/reactivity). What the
   item carries statically is what serialization and hit-testing see.
 - **Frame publication.** Before painting, `render()` publishes the lowered
   `items`, the root `posScales` (data → layout pixels, read off the placed root

@@ -361,41 +361,54 @@ Operators created with `createOperator` automatically support
 composes the ordinary split/channel/combine pipeline with a structural
 translation wrapper around the produced node.
 
-## 7. `.label()` on the operator (traversal) form
+## 7. `.label()` and `.name()` on the operator (traversal) form
 
 `stack({ by: "class", dir: "y" }).label(accessor, options?)` labels each
-**group** the split produces, rather than each mark instance. It is not
-built on the `ModifierConfig`/`attachModifiers` system section 8 describes
-(that system decorates a _mark_; the operator form needs to affect the
-_execution_ of a still-being-called operator, after `.label()` has already
-returned). Instead:
+**group** the split produces, rather than each mark instance. It is the
+mark-side `labelModifier` of section 8 applied to each group node: the
+node(s) one split leaf produced. The operator cannot be decorated the way a
+mark is, because `.label()` has to affect the _execution_ of a
+still-being-called operator, after `.label()` has already returned. So:
 
-- `dual`'s operator branch closes over a `let labelState` that starts
-  `undefined`. `.label()` (`attachLabelOption`) mutates it; the operator's
-  execution closure reads the current value each time it runs (once per
-  `.flow()` render), so `.label()` can be called any time before render,
-  in any position in the chain.
+- `dual`'s operator branch closes over a `let groupModifiers` list that
+  starts empty. `.label()` (`attachChainedMethod`) appends one call to it: the
+  modifier (`labelModifier`) and the arguments its `bind` gives (the
+  accessor, the options, and the one call identity every group of the call
+  shares). The operator's execution closure reads the current list each
+  time it runs (once per `.flow()` render), so `.label()` can be called any
+  time before render, in any position in the chain.
 - In the per-leaf loop (where `applyMark` turns one split leaf into node(s)),
-  if `labelState` is set, every node the leaf produced gets `node.datum ??=
-leaf` (the leaf's own subdata — usually the rows array `split` handed it)
-  and `node.label(labelState.accessor, labelState.options, layerContext)`
-  (the name registry the operator is built in: the chart's, or that of a
-  `layer([...])` combinator nested in it. A `selectAll(name)` in the
-  label's `avoiding` is found there by the widening lookup
-  `LayerContext.lookup`, nearer registries first; the mark-side
-  `labelModifier` passes it the same way). Stamping
-  `datum` here is what makes the label-elaboration pass's `resolveLabelTargets`
+  when the list is not empty, every node the leaf produced gets `node.datum ??=
+leaf` (the leaf's own subdata — usually the rows array `split` handed it),
+  and then each call's `apply(node, layerContext, leaf, ...args)`, as a mark
+  applies its modifiers to its node. For `.label()` that is
+  `node.label(accessor, options, call)`, with a `selectAll(name)` in the
+  label's `avoiding` resolved in the name registry the operator is built in
+  (the chart's, or that of a `layer([...])` combinator nested in it, found by
+  the widening lookup `LayerContext.lookup`, nearer registries first).
+  Stamping `datum` here is what makes a ref to the group read the group's
+  rows, and what makes the label-elaboration pass's `resolveLabelTargets`
   gate ("a node with its own datum keeps its own label instead of propagating
   it to children") fire at the group level — the same effect the pre-#702 manual workaround achieved
   by hand (see the "Label on Spread" story, which now uses the operator
   form instead).
+- `.name(layerName)` (#802) appends a call to the same list: the
+  `groupNameModifier`, whose `apply` gives the group node the name (its
+  `_name`, unless it already has one: a group node can be the mark's own
+  node, and the mark keeps its name) and adds the name to the node's
+  `__layerRegistration` keys. The chart's registration walk files a node
+  under each of its keys, so a node can be both a named mark and a named
+  operator's group, and `selectAll(layerName)` yields one ref per group whose
+  `datum` is the group's rows. A string name rides the wire as the
+  operator's `name` field (`OPERATOR_BASE_FIELDS`); a token does not.
 - `.translate()` wraps the operator in a _new_ function object (`translated`
-  in `translateOperator`), so `.label()` needs to reach the SAME `labelState`
+  in `translateOperator`), so `.label()` needs to reach the SAME `groupModifiers`
   regardless of which wrapper the caller holds. `translateOperator` doesn't
   attach a fresh label-modifier — it delegates: `translated.label(...)`
   calls the base operator's own `.label(...)`, which mutates the base
-  operator's closed-over `labelState`. That's what makes both
+  operator's closed-over `groupModifiers`. That's what makes both
   `.translate().label()` and `.label().translate()` work identically.
+  `.name()` delegates the same way.
 - `resolveLabelText` (`ast/labels/labelPlacement.ts`) resolves the accessor
   over the node's datum, which is always a list of rows, in one of three
   ways, depending on the accessor's shape:
@@ -425,11 +438,13 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   base operator's wire tag (`wireOf`) onto the wrapper and stamps
   `tag.translate` — without that copy, a translated operator would silently
   serialize as the opaque `{type: "derive"}` fallback, losing both
-  `translate` and any chained `.label()`.
+  `translate` and any chained `.label()`. `translateMark` does the same for a
+  mark (two translates add up), so a translated mark reaches the IR as its
+  base mark's node with a `translate`.
 
 `.transition(spec)` on the operator form (the build-in prototype, see
 `src/animation/`) is built the same way. `dual` closes over a
-`transitionState` that `.transition()` (`attachTransitionOption`) sets, and
+`transitionState` that `.transition()` (`attachChainedMethod`) sets, and
 the execution closure records it on the node `layout` builds
 (`recordOperatorTransition`), so the build-in can read the operator's
 arrangement of its children off the resolved tree. `translateOperator`
@@ -518,9 +533,13 @@ works the same way: `value` is a boolean or a callback on the datum, resolved
 per instance and through `resolveArgs`, and only a constant crosses the IR.
 The two are made by one maker, `datumValueModifier(name, set, isConstant)`.
 `.hidden()` sets the node's hidden flag and nothing else, so it has no
-function form.
+function form. `tooltipModifier` (`.tooltip(fields?)`, #1395) binds one
+`call` object per chained call, so the chart can find every node one call
+made; its `apply` records the box's rows and the node's key on each node
+(`ast/tooltip/request.ts`), and its `tag` remembers the mark's wire, whose
+channel options name the fields the mark draws.
 `nameableMark` attaches one list of modifiers, `NAMEABLE_MODIFIERS` (`name`,
-`label`, `zOrder`, `hidden`, `transition`), and exports their method names as
+`label`, `zOrder`, `hidden`, `transition`, `tooltip`), and exports their method names as
 `NAMEABLE_METHODS`, so a wrapper around a mark that must forward its chain
 (the `image` mark's dimension-awaiting wrapper) forwards every one of them
 from the same list. A mark that wraps marks forwards the same form by

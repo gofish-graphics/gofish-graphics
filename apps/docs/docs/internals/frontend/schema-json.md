@@ -666,6 +666,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2416,6 +2429,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2547,6 +2573,19 @@ for the API.
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           ]
         },
@@ -2694,6 +2733,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2808,6 +2860,19 @@ for the API.
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           ]
         },
@@ -2974,6 +3039,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3112,6 +3190,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -3212,6 +3303,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -3294,6 +3398,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -3371,6 +3488,19 @@ for the API.
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           ]
         },
@@ -3511,6 +3641,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3643,6 +3786,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3744,6 +3900,19 @@ for the API.
             }
           ]
         },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3790,6 +3959,19 @@ for the API.
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "tooltip": {
+          "anyOf": [
+            {
+              "const": true
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           ]
         },

@@ -58,6 +58,7 @@ import {
 } from "./coordinateTransforms/bake";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
+import { walkItems } from "../interaction/runtime";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
@@ -587,6 +588,26 @@ export const placedByOwnData = (
   originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
   originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
 
+/** `root` and the nodes below it, breadth first (a leaf of the module
+ *  graph, so the interaction runtime can walk a tree without importing the
+ *  operators): every node at one depth
+ *  before any deeper one. */
+export function* breadthFirst(root: GoFishNode): Generator<GoFishNode> {
+  const queue: GoFishNode[] = [root];
+  for (let i = 0; i < queue.length; i++) {
+    const n = queue[i];
+    yield n;
+    for (const c of n.children) if (c instanceof GoFishNode) queue.push(c);
+  }
+}
+
+/** Make every item in `items`, the items of groups and of composites'
+ *  operands included, no pointer target (`GoFishNode.overlay`). */
+const clearPointerEvents = (items: DisplayList.DisplayItem[]): void =>
+  walkItems(items, (item) => {
+    item.style = { ...item.style, pointerEvents: "none" };
+  });
+
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
  * whose type is not continuous). It runs in its own walk, after every type is
@@ -894,7 +915,7 @@ export class GoFishNode {
    *  apart from the transitions it draws over them, and the layer its frame
    *  holds, every tier of a `.layer()` chain included (`frameChart`). A
    *  label is a layer of text on the nearest one around its mark
-   *  (`elaborateLabels`). */
+   *  (`labelLayer`). */
   public _chartContent?: true;
   /** Set by chrome elaboration on the box a node's axes are seated beside,
    *  continuous axes and category label rows alike, the content of its
@@ -963,6 +984,21 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /** Text that describes this node, written as the `title` of the items it
+   *  draws itself (a mark's `.tooltip()` content), or of all its items when
+   *  it draws none itself. A static drawing shows it on hover. */
+  public title?: string;
+  /** Set on a node drawn over the graphic, inside it (a tooltip's box and
+   *  the marker on a line's point): nothing it draws is a pointer target
+   *  (its items paint with `pointerEvents: "none"`), and the canvas is
+   *  sized without it (`drawnOverflow` in `gofish.tsx`), so opening it
+   *  moves nothing else. */
+  public overlay?: true;
+  /** Set on a node drawn as a path through its data rows, one point per
+   *  row (the shape form of `line` built from rows, `shapes/band.tsx`): a
+   *  tooltip focuses one of its rows, and a field list names the rows'
+   *  fields (`tooltip/request.ts`). */
+  public throughRows?: true;
   /** The box its own options give it (`elaborateOwnDims`), for a construct
    *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
    *  the construct reads. Its length is read here ({@link lengthOn}). */
@@ -2120,6 +2156,16 @@ export class GoFishNode {
     return (
       this._chartRing === true && !hasOrigin(this._underlyingSpace?.[axis])
     );
+  }
+
+  /**
+   * Whether this node or an ancestor is an overlay, no pointer target
+   * ({@link overlay}).
+   */
+  private underOverlay(): boolean {
+    for (let n: unknown = this; n instanceof GoFishNode; n = n.parent)
+      if (n.overlay) return true;
+    return false;
   }
 
   /**
@@ -3324,9 +3370,14 @@ export class GoFishNode {
   private filtered(
     items: DisplayList.DisplayItem[]
   ): DisplayList.DisplayItem[] {
-    if (this._filter === undefined || items.length === 0) return items;
+    if (items.length === 0 || this._filter === undefined) return items;
     return [
-      { kind: "group", transform: {}, filter: this._filter, children: items },
+      {
+        kind: "group",
+        transform: {},
+        filter: this._filter,
+        children: items,
+      },
     ];
   }
 
@@ -3383,6 +3434,13 @@ export class GoFishNode {
         this.paintedStyle ??= style;
       }
     }
+    if (this.title !== undefined) {
+      const own = items.filter((item) => item.id === this.uid);
+      for (const item of own.length > 0 ? own : items) item.title = this.title;
+    }
+    // A container lowers its leaves through their own `lowerWith`, so each
+    // node looks up its ancestors for the flag, as for visibility.
+    if (items.length > 0 && this.underOverlay()) clearPointerEvents(items);
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure
@@ -3707,7 +3765,7 @@ export class GoFishNode {
 
   /** Whether the bake stops at this node, which lowers its own subtree
    *  (`coordinateTransforms/bake.ts`): a boundary type, or a node with a
-   *  `filter`, which draws its subtree as one filtered picture. */
+   *  `filter`, which draws its subtree as one picture. */
   public isBakeBoundary(): boolean {
     return BAKE_BOUNDARY_TYPES.has(this.type) || this._filter !== undefined;
   }

@@ -56,13 +56,15 @@ interface SerializeTag {
    *  `field(...)` aggregate's serialized `FieldExprWire` (`{type: "field",
    *  ...}`) — see `labelIRField` in createOperator.ts. */
   label?: Array<{ accessor: string | AnyObject; [k: string]: unknown }>;
-  /** Set when `.translate({x, y})` is chained on an operator (traversal
-   *  form) — `translateOperator` copies the base operator's tag forward onto
+  /** Set when `.translate({x, y})` is chained on a mark (`translateMark`)
+   *  or an operator (traversal form) — `translateOperator` copies the base operator's tag forward onto
    *  its wrapper and stamps this field so the structural pixel offset
    *  reaches the wire (mirrors `TranslatableIR.translate` in gofish-ir). */
   translate?: { x?: number; y?: number };
   /** Set when a constant `.hidden(value)` is chained on a mark. */
   hidden?: boolean;
+  /** Set when `.tooltip(fields?)` is chained on a mark. */
+  tooltip?: true | string[];
 }
 
 /**
@@ -391,11 +393,13 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   // `.label(accessor, options)` / `.translate({x, y})` chained on the
   // operator (traversal) form land in `tag.label` / `tag.translate`,
   // mirroring how a chained mark `.label()` surfaces as a top-level field in
-  // `markToIR` — see createOperator.ts's `attachLabelOption` /
+  // `markToIR` — see createOperator.ts's `attachChainedMethod` calls (its
+  // `groupModifiers` list holds the `.name()` and `.label()` calls) and
   // `translateOperator`.
   return {
     type: tag.type,
     ...wireOpts("operator", tag.type, tag.opts),
+    ...(tag.name !== undefined ? { name: tag.name } : {}),
     ...(tag.label !== undefined ? { label: wireLabels(tag.label) } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;
@@ -455,6 +459,8 @@ async function markToIR(
   if (tag.name !== undefined) chained.name = tag.name;
   if (tag.label !== undefined) chained.label = wireLabels(tag.label);
   if (tag.hidden !== undefined) chained.hidden = tag.hidden;
+  if (tag.tooltip !== undefined) chained.tooltip = tag.tooltip;
+  if (tag.translate !== undefined) chained.translate = tag.translate;
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

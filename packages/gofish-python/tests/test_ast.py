@@ -326,6 +326,56 @@ class TestMarkZOrder:
         assert call(m, lambda_id, [[BridgeRef(0), BridgeRef(1)]], refs) == [1]
 
 
+class TestMarkTooltip:
+    """`.tooltip(fields=None)`: `True`, or the list of fields, on the mark's IR
+    (#1395)."""
+
+    def test_no_fields(self):
+        assert ir(rect(w="share").tooltip())["tooltip"] is True
+
+    def test_fields_in_order(self):
+        m = rect(w="share").tooltip(["share", "path"])
+        assert ir(m)["tooltip"] == ["share", "path"]
+
+    def test_absent_by_default(self):
+        assert "tooltip" not in ir(rect(w="share"))
+
+    def test_kept_through_other_modifiers(self):
+        m = rect(w="share").tooltip(["n"]).name("bars").z_order(1)
+        node = ir(m)
+        assert node["tooltip"] == ["n"] and node["name"] == "bars"
+
+    def test_a_bare_string_is_an_error(self):
+        # A str is a sequence of letters, not the list of one field.
+        with pytest.raises(TypeError, match=r'\["lake"\]'):
+            rect(w="share").tooltip("lake")
+
+    def test_translate_in_either_order(self):
+        # The IR carries both, whichever comes first; the JS side chains
+        # them in one order and `.translate()` keeps the tooltip on the mark.
+        a = ir(line(x="year", y="v").translate(y=5).tooltip(["year"]))
+        b = ir(line(x="year", y="v").tooltip(["year"]).translate(y=5))
+        assert a == b
+        assert a["tooltip"] == ["year"] and a["translate"] == {"y": 5}
+
+    def test_in_a_chart(self):
+        from gofish import chart, spread
+
+        doc = (
+            chart([{"path": "a", "share": 0.1}])
+            .flow(spread(by="path", dir="y"))
+            .mark(rect(w="share").tooltip())
+            .to_ir()
+        )
+        assert doc["root"]["mark"]["tooltip"] is True
+
+    def test_a_ref_has_no_tooltip(self):
+        from gofish import ref
+
+        with pytest.raises(TypeError, match="tooltip"):
+            ref("bars").tooltip()
+
+
 class TestMarkName:
     """Test Mark.name() method."""
 
@@ -350,6 +400,43 @@ class TestMarkName:
         m = rect(h="value")
         d = ir(m)
         assert "name" not in d
+
+
+class TestOperatorName:
+    """`.name()` on an operator names each group it makes (#802)."""
+
+    def test_name_in_ir(self):
+        d = ir(spread(by="site", dir="x").name("sites"))
+        assert d["name"] == "sites"
+        assert d["type"] == "spread"
+        assert d["by"] == "site"
+
+    def test_no_name_not_in_ir(self):
+        assert "name" not in ir(spread(by="site", dir="x"))
+
+    def test_name_returns_new_operator(self):
+        op = spread(by="site", dir="x")
+        named = op.name("sites")
+        assert named is not op
+        assert op._name is None
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            spread(by="site", dir="x").name("sites").label("site"),
+            spread(by="site", dir="x").label("site").name("sites"),
+            spread(by="site", dir="x").name("sites").translate(y=5),
+            spread(by="site", dir="x").translate(y=5).name("sites"),
+        ],
+    )
+    def test_name_survives_chained_calls(self, op):
+        d = ir(op)
+        assert d["name"] == "sites"
+        assert "label" in d or "translate" in d
+
+    def test_derive_has_no_name(self):
+        with pytest.raises(NotImplementedError):
+            derive(lambda rows: rows).name("x")
 
 
 class TestRefData:

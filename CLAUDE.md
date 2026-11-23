@@ -163,7 +163,9 @@ Key coordinate systems available, all in the `Coord` family (`Coord.polar()`):
   anything I didn't intend?" check for an inner loop. Unlike the CI visual baselines, it works
   on Mac (it diffs normalized geometry, not pixels, so no text-metric drift) and needs no
   curation. Pass a substring to scope to one story or a group (`pnpm capture-diff main bar`).
-  Exits non-zero when anything moved; report at `tests/tmp/capture-diff/report.html`.
+  Exits non-zero when anything moved; report at `tests/tmp/capture-diff/report.html`. To hover or
+  animate a moved story on both sides, serve the report with `pnpm capture-diff:serve` and press
+  its Run live button; the CI review site has the same as its Live view (`tests/README.md`).
 - **Documentation**: VitePress site in `apps/docs/` with live chart examples
 - **Testing**: `src/tests/` holds visual chart examples and the `*.test.ts` unit tests (`pnpm --filter gofish-graphics test`)
 - **Development Server**: `pnpm dev` runs Vite dev server on port 3000

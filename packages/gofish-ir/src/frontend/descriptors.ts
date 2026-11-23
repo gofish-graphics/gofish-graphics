@@ -357,6 +357,14 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
     type: t.union(t.boolean, t.ref("BridgeLambdaSentinel")),
     doc: "From `.hidden(value)`: the mark is laid out and feeds scales, axes, legends and refs, and paints nothing. A boolean, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to. An ancestor's `hidden` wins over a descendant's `false`.",
   },
+  // TODO(#1395): the tooltip reference pages (docs/{js,python}/api/core/
+  // tooltip.md) hand-write their parameter table, because `gofish-ref`
+  // cannot render a base field of a mark. The right fix is a `gofish-ref`
+  // form for one base field, so the table comes from this `doc`.
+  tooltip: {
+    type: t.union(t.literal(true), t.array(t.string)),
+    doc: "From `.tooltip(fields?)`: a box that describes the mark under the pointer, beside it. `true` shows every field with one value on the mark, a size or position channel's field with the value it draws (a stacked segment's summed count), except a `line`'s or `ribbon`'s, which draw each row's value; a list shows exactly those fields, in order. On a `line` drawn through rows, the box shows the fields of the row nearest the pointer, beside its point, and a list names the rows' fields: the box shows them for that row, and the line's `<title>` only those with one value on the whole line. Numbers show digit grouping from five digits on (2018, 11,902) and at most two fraction digits, and a number below 1 shows three significant digits. A static drawing writes the same rows as the mark's SVG `<title>`.",
+  },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
@@ -399,6 +407,10 @@ export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
  *  or it throws) or a `field(...)` aggregate (`.sum()`/`.mean()`/etc.) folding
  *  the group's rows to one value, e.g. `.label(field("count").sum())`. */
 export const OPERATOR_BASE_FIELDS: FieldGroup = group({
+  name: {
+    type: t.string,
+    doc: 'Layer name, from `.name("...")` on the operator: each group the operator makes is filed under it, so `selectAll(name)` yields one ref per group, whose `datum` is the group\'s rows.',
+  },
   label: { type: t.ref("LabelIR") },
   translate: { type: t.ref("TranslateIR") },
   debug: {
@@ -409,7 +421,7 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
 
 /** The base fields the Python generator exposes as kwargs on every operator
  *  core and dual-form combinator core (the rest of OPERATOR_BASE_FIELDS ride
- *  Operator methods: `.label()`, `.translate()`). */
+ *  Operator methods: `.name()`, `.label()`, `.translate()`). */
 export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
   debug: OPERATOR_BASE_FIELDS.debug,
 });

@@ -8,7 +8,6 @@ import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef } from "../_ref";
 import { LabelText, type LabelNode } from "./labelNode";
-import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
 import { placedOutlines, type Outline } from "../geometry";
@@ -20,7 +19,8 @@ import {
 } from "./placeStep";
 import { avoidedRefs } from "../nodeRefs";
 import type { Place } from "../../families/place";
-import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
+import type { DrawnTier, SelectionLayer } from "../selectionLayer";
+import { selectNode } from "../marks/resolveRefData";
 import { Frontend } from "gofish-ir";
 import {
   orientSide,
@@ -44,13 +44,14 @@ import {
  * ordinary `align`/`distribute` constraints — exactly the technique
  * `elaborateOrdinalAxis` uses for its ref-based tick labels.
  *
- * The pass first resolves each `.label()` spec to its TARGET node
- * (`resolveLabelTargets`, replacing the old `GoFishNode.resolveLabels`
- * method). Then a label is a layer of text on its chart: the content of the
- * nearest `chart()` around the labeled mark (or the render root) is wrapped
- * once in a `Layer` with one `ref()` + `Text` pair per (labeled node ×
- * spec), so a label takes room in its chart and never moves the marks it
- * describes (see `elaborateLabels`).
+ * `.label()` is a layer over its selection (`selectionLayer.ts`, the
+ * lowering every such modifier shares). The pass first resolves each
+ * `.label()` spec to its TARGET node (`resolveLabelTargets`, replacing the
+ * old `GoFishNode.resolveLabels` method). Then a label is a layer of text on
+ * its chart: the content of the nearest `chart()` around the labeled mark
+ * (or the render root) is wrapped once in a `Layer` with one ref + label
+ * pair per (labeled node × spec), so a label takes room in its chart and
+ * never moves the marks it describes (see `drawLabels`).
  */
 
 // Visual constants — chosen to match the previous bespoke label styling.
@@ -330,173 +331,155 @@ const isChosen = (p: TargetPosition): p is Place | "outline" =>
   p === "outline" || isPlace(p);
 
 /**
- * Wrap `node`, a chart's content, in ONE Layer tier carrying, per label
- * pair, a `ref(target)` stand-in and a label, in order. A label at a
- * position string is placed by the solve, by the constraints
- * `buildLabelConstraints` derives from it; a label the chooser places is
- * placed after the solve, by one `labelPlace` constraint over all of them,
- * which also keeps them off the labels at a position string and the labels
- * of the charts inside `node` (`inside`, placed before it, read through
- * refs). Returns the wrapper and every label it seated.
+ * The label tier over one home (`labelLayer`'s `draw`): per label pair, a
+ * ref to its target, made as a selection makes one (`selectNode`), and a label,
+ * in order, beside the home's content. A label's text is its accessor over
+ * the target's rows, the ref's `datum`. A label at a position string is
+ * placed by the solve, by the constraints `buildLabelConstraints` derives
+ * from it; a label the chooser places is placed after the solve, by one
+ * `labelPlace` constraint over all of them, which also keeps them off the
+ * labels at a position string and the labels of the charts inside the home
+ * (`inside`, placed before it, read through refs). It draws every label it
+ * seated.
  */
-async function wrapWithLabels(
-  node: GoFishNode,
+function drawLabels(
   pairs: LabelPair[],
-  inside: LabelNode[]
-): Promise<{ node: GoFishNode; labels: LabelNode[] }> {
+  { home, inside }: { home: GoFishNode; inside: LabelNode[][] }
+): DrawnTier<LabelNode[]> {
   // The label constraints run in the wrapper's axis order, which is the
   // wrapped node's: the wrapper's spaces are the node's.
-  const yDirection = wrapperDirection(node);
+  const yDirection = wrapperDirection(home);
   const seated: LabelNode[] = [];
-  const root = await wrapPreservingIdentity(node, async (content) => {
-    const refs: GoFishAST[] = [];
-    const texts: GoFishNode[] = [];
-    // Labels at a position string, placed by the solve.
-    const fixed: {
-      stand: GoFishAST;
-      text: GoFishNode;
-      position: LabelPosition;
-      offset?: number;
-      label: LabelNode;
-    }[] = [];
-    // Labels the chooser places after the solve.
-    const placed: {
-      stand: GoFishAST;
-      text: GoFishNode;
-      avoid: GoFishAST[];
-      spec: LabelSpec;
-      place: Place | "outline";
-      node: ReturnType<typeof LabelText>;
-    }[] = [];
-    // The nodes each call keeps off, read through refs made once per call.
-    const avoided = new Map<unknown, GoFishAST[]>();
+  const refs: GoFishAST[] = [];
+  const texts: GoFishNode[] = [];
+  // Labels at a position string, placed by the solve.
+  const fixed: {
+    stand: GoFishAST;
+    text: GoFishNode;
+    position: LabelPosition;
+    offset?: number;
+    label: LabelNode;
+  }[] = [];
+  // Labels the chooser places after the solve.
+  const placed: {
+    stand: GoFishAST;
+    text: GoFishNode;
+    avoid: GoFishAST[];
+    spec: LabelSpec;
+    place: Place | "outline";
+    node: ReturnType<typeof LabelText>;
+  }[] = [];
+  // The nodes each call keeps off, read through refs made once per call.
+  const avoided = new Map<unknown, GoFishAST[]>();
 
-    for (const { target, spec, position } of pairs) {
-      const text = resolveLabelText(spec.accessor, target.datum);
-      if (!text) continue; // empty/null accessor result: skip this spec
+  for (const { target, spec, position } of pairs) {
+    // The target's rows, which its ref reads (`GoFishRef.datum`). The ref
+    // is made only for a label that has a text.
+    const text = resolveLabelText(spec.accessor, target.datum);
+    if (!text) continue; // empty/null accessor result: skip this spec
 
-      const stand = ref(target);
-      refs.push(stand);
+    const stand = selectNode(target);
+    refs.push(stand);
 
-      const label = LabelText({
-        text,
-        fontSize: spec.fontSize ?? 11,
-        fontFamily: spec.fontFamily ?? LABEL_FONT_FAMILY,
-        fontWeight: spec.fontWeight,
-        fontStyle: spec.fontStyle,
-        fill: spec.color ?? autoLabelColor(target, stand),
-        rotate: spec.rotate,
-        halo: spec.halo,
-        background: spec.background,
-      });
-      texts.push(label.node);
-      seated.push(label);
-      // The label is part of its target as a mark, though it lives out of
-      // the target's subtree; record that, so whatever takes the mark over
-      // (a `time.transition()`) takes the label with it, and the label
-      // paints under its mark's build-in animation.
-      target.INTERNAL_attach(label.node);
-      if (!isChosen(position)) {
-        fixed.push({
-          stand,
-          text: label.node,
-          position,
-          offset: spec.offset,
-          label,
-        });
-        continue;
-      }
-      // The chooser places it after the solve, so the claim walk cannot
-      // know where it lands: it is ink, which takes no room, and the canvas
-      // grows to hold it where the render gives no size (#1032).
-      label.node.inkOn = [true, true];
-      let avoid = avoided.get(spec.group);
-      if (avoid === undefined) {
-        avoid = avoidedRefs(
-          spec.avoiding,
-          undefined,
-          ".label({ avoiding })",
-          ".label()"
-        );
-        refs.push(...avoid);
-        avoided.set(spec.group, avoid);
-      }
-      placed.push({
+    const label = LabelText({
+      text,
+      fontSize: spec.fontSize ?? 11,
+      fontFamily: spec.fontFamily ?? LABEL_FONT_FAMILY,
+      fontWeight: spec.fontWeight,
+      fontStyle: spec.fontStyle,
+      fill: spec.color ?? autoLabelColor(target, stand),
+      rotate: spec.rotate,
+      halo: spec.halo,
+      background: spec.background,
+    });
+    texts.push(label.node);
+    seated.push(label);
+    // The label is part of its target as a mark, though it lives out of
+    // the target's subtree; record that, so whatever takes the mark over
+    // (a `time.transition()`) takes the label with it, and the label
+    // paints under its mark's build-in animation.
+    target.INTERNAL_attach(label.node);
+    if (!isChosen(position)) {
+      fixed.push({
         stand,
         text: label.node,
-        avoid,
-        spec,
-        place: position,
-        node: label,
+        position,
+        offset: spec.offset,
+        label,
       });
+      continue;
     }
-    // The labels of the charts inside, which the chooser keeps its labels
-    // off as it does those at a position string here.
-    const insideStands =
-      placed.length === 0
-        ? []
-        : inside.map((t) => {
-            const stand = ref(t.node);
-            refs.push(stand);
-            return { node: stand as GoFishAST, label: t };
-          });
-
-    // The content is seated at its own origin first, so every label
-    // constraint (which reads a target via its `ref()`) sees it already
-    // placed and only moves the label. The chooser runs after the solve.
-    return wrapRing(content, {
-      nodes: [...refs, ...texts] as GoFishNode[],
-      constraints: (at) => [
-        ...fixed.flatMap(({ stand, text, position, offset }) =>
-          buildLabelConstraints(
-            position,
-            offset,
-            at(stand),
-            at(text),
-            yDirection
-          )
-        ),
-        ...(placed.length === 0
-          ? []
-          : [
-              createLabelPlaceConstraint(
-                placed.map(
-                  (p): LabelPlaceItem => ({
-                    group: p.spec.group,
-                    target: at(p.stand),
-                    label: at(p.text),
-                    node: p.node,
-                    place: p.place,
-                    offset: p.spec.offset,
-                    avoiding: p.avoid.map(at),
-                    call: callName(p.spec.accessor),
-                  })
-                ),
-                [
-                  ...fixed.map(({ text, label }) => ({ node: text, label })),
-                  ...insideStands,
-                ].map(({ node, label }) => ({ ref: at(node), label })),
-                yDirection
-              ),
-            ]),
-      ],
+    // The chooser places it after the solve, so the claim walk cannot
+    // know where it lands: it is ink, which takes no room, and the canvas
+    // grows to hold it where the render gives no size (#1032).
+    label.node.inkOn = [true, true];
+    let avoid = avoided.get(spec.group);
+    if (avoid === undefined) {
+      avoid = avoidedRefs(
+        spec.avoiding,
+        undefined,
+        ".label({ avoiding })",
+        ".label()"
+      );
+      refs.push(...avoid);
+      avoided.set(spec.group, avoid);
+    }
+    placed.push({
+      stand,
+      text: label.node,
+      avoid,
+      spec,
+      place: position,
+      node: label,
     });
-  });
-  return { node: root, labels: seated };
-}
+  }
+  // The labels of the charts inside, which the chooser keeps its labels
+  // off as it does those at a position string here.
+  const insideStands =
+    placed.length === 0
+      ? []
+      : inside.flat().map((t) => {
+          const stand = selectNode(t.node);
+          refs.push(stand);
+          return { node: stand as GoFishAST, label: t };
+        });
 
-/**
- * The node a label's text layer goes on: the content of the nearest
- * `chart()` around its target (`_chartContent`, inside the chart's chrome
- * rings), the target itself when it is one, or `root`, the render root,
- * when no chart holds it. In a `.layer()` chain, that is the target's own
- * tier, and the transitions a chart draws over its marks are not in it, so
- * they read its labels placed.
- */
-function homeOf(target: GoFishNode, root: GoFishNode): GoFishNode {
-  for (let n: GoFishNode | undefined = target; n; n = n.parent)
-    if (n._chartContent) return n;
-  return root;
+  // The home's content is seated at its own origin first (`wrapRing`), so
+  // every label constraint (which reads a target via its ref) sees it
+  // already placed and only moves the label. The chooser runs after the
+  // solve.
+  return {
+    drawn: seated,
+    nodes: [...refs, ...texts] as GoFishNode[],
+    constraints: (at) => [
+      ...fixed.flatMap(({ stand, text, position, offset }) =>
+        buildLabelConstraints(position, offset, at(stand), at(text), yDirection)
+      ),
+      ...(placed.length === 0
+        ? []
+        : [
+            createLabelPlaceConstraint(
+              placed.map(
+                (p): LabelPlaceItem => ({
+                  group: p.spec.group,
+                  target: at(p.stand),
+                  label: at(p.text),
+                  node: p.node,
+                  place: p.place,
+                  offset: p.spec.offset,
+                  avoiding: p.avoid.map(at),
+                  call: callName(p.spec.accessor),
+                })
+              ),
+              [
+                ...fixed.map(({ text, label }) => ({ node: text, label })),
+                ...insideStands,
+              ].map(({ node, label }) => ({ ref: at(node), label })),
+              yDirection
+            ),
+          ]),
+    ],
+  };
 }
 
 /**
@@ -519,54 +502,24 @@ function takeLabels(target: GoFishNode, out: LabelPair[]): void {
 }
 
 /**
- * Elaborate every `.label()` in `node`'s subtree into real label nodes and
- * constraints. Entry point for the pipeline (see `gofish.tsx`). After
- * `resolveLabelTargets`, a label is a text in one layer on its chart
- * (`homeOf`): each chart's content is wrapped once, with every label of the
- * chart (`wrapWithLabels`), so a chart's labels take room in the chart, the
- * chooser places them all in one run, and a label never moves the marks it
- * describes.
+ * `.label()` as a layer over its selection (`selectionLayer.ts`). Its stamps
+ * are the label specs on the nodes, relayed from a group to the nodes that
+ * carry them (`resolveLabelTargets`), and taken off in `holdLabels`'s order;
+ * the tier over each home is `drawLabels`. The pipeline lowers it after
+ * chrome (`gofish.tsx`). A label is a text in one layer on its chart
+ * (`homeOf` in `selectionLayer.ts`): each chart's content is wrapped once,
+ * with every label of the chart, so a chart's labels take room in the
+ * chart, the chooser places them all in one run, and a label never moves
+ * the marks it describes.
  */
-export async function elaborateLabels(
-  node: GoFishNode
-): Promise<{ node: GoFishNode; changed: boolean }> {
-  resolveLabelTargets(node);
-  const pairs: LabelPair[] = [];
-  holdLabels(node, pairs);
-  takeLabels(node, pairs);
-  if (pairs.length === 0) return { node, changed: false };
-  const homes = new Map<GoFishNode, LabelPair[]>();
-  for (const p of pairs) {
-    const home = homeOf(p.target, node);
-    const here = homes.get(home);
-    if (here === undefined) homes.set(home, [p]);
-    else here.push(p);
-  }
-  // A chart is wrapped after the charts inside it, so its chooser keeps its
-  // labels off theirs, already placed.
-  const depth = (n: GoFishNode) => {
-    let d = 0;
-    for (let p = n.parent; p; p = p.parent) d++;
-    return d;
-  };
-  const order = [...homes].sort(([a], [b]) => depth(b) - depth(a));
-  const done: { node: GoFishNode; labels: LabelNode[] }[] = [];
-  let out = node;
-  for (const [home, here] of order) {
-    const parent = home.parent;
-    const inside = done
-      .filter((d) => isInside(d.node, home))
-      .flatMap((d) => d.labels);
-    const wrapped = await wrapWithLabels(home, here, inside);
-    done.push(wrapped);
-    if (home === node) out = wrapped.node;
-    else parent!.replaceChild(parent!.indexOfChild(home)!, wrapped.node);
-  }
-  return { node: out, changed: true };
-}
-
-/** Whether `n` is in `home`'s subtree, below it. */
-function isInside(n: GoFishNode, home: GoFishNode): boolean {
-  for (let p = n.parent; p; p = p.parent) if (p === home) return true;
-  return false;
-}
+export const labelLayer: SelectionLayer<LabelPair, LabelNode[]> = {
+  take(root) {
+    resolveLabelTargets(root);
+    const pairs: LabelPair[] = [];
+    holdLabels(root, pairs);
+    takeLabels(root, pairs);
+    return pairs;
+  },
+  target: (pair) => pair.target,
+  draw: drawLabels,
+};

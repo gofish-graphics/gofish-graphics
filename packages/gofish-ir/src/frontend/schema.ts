@@ -307,6 +307,10 @@ export interface SpreadOperator
    *  subdata. String accessors round-trip; function accessors don't (see
    *  `LabelIR`/`labelIRField` in createOperator.ts). */
   label?: LabelIR;
+  /** From `.name("...")` on the operator: each group node it makes is
+   *  filed under this layer name, so `selectAll(name)` yields one ref per
+   *  group, whose `datum` is the group's rows. */
+  name?: string;
   by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
@@ -338,6 +342,8 @@ export interface StackOperator
   type: "stack";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   by?: string | FieldAccessor | ChunkKeyIR;
   /** See `SpreadOperator.dir`. */
   dir?: string;
@@ -358,6 +364,8 @@ export interface GroupOperator
   type: "group";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   by: string | FieldAccessor | ChunkKeyIR;
 }
 
@@ -368,6 +376,8 @@ export interface ScatterOperator
   type: "scatter";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   by?: string | FieldAccessor | ChunkKeyIR;
   x?: ChannelValue;
   y?: ChannelValue;
@@ -445,6 +455,8 @@ export interface TableOperator
   type: "table";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** The column and row keys, each what `SpreadOperator.by` takes. */
   by: {
     x: string | FieldAccessor | ChunkKeyIR;
@@ -481,6 +493,8 @@ export interface TreemapOperator
   type: "treemap";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** Field to partition rows by; also accepts a field(...) accessor carrying
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
@@ -521,6 +535,8 @@ export interface PackOperator
   type: "pack";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor | ChunkKeyIR;
   /** Gap between sibling circles, in pixels. Default 0. */
@@ -553,6 +569,8 @@ export interface PartitionOperator
   type: "partition";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
+  /** See `SpreadOperator.name`. */
+  name?: string;
   /** A key that has a region: a binned field accessor, one per axis, or a
    *  binned struct of two fields. */
   by:
@@ -864,6 +882,8 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   hidden?: boolean | BridgeLambdaSentinel;
+  /** `.tooltip()` (`true`) or `.tooltip(fields)`. */
+  tooltip?: true | string[];
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -883,6 +903,8 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   hidden?: boolean | BridgeLambdaSentinel;
+  /** `.tooltip()` (`true`) or `.tooltip(fields)`. */
+  tooltip?: true | string[];
   translate?: TranslateIR;
 }
 

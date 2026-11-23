@@ -22,7 +22,9 @@
  *   cubic Béziers for monotone and smooth ones, then, under a coordinate
  *   transform, one adaptive resampling of the drawn path through it.
  * - Geometry gives the box, the outline of the same path, and the
- *   cross-section along the value axis.
+ *   cross-section along the value axis; a line drawn through rows also
+ *   gives each row's point (`rowPoints`), which lowering records where it
+ *   draws it (`drawnRowPoints`), so a tooltip can focus one row of it.
  */
 import { color6, resolveColorChannel } from "../../color";
 import {
@@ -61,6 +63,7 @@ import {
 import {
   boxCrossSection,
   boxOfDims,
+  orderToPixel,
   outlinePaint,
   pathOutline,
 } from "../geometry";
@@ -83,6 +86,7 @@ import type { BlendMode } from "../blendMode";
 import { evalFieldValues, isMissing } from "../fieldExpr";
 import { resolveColumn } from "../channels";
 import { groupFun } from "../groupExpr";
+import { setDrawnRowPoints } from "../displayList/drawnRowPoints";
 import { cellOn } from "../groupCell";
 
 /** A band's or a path's two edges: functions of the parameter, in data
@@ -106,6 +110,10 @@ export type BandProps = {
    *  (`rect.inset`). The box is the band's own (ink only). A closed band
    *  only. */
   inset?: number;
+  /** The rows the band is drawn through, each at its parameter value, in
+   *  order ({@link bandOfRows}); none when its edges are functions
+   *  ({@link bandOfFunctions}). */
+  rows?: readonly { row: unknown; t: number }[];
   /** What the parameter's and the values' columns measure, read into
    *  units in the type walk. An amount's units are those of a difference of
    *  its values, as a rect's data size is (`magnitude`). */
@@ -262,8 +270,12 @@ function sampledEdgePath(
 
 /** What layout leaves for lowering and geometry: the edges in the node's
  *  local pixels (along the parameter from 0) and the path they draw, in the
- *  node's axis order. */
-type LaidOutBand = { edges: BandEdges; path: Path };
+ *  node's axis order, and the point of each row a line is drawn through. */
+type LaidOutBand = {
+  edges: BandEdges;
+  path: Path;
+  points: { row: unknown; at: Point }[];
+};
 
 export const Band = ({
   axis,
@@ -271,6 +283,7 @@ export const Band = ({
   origin,
   closed,
   inset = 0,
+  rows,
   parameterQuantity,
   valueQuantity,
   fill = color6[0],
@@ -419,9 +432,20 @@ export const Band = ({
         translate[axis] = start;
         if (origin === "pinned") translate[across] = pxOf(values!.map!, lo);
         const ink = inset > 0 ? insetEdges(px, inset) : px;
+        // A line's rows, each on its drawn edge. A ribbon is a region (a
+        // pointer anywhere inside it is on it), described as a whole, so it
+        // gives none.
+        const { min: u0, max: u1 } = px.upper.domain;
+        const points = closed
+          ? []
+          : (rows ?? []).map(({ row, t }) => {
+              const u = Math.min(u1, Math.max(u0, pxOf(along, t) - start));
+              return { row, at: point(u, px.upper.at(u)) };
+            });
         const renderData: LaidOutBand = {
           edges: ink ?? px,
           path: ink === undefined ? [] : pathOf(ink),
+          points,
         };
         return {
           intrinsicDims: dims,
@@ -434,7 +458,7 @@ export const Band = ({
         _children,
         node
       ): DisplayList.DisplayItem[] => {
-        const { path } = renderData as LaidOutBand;
+        const { path, points } = renderData as LaidOutBand;
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
@@ -442,32 +466,52 @@ export const Band = ({
         const placed = mapPathPoints(path, local);
         // Under a coordinate transform the exact path is resampled through
         // it, adaptively, to half a pixel; with none it is drawn as it is.
-        const drawn =
+        const warped =
           coordinateTransform && coordinateTransform.type !== "linear"
-            ? transformPath(placed, coordinateTransform, { resample: true })
-            : placed;
-        return [
-          {
-            kind: "path",
-            d: pathToPixelSVG(drawn, toPixel),
-            datum: node.datum,
-            role: roleFor(node.datum),
-            style: lowerStyle({
-              fill: closed ? resolvedFill : "none",
-              stroke: resolvedStroke,
-              strokeWidth,
-              strokeDasharray,
-              opacity,
-              mixBlendMode: blendMode,
-            }),
-          },
-        ];
+            ? coordinateTransform
+            : undefined;
+        const drawn = warped
+          ? transformPath(placed, warped, { resample: true })
+          : placed;
+        const item: DisplayList.DisplayItem = {
+          kind: "path",
+          d: pathToPixelSVG(drawn, toPixel),
+          datum: node.datum,
+          role: roleFor(node.datum),
+          style: lowerStyle({
+            fill: closed ? resolvedFill : "none",
+            stroke: resolvedStroke,
+            strokeWidth,
+            strokeDasharray,
+            opacity,
+            mixBlendMode: blendMode,
+          }),
+        };
+        // Each row's point, drawn as the path is: placed, through the
+        // coordinate transform, to pixels.
+        if (points.length > 0)
+          setDrawnRowPoints(
+            item,
+            points.map(({ row, at }) => {
+              const placedAt = local(at);
+              const [x, y] = toPixel(
+                warped ? warped.transform(placedAt) : placedAt
+              );
+              return { row, x, y };
+            })
+          );
+        return [item];
       },
       geometry: ({ intrinsicDims, renderData }, _children, node) => {
-        const { edges: px, path } = renderData as LaidOutBand;
+        const { edges: px, path, points } = renderData as LaidOutBand;
         const box = boxOfDims(intrinsicDims, node.type);
         return {
           box,
+          rowPoints: () =>
+            points.map(({ row, at }) => ({
+              row,
+              at: orderToPixel([at], node.yFrame.direction)[0],
+            })),
           outline: (tolerance) => [
             pathOutline(path, tolerance, node.yFrame.direction, closed, paint),
           ],
@@ -478,6 +522,7 @@ export const Band = ({
     },
     []
   );
+  if (!closed && rows !== undefined) node.throughRows = true;
   return node;
 };
 
@@ -636,7 +681,7 @@ export function bandOfRows(
   value: Channel & { kind: "amount" | "position" },
   curve: ParameterCurve,
   group: string | number | undefined
-): Pick<BandProps, "edges" | "parameterQuantity" | "valueQuantity"> {
+): Pick<BandProps, "edges" | "rows" | "parameterQuantity" | "valueQuantity"> {
   const a = parameter.accessor as { type?: string; name?: string; ops?: [] };
   const column =
     typeof a === "string"
@@ -667,6 +712,7 @@ export function bandOfRows(
         lower: restrict(whole.edges.lower, over),
         upper: restrict(whole.edges.upper, over),
       },
+      rows: whole.rows?.filter(({ t }) => t >= over.min && t <= over.max),
     };
   }
   const read = (c: Channel) => {
@@ -698,8 +744,8 @@ export function bandOfRows(
         `between to draw a curve over. Use a numeric or time column, or the ` +
         `connector form (${mark}() after a spread or scatter over the levels).`
     );
-  const points: { t: number; v: number }[] = [];
-  rows.forEach((_, i) => {
+  const points: { row: unknown; t: number; v: number }[] = [];
+  rows.forEach((row, i) => {
     const ti = t.values[i];
     const vi = v.values[i];
     if (isMissing(ti) || isMissing(vi)) return;
@@ -717,7 +763,7 @@ export function bandOfRows(
           `but a row${where} has ${JSON.stringify(vi)}.`
       );
     if (Number.isNaN(ti) || Number.isNaN(vi)) return;
-    points.push({ t: ti, v: vi });
+    points.push({ row, t: ti, v: vi });
   });
   if (points.length === 0)
     throw new Error(
@@ -745,5 +791,8 @@ export function bandOfRows(
     points.map((p) => p.v),
     curve
   );
-  return edgesOf(curveThrough, value.kind, t.quantity, v.quantity);
+  return {
+    ...edgesOf(curveThrough, value.kind, t.quantity, v.quantity),
+    rows: points.map(({ row, t }) => ({ row, t })),
+  };
 }
