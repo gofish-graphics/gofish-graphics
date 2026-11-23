@@ -11,9 +11,9 @@ A design for writing layout algorithms as GoFish code, on the smallest set of la
 - User code writes decisions three ways: a function that calls `measure` on its children, a `choose` among alternatives, or a `layout` that reads the room it was given.
 - Nothing is implemented except prototype stories. Two of the five primitives are partly missing: the minimum gap, and an average of positions.
 
-**Decisions.** Discrete. Made by plan code, or by `choose`. which items share a row, the order in a column, which two circles a new one rests on
+**Decisions.** Discrete. Made by plan code, or by `choose`. _which items share a row, the order in a column, which two circles a new one rests on_
 
-**Relations.** Facts between shapes. Data, not code. these are 10 apart, this is at least clear of that, these touch
+**Relations** Facts between shapes. Data, not code. these are 10 apart, this is at least clear of that, these touch
 
 **A solver per scope.** Turns one scope's relations into positions. today: one symbolic solver. Later: geometry, optimization
 
@@ -70,11 +70,15 @@ The names `Solver.geometry` and `Constraint.touch` only show the shape of the id
 
 #### Solvers meet at scope boundaries
 
-A scope has one solver. Solvers never share unknowns. What crosses a boundary is small and the same for every solver:
+Across a scope boundary, solvers share no unknowns. What crosses is small and the same for every solver:
 
 - **Down:** the room offered, as a box or a convex shape.
 - **Up:** how much room the scope needs, and its geometry (box, enclosing circle, outline).
 - **Nothing else.** No scale is shared across the boundary, and no length leaves the scope it was computed in.
+
+**Inside a scope, solvers can share unknowns in one direction.** One runs first and the next reads its results as known. The engine already does this: the overlap step and label placement run after the symbolic solve, on the positions it fixed. That covers a beeswarm (x from the symbolic solver, the other axis from another), ribbons drawn after their nodes, and a circle placed against two circles that are already placed. It is an order of solvers, not an exchange between them.
+
+**Nelson-Oppen does not give more than that for these solvers.** It combines solvers that share unknowns by passing equalities between them until nothing new appears. It needs the theories to have no operations in common, and the symbolic and geometry solvers both do arithmetic on the same coordinates. It answers whether a solution exists, not which one a slack rule or a cost would pick. And where a relation has an either-or consequence (a circle that touches two others has two possible places), it needs case splits, which here are the decisions. The design note in PR \#806 draws the same line: the lesson to keep is cooperation through a small shared set of facts, not the algorithm. Unknowns that two solvers constrain at the same time belong inside one solver whose relations cover both, which is the optimizing one.
 
 This is the same boundary a `layout` function needs (below), and it is what issue \#806 calls cooperating layout theories. A geometry scope inside a chart is a child with a size. A chart inside a geometry scope is a shape to be placed. The symbolic solver asks one more thing of a scope that wants to take part in fitting a chart to its room: its size must be a function of the scale that never shrinks when the scale grows. Circle packing gives one when all its radii come from data, because the whole packing grows with the scale. That is what d3 does.
 

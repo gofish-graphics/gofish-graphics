@@ -289,8 +289,8 @@
       <div class="card">
         <h3>Solvers meet at scope boundaries</h3>
         <p class="note">
-          A scope has one solver. Solvers never share unknowns. What crosses a
-          boundary is small and the same for every solver:
+          Across a scope boundary, solvers share no unknowns. What crosses is
+          small and the same for every solver:
         </p>
         <ul class="tight">
           <li><b>Down:</b> the room offered, as a box or a convex shape.</li>
@@ -303,6 +303,31 @@
             length leaves the scope it was computed in.
           </li>
         </ul>
+        <p class="note">
+          <b>Inside a scope, solvers can share unknowns in one direction.</b>
+          One runs first and the next reads its results as known. The engine
+          already does this: the overlap step and label placement run after the
+          symbolic solve, on the positions it fixed. That covers a beeswarm (x
+          from the symbolic solver, the other axis from another), ribbons drawn
+          after their nodes, and a circle placed against two circles that are
+          already placed. It is an order of solvers, not an exchange between
+          them.
+        </p>
+        <p class="note">
+          <b>Nelson-Oppen does not give more than that for these solvers.</b>
+          It combines solvers that share unknowns by passing equalities between
+          them until nothing new appears. It needs the theories to have no
+          operations in common, and the symbolic and geometry solvers both do
+          arithmetic on the same coordinates. It answers whether a solution
+          exists, not which one a slack rule or a cost would pick. And where a
+          relation has an either-or consequence (a circle that touches two
+          others has two possible places), it needs case splits, which here are
+          the decisions. The design note in PR #806 draws the same line: the
+          lesson to keep is cooperation through a small shared set of facts, not
+          the algorithm. Unknowns that two solvers constrain at the same time
+          belong inside one solver whose relations cover both, which is the
+          optimizing one.
+        </p>
         <p class="note">
           This is the same boundary a <code>layout</code> function needs
           (below), and it is what issue #806 calls cooperating layout theories.
