@@ -259,7 +259,7 @@ type ClaimMemo = {
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
   /** Per axis, its chains with members that have no size of their own
-   *  (`chainsOf` in `layer`), once read. */
+   *  (`chainsOf` in `constraints/distribute.ts`), once read. */
   chains: [ChainMembers[] | undefined, ChainMembers[] | undefined];
   /** Per axis, the key of its unit ({@link GoFishNode.unitKeyAt}), once
    *  read. */
@@ -271,7 +271,7 @@ type ClaimMemo = {
 
 /** One chain of a layer along an axis (a `distribute` there): its members
  *  with no size of their own, each with its weight in the slack
- *  (`chainsOf` in `layer`). */
+ *  (`chainsOf` in `constraints/distribute.ts`). */
 export type ChainMembers = { child: number; weight: number }[];
 
 const freshClaimMemo = (): ClaimMemo => ({
@@ -2072,7 +2072,7 @@ export class GoFishNode {
   /** Whether the room this node is given on `axis` reaches something that
    *  fills it: it fills ({@link fillsRoom}), or it has no scope of its own
    *  and some child reads its room. A part of a chain that reads no room
-   *  takes only its need of the chain's slack (`chainsOf` in `layer`): a
+   *  takes only its need of the chain's slack (`chainsOf` in `constraints/distribute.ts`): a
    *  room larger than its box would change nothing it draws. */
   public readsRoom(axis: 0 | 1): boolean {
     this.resolveExtent();

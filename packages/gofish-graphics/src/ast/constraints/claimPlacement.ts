@@ -24,6 +24,7 @@ import {
   type Axis,
   type ConstraintRef,
   type KeyOf,
+  type ResolvedOperands,
 } from "./shared";
 import { isPositionInterval, type PositionConstraint } from "./position";
 import { gridTracks } from "./grid";
@@ -239,6 +240,38 @@ export const literalSeats = (
     }
   }
   return seats;
+};
+
+/** How a layer seats its children (`ClaimWalk.seating`): per axis, by
+ *  child index, the constraints that act on it there, and the literal
+ *  seats its constraints pin, by key (`literalSeats`). */
+export type Seating = {
+  acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
+  seats: Map<string, [number | undefined, number | undefined]>;
+};
+
+/** How a layer with `constraints`, resolved to `operands`, seats its
+ *  children ({@link Seating}). */
+export const seatingOf = (
+  constraints: readonly ConstraintSpec[],
+  { operands, keyOf }: ResolvedOperands
+): Seating => {
+  const acting: Seating["acting"] = [new Map(), new Map()];
+  for (const c of constraints)
+    for (const axis of [0, 1] as const) {
+      if (!actsOn(c, axis)) continue;
+      const kids = new Set<number>();
+      for (const r of c.children) {
+        const op = operands.get(keyOf(r));
+        if (op !== undefined) kids.add(op.child);
+      }
+      for (const k of kids) {
+        const list = acting[axis].get(k);
+        if (list === undefined) acting[axis].set(k, [c]);
+        else list.push(c);
+      }
+    }
+  return { acting, seats: literalSeats(constraints, keyOf) };
 };
 
 /** One child's box on the axis: `[lo, hi]` about its origin, in σ. */

@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { GoFishNode, placedByOwnData, type ChainMembers } from "../_node";
+import { GoFishNode, placedByOwnData } from "../_node";
 import {
   getScopeRegistry,
   seatInBand,
@@ -41,24 +41,12 @@ import {
   cellsOf,
   type ConstraintSpec,
 } from "../constraints";
-import {
-  GoFishRef,
-  resolution,
-  type ResolvedConstraints,
-  type ResolvedOperand,
-} from "../_ref";
+import { GoFishRef, resolution, type ResolvedConstraints } from "../_ref";
 import {
   applyRelationalZBelowDefaults,
   targetOf,
 } from "../constraints/relationalPaint";
-import {
-  axisIndex,
-  axisName,
-  isPointAlign,
-  directSlot,
-  type ConstraintPosScales,
-  type ResolvedOperands,
-} from "../constraints/shared";
+import { axisName, type ConstraintPosScales } from "../constraints/shared";
 import type { LocalSpan } from "../constraints/placementProgramLowerer";
 import {
   applyNestExtentPlan,
@@ -67,7 +55,9 @@ import {
   buildNestPlan,
 } from "../constraints/nestPlan";
 import {
+  alignedParts,
   composePlanSpaces,
+  stackPlacesOf,
   planConstraintComposition,
   planSharing,
   resolveLayerBaseSpaces,
@@ -82,23 +72,21 @@ import {
   solveLayerScales,
 } from "../constraints/proposalPlan";
 import {
-  actsOn,
-  literalSeats,
+  seatingOf,
   type ClaimChild,
   type Placement,
+  type Seating,
 } from "../constraints/claimPlacement";
+import { chainRooms } from "../constraints/distribute";
 import {
   buildPlan,
   inTarget,
   planPlacement,
-  planPlacementInChild,
   mapForms,
   plotIn,
   type LayerPlan,
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
-import { stackPlaces, type StackPlace } from "../constraints/distribute";
-import { isConstant } from "../fun";
 import { plotForms, reachPast } from "../solver/plotForms";
 
 /** `p` grown by an outline drawn `o` pixels past its box on each side
@@ -140,48 +128,6 @@ const domainPlan = (
     summary: mapForms(summary, widen),
     plotWhole: plan.plotWhole && widen(plan.plotWhole),
   };
-};
-
-/**
- * The chains of `node` along `axis` (each `distribute` there) that have a
- * member with no size of its own (`GoFishNode.sizedOn`): per chain, those
- * members, each with its weight in the chain's slack, in the order the
- * chain names them. The weight is `GoFishNode.flexWeight` for a member
- * whose room reaches something that fills it (`GoFishNode.readsRoom`), and
- * 0 for any other, which takes only its need. They depend on the node's claim alone, so they are read
- * once per claim (`ClaimMemo.chains`).
- */
-const chainsOf = (
-  node: GoFishNode,
-  axis: 0 | 1,
-  refs: Pick<ResolvedConstraints, "operands" | "keyOf">
-): ChainMembers[] => {
-  const memo = node._claimMemo.chains[axis];
-  if (memo !== undefined) return memo;
-  const chains: ChainMembers[] = [];
-  for (const c of node.constraints) {
-    if (c.type !== "distribute" || axisIndex(c.dir) !== axis) continue;
-    const flex: ChainMembers = [];
-    for (const ref of c.children) {
-      const k = directSlot(refs, ref);
-      const child = k === undefined ? undefined : node.children[k];
-      // A member whose room reaches nothing that fills it (a legend of
-      // fixed swatches and text) takes only its need: its weight in the
-      // slack is 0 (`GoFishNode.readsRoom`).
-      if (
-        child instanceof GoFishNode &&
-        !child.sizedOn(axis) &&
-        !flex.some((m) => m.child === k)
-      )
-        flex.push({
-          child: k!,
-          weight: child.readsRoom(axis) ? child.flexWeight(axis) : 0,
-        });
-    }
-    if (flex.length > 0) chains.push(flex);
-  }
-  node._claimMemo.chains[axis] = chains;
-  return chains;
 };
 
 export type LayerOptions = {
@@ -379,126 +325,20 @@ export const layer = createNodeOperatorSequential(
       }
       return false;
     };
-    // Where an operand nested in a child lands in that child's own frame,
-    // by its key.
-    const nestedPlacement =
-      (axis: 0 | 1, operands: ReadonlyMap<string, ResolvedOperand>) =>
-      (key: string) => {
-        const op = operands.get(key);
-        const container = op && node.children[op.child];
-        return op !== undefined &&
-          op.node instanceof GoFishNode &&
-          container instanceof GoFishNode
-          ? planPlacementInChild(op.node, container, axis)
-          : undefined;
-      };
     // How this layer seats its children (`ClaimWalk.seating`), read once
     // for the operands it was read from.
     let seatingMemo:
       | {
           of: ResolvedConstraints;
-          seating: ReturnType<NonNullable<GoFishNode["claimWalk"]>["seating"]>;
+          seating: Seating;
         }
       | undefined;
     const seating = () => {
       const resolved = resolution(node);
       if (seatingMemo?.of === resolved) return seatingMemo.seating;
-      const { operands, keyOf } = resolved;
-      const acting: [
-        Map<number, ConstraintSpec[]>,
-        Map<number, ConstraintSpec[]>,
-      ] = [new Map(), new Map()];
-      for (const c of node.constraints)
-        for (const axis of [0, 1] as const) {
-          if (!actsOn(c, axis)) continue;
-          const kids = new Set<number>();
-          for (const r of c.children) {
-            const op = operands.get(keyOf(r));
-            if (op !== undefined) kids.add(op.child);
-          }
-          for (const k of kids) {
-            const list = acting[axis].get(k);
-            if (list === undefined) acting[axis].set(k, [c]);
-            else list.push(c);
-          }
-        }
-      const fresh = {
-        acting,
-        seats: literalSeats(node.constraints, keyOf),
-      };
+      const fresh = seatingOf(node.constraints, resolved);
       seatingMemo = { of: resolved, seating: fresh };
       return fresh;
-    };
-    // A point `align` puts each operand's anchor exactly at its partners'
-    // anchors: it has no offset or gap (a chain's `spacing` is a
-    // `distribute`, not an align). So where a partner is in a continuous or
-    // ordinal part on the axis, the anchor is at a datum there, and an
-    // operand in no such part is in its partner's: it is at that datum, as
-    // a circle is, with a size of its own in pixels (a flower aligned to the
-    // end of its stem). A `"span"` align ties both endpoints, so both are at
-    // data and the operand is in its partner's part the same way. A
-    // `"size"` align ties only a length and leaves the position free, so no
-    // endpoint is at a datum and it joins nothing. Aligns chain, so this
-    // runs until nothing changes. A `ref` operand is in the part its target
-    // is in, in its target's layer (`refHome`), and an align never moves it.
-    // TODO(#1053, #1054): a shortcut. A pixel offset on an aligned operand
-    // (a `.translate()` wrapper) would put its anchor at datum + pixels,
-    // which is in no data space; today the align's solve overrides that
-    // translate, so the anchor is at the datum and the operand joins.
-    // Once pixel offsets have their own semantics, an operand an align
-    // places with a pixel offset should stay out of its partner's part.
-    const alignedParts = (
-      axis: 0 | 1,
-      base: UnderlyingSpace[],
-      aligns: readonly ConstraintSpec[],
-      resolved: ResolvedOperands
-    ): UnderlyingSpace[] => {
-      // Per align, the operands it puts in a part (no `ref`), and where
-      // each operand's part is read: an index into `parts`, or a part of
-      // another layer's.
-      const groups: {
-        moved: number[];
-        reads: (number | UnderlyingSpace)[];
-      }[] = [];
-      for (const c of aligns) {
-        const spec = c.type === "align" ? c[axisName(axis)] : undefined;
-        if (spec !== "span" && !isPointAlign(spec)) continue;
-        const moved: number[] = [];
-        const reads: (number | UnderlyingSpace)[] = [];
-        for (const r of c.children) {
-          const i = directSlot(resolved, r);
-          if (i === undefined) continue;
-          const child = node.children[i];
-          if (child instanceof GoFishRef) reads.push(refHome(child, axis) ?? i);
-          else {
-            moved.push(i);
-            reads.push(i);
-          }
-        }
-        groups.push({ moved, reads });
-      }
-      if (groups.length === 0) return base;
-      const parts = [...base];
-      const read = (r: number | UnderlyingSpace) =>
-        typeof r === "number" ? parts[r] : r;
-      for (let changed = true; changed; ) {
-        changed = false;
-        for (const { moved, reads } of groups) {
-          let at: UnderlyingSpace | undefined;
-          for (const r of reads)
-            if (isVisualized(read(r))) {
-              at = read(r);
-              break;
-            }
-          if (at === undefined) continue;
-          for (const i of moved)
-            if (!isVisualized(parts[i])) {
-              parts[i] = at;
-              changed = true;
-            }
-        }
-      }
-      return parts;
     };
 
     // The layer's composed per-axis types: the types of its content. A pure
@@ -646,7 +486,9 @@ export const layer = createNodeOperatorSequential(
             return whole || sharing.sets[axis][i] !== 0 ? UNDEFINED : c[axis];
           }),
           aligns,
-          { operands, keyOf }
+          { operands, keyOf },
+          (i) => node.children[i] instanceof GoFishRef,
+          (i) => refHome(node.children[i] as GoFishRef, axis)
         )
       ) as [UnderlyingSpace[], UnderlyingSpace[]];
       return {
@@ -657,54 +499,6 @@ export const layer = createNodeOperatorSequential(
         parts,
         places: stackPlacesOf(plan, effectiveChildren, childNodes),
       };
-    };
-
-    // Per axis, where each stack on that axis lays a part whose offset
-    // changes along u (`stackPlaces`), by child index: the part draws its
-    // offset (`AxisScale.shear`), and the layer claims the part where it
-    // lies. A part whose offset is one number is placed by the solve
-    // instead (`lowerDistributePlacement`). A part that cannot draw a
-    // changing offset (a rect, a circle) is an error that names it.
-    const stackPlacesOf = (
-      plan: ReturnType<typeof planConstraintComposition>,
-      children: Size<UnderlyingSpace>[],
-      childNodes: readonly GoFishAST[]
-    ): [Map<number, StackPlace>, Map<number, StackPlace>] => {
-      const out: [Map<number, StackPlace>, Map<number, StackPlace>] = [
-        new Map(),
-        new Map(),
-      ];
-      for (const seg of plan?.segments ?? []) {
-        if (!seg.glue) continue;
-        const axis = seg.dAxis;
-        const nameOf = (k: number) =>
-          seg.keys[k] !== undefined
-            ? `the part "${seg.keys[k]}"`
-            : `part ${k + 1}`;
-        const places = stackPlaces(
-          seg.idx.map((i) => children[i][axis]),
-          seg.baseline
-        );
-        seg.idx.forEach((i, k) => {
-          if (isConstant(places[k].offset)) return;
-          const child = childNodes[i];
-          if (!(child instanceof GoFishNode) || child.shearAxis !== axis) {
-            const what = child instanceof GoFishNode ? child.type : "reference";
-            const across = axisName(axis === 0 ? 1 : 0);
-            throw new Error(
-              `[gofish] stack: ${nameOf(k)} is a ${what}, which has one ` +
-                `size along ${axisName(axis)}, but the stack moves it by an ` +
-                `offset that changes along ${across}, since some parts are ` +
-                `bands whose thickness changes there, so its boundary ` +
-                `changes too. A ${what} can't be split along a ` +
-                `changing boundary; only a band can. Stack parts that are ` +
-                `all bands (ribbon({ x, h })).`
-            );
-          }
-          out[axis].set(i, places[k]);
-        });
-      }
-      return out;
     };
 
     // The type hook's last composition, read by the claim hook. A node's
@@ -801,7 +595,6 @@ export const layer = createNodeOperatorSequential(
                 claimChildren(axis, effectiveExtents, standInPlacements(axis)),
                 node.constraints,
                 refs,
-                nestedPlacement(axis, refs.operands),
                 ring,
                 scale[axis]
               )
@@ -1235,56 +1028,19 @@ export const layer = createNodeOperatorSequential(
           const roomOf = (i: number, axis: 0 | 1) =>
             inPlot(i, axis) ? plotRooms[axis] : size[axis];
 
-          // The room of each member of a chain along `axis` that has no size
-          // of its own (#1257): its need (its claim at the σ this layer hands
-          // its children) plus its share of the slack, what this layer's
-          // room leaves past the hull of its content's needs (chrome or
-          // labels seated beside a chain included). Each chain splits the
-          // slack among its own members that read their room, so two chains
-          // side by side (two rows of one width) each fill the room. An
-          // `fr(k)` member takes k shares. A member whose room reaches
-          // nothing that fills it (`GoFishNode.readsRoom`: a legend, a ring's
-          // chrome) takes only its need, and where no member reads its room
-          // the slack is left over: each member's room is its need.
-          // TODO(#1257): a chain narrower than the hull gets only the
-          // hull's slack; its own would need the boxes beside it on its row. This is CSS's
-          // `flex: 1 1 auto`. σ is solved from the needs alone, so where the
-          // needs fill the room (a scope fitted to it) the slack is 0, and
-          // on an axis with no room (an unsized render) the members keep
-          // their needs. The chains are read once per claim (`chainsOf`).
-          // A member of two chains on one axis takes the first one's room.
-          const chainRoomsOn = (
-            axis: 0 | 1
-          ): Map<number, number> | undefined => {
-            if (!Number.isFinite(size[axis])) return undefined;
-            const chains = chainsOf(node, axis, { operands, keyOf });
-            if (chains.length === 0) return undefined;
-            const sigma = sigmaOf(axis);
-            const need = (i: number) => {
-              if (inkChildren[axis].has(i)) return 0;
-              const c = node.children[i];
-              const claim =
-                c instanceof GoFishNode ? c.resolveExtent()[axis] : undefined;
-              return claim === undefined ? 0 : Pwl.at(claim.width, sigma);
-            };
-            const whole = contentExtents[axis];
-            const slack = room(
-              size[axis] -
-                (whole === undefined ? 0 : Pwl.at(whole.width, sigma))
+          // The room of each member of a chain with no size of its own
+          // (#1257): its need plus its share of the slack (`chainRooms`).
+          const chainRoomsOn = (axis: 0 | 1) =>
+            chainRooms(
+              node,
+              axis,
+              { operands, keyOf },
+              size[axis],
+              sigmaOf(axis),
+              inkChildren[axis],
+              contentExtents[axis]
             );
-            const rooms = new Map<number, number>();
-            for (const flex of chains) {
-              const total = flex.reduce((s, m) => s + m.weight, 0);
-              for (const { child, weight } of flex)
-                if (!rooms.has(child))
-                  rooms.set(
-                    child,
-                    need(child) + (total > 0 ? (slack * weight) / total : 0)
-                  );
-            }
-            return rooms;
-          };
-          const chainRooms = [chainRoomsOn(0), chainRoomsOn(1)];
+          const chainRoomsByAxis = [chainRoomsOn(0), chainRoomsOn(1)];
 
           const layoutChild = (i: number) => {
             const child = children[i];
@@ -1298,13 +1054,14 @@ export const layer = createNodeOperatorSequential(
             // proposal, so nest composes with — and wins on its derived axes
             // over — any other proposal.
             // A member of a chain with no size of its own is laid out at
-            // its need plus its share of the chain's slack (`chainRooms`).
+            // its need plus its share of the chain's slack
+            // (`chainRoomsByAxis`).
             // Any other child is proposed this layer's room (its cell, its
             // span, its grid track): a child with a size of its own keeps
             // it, and one without fills it.
             const own: Size<number | undefined> = [
-              chainRooms[0]?.get(i),
-              chainRooms[1]?.get(i),
+              chainRoomsByAxis[0]?.get(i),
+              chainRoomsByAxis[1]?.get(i),
             ];
             // A ring's content is part of its plot, so it is proposed what
             // the chrome leaves of the ring's room (`plotRooms`).

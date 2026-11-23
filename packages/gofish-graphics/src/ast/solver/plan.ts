@@ -23,7 +23,7 @@ import {
   type Placement,
 } from "../constraints/claimPlacement";
 import { type ConstraintSpec } from "../constraints";
-import type { ResolvedOperands } from "../constraints/shared";
+import type { ResolvedConstraints } from "../_ref";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -281,21 +281,21 @@ export const plotIn = (
  * envelope of their boxes, which is what layout lays out.
  *
  * `children` is what the claim walk knows of each child, with its claim as
- * its extent (`claimChildren` in `layer`). `nested` is where an operand
- * nested in a child lands in that child's own frame
- * (`planPlacementInChild`). `ring` says the layer is a ring of chrome, whose
- * children past the first are chrome.
+ * its extent (`claimChildren` in `layer`). An operand nested in a child
+ * lands where the plans from it up to that child put it in the child's own
+ * frame (`nestedPlacement`). `ring` says the layer is a ring of chrome,
+ * whose children past the first are chrome.
  */
 export function buildPlan(
   node: GoFishNode,
   axis: 0 | 1,
   children: ClaimChild[],
   constraints: readonly ConstraintSpec[],
-  { operands, keyOf }: ResolvedOperands,
-  nested: (key: string) => Placement | undefined,
+  { operands, keyOf }: Pick<ResolvedConstraints, "operands" | "keyOf">,
   ring: boolean,
   scale: number
 ): LayerPlan {
+  const nested = nestedPlacement(node, axis, operands);
   // A child placed where its refs land is placed by what it draws: its
   // forms are where it is placed, all of them box.
   const forms = children.map((c, i): ChildForms | undefined =>
@@ -659,6 +659,20 @@ export function planPlacementInChild(
   if (walked === undefined || walked.n !== container) return undefined;
   return placementOf(...walked.at);
 }
+
+/** Where an operand nested in a child of `layer` lands in that child's own
+ *  frame on `axis` (`planPlacementInChild`), by its key. */
+const nestedPlacement =
+  (layer: GoFishNode, axis: 0 | 1, operands: ResolvedConstraints["operands"]) =>
+  (key: string): Placement | undefined => {
+    const op = operands.get(key);
+    const container = op && layer.children[op.child];
+    return op !== undefined &&
+      op.node instanceof GoFishNode &&
+      container instanceof GoFishNode
+      ? planPlacementInChild(op.node, container, axis)
+      : undefined;
+  };
 
 /** The node whose frame a `position` constraint of `layer` reads its
  *  datums in (`PositionOptions.in`), if it names one. */
