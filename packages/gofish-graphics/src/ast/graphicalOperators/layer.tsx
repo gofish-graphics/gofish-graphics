@@ -2,20 +2,13 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import {
-  GoFishNode,
-  placedByOwnData,
-  type ChainMembers,
-  type ToPixel,
-} from "../_node";
-import type { DisplayList } from "gofish-ir";
+import { GoFishNode, placedByOwnData, type ChainMembers } from "../_node";
 import {
   getScopeRegistry,
   seatInBand,
   seatInScope,
   type FixedSolve,
 } from "../solver/scopes";
-import { isToken } from "../createName";
 import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
 import {
   UNDEFINED,
@@ -47,7 +40,6 @@ import {
   cellBoxesOf,
   cellsOf,
   type ConstraintSpec,
-  type ZOrderConstraint,
 } from "../constraints";
 import {
   GoFishRef,
@@ -108,16 +100,6 @@ import { evaluate } from "../solver/formula";
 import { stackPlaces, type StackPlace } from "../constraints/distribute";
 import { isConstant } from "../fun";
 import { plotForms, reachPast } from "../solver/plotForms";
-
-// ── Z-order resolution ────────────────────────────────────────────────────
-//
-// A layer's `Constraint.zAbove` / `zBelow` constraints order its direct
-// children (`orderChildrenForPaint` in paintOrder.ts): each operand lifts to
-// the child that contains it, and a constraint whose operands share a child is
-// pushed down into that child's own order, whatever kind of node the child is
-// (every node that paints its children orders them through the same function).
-
-const sum = ([a, b]: [number, number]) => a + b;
 
 /** `p` grown by an outline drawn `o` pixels past its box on each side
  *  (`GoFishNode.strokeOverhang`). */
