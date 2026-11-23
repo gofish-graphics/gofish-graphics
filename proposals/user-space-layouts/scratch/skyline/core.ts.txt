@@ -1,0 +1,253 @@
+// Scratch core for the skyline experiments.
+const D3 =
+  "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/node_modules/.pnpm/d3-hierarchy@3.1.2/node_modules/d3-hierarchy/src/";
+const { packSiblings, packEnclose } = await import(D3 + "index.js");
+export { packSiblings, packEnclose };
+
+export type C = { x: number; y: number; r: number };
+export type P = { x: number; y: number };
+
+export const EPS = 1e-6;
+
+export function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function randomSets(kind: "uniform" | "heavy", count = 200, seed = 1) {
+  const R = rng(seed + (kind === "heavy" ? 1000 : 0));
+  const sets: number[][] = [];
+  for (let s = 0; s < count; s++) {
+    const n = 30 + Math.floor(R() * 171);
+    const radii: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (kind === "uniform") radii.push(2 + 18 * R());
+      // Pareto on radius, alpha = 2, min 2, capped at 80.
+      else radii.push(Math.min(80, 2 * Math.pow(1 - R(), -1 / 2)));
+    }
+    sets.push(radii);
+  }
+  return sets;
+}
+
+// ---------------------------------------------------------------------------
+// Skyline: the outer root of |rho u - c| = R, over every placed circle.
+
+/** Outer root along direction theta from origin o, or -Infinity if c does not block. */
+export function outerRoot(theta: number, o: P, c: C, r: number, pad = 0) {
+  const R = c.r + r + pad;
+  const px = c.x - o.x;
+  const py = c.y - o.y;
+  const a = px * Math.cos(theta) + py * Math.sin(theta);
+  const disc = R * R - (px * px + py * py) + a * a;
+  if (disc < 0) return -Infinity;
+  const root = a + Math.sqrt(disc);
+  return root < 0 ? -Infinity : root;
+}
+
+export function skylineRho(theta: number, o: P, placed: C[], r: number) {
+  let m = 0;
+  for (const c of placed) m = Math.max(m, outerRoot(theta, o, c, r));
+  return m;
+}
+
+export const overlapsAny = (p: P, r: number, placed: C[], pad = 0) =>
+  placed.some((q) => Math.hypot(p.x - q.x, p.y - q.y) < r + q.r + pad - EPS);
+
+export function anyOverlap(cs: C[], pad = 0) {
+  let worst = 0;
+  for (let i = 0; i < cs.length; i++)
+    for (let j = i + 1; j < cs.length; j++) {
+      const v = cs[i].r + cs[j].r + pad - Math.hypot(cs[i].x - cs[j].x, cs[i].y - cs[j].y);
+      worst = Math.max(worst, v);
+    }
+  return worst; // > 1e-6 means overlap
+}
+
+export function tangentToBoth(a: C, b: C, r: number): P[] {
+  const ra = a.r + r;
+  const rb = b.r + r;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const d = Math.hypot(dx, dy);
+  if (d > ra + rb || d < Math.abs(ra - rb) || d === 0) return [];
+  const along = (d * d + ra * ra - rb * rb) / (2 * d);
+  const h = Math.sqrt(Math.max(0, ra * ra - along * along));
+  const mx = a.x + (along * dx) / d;
+  const my = a.y + (along * dy) / d;
+  return [
+    { x: mx - (h * dy) / d, y: my + (h * dx) / d },
+    { x: mx + (h * dy) / d, y: my - (h * dx) / d },
+  ];
+}
+
+export const enclosingR = (cs: C[]) => packEnclose(cs.map((c) => ({ ...c }))).r;
+
+// ---------------------------------------------------------------------------
+// Lowest notch, brute force: every point touching two placed circles that is
+// free and sits on the skyline (nothing beyond it on its ray). O(k^3) per step.
+
+export function lowestNotchBrute(o: P, placed: C[], r: number) {
+  let best: P | null = null;
+  let bestRho = Infinity;
+  const consider = (p: P) => {
+    const rho = Math.hypot(p.x - o.x, p.y - o.y);
+    if (rho >= bestRho - 1e-12) return;
+    if (overlapsAny(p, r, placed)) return;
+    const th = Math.atan2(p.y - o.y, p.x - o.x);
+    if (skylineRho(th, o, placed, r) > rho + 1e-6) return; // something beyond
+    best = p;
+    bestRho = rho;
+  };
+  for (let i = 0; i < placed.length; i++)
+    for (let j = i + 1; j < placed.length; j++)
+      for (const p of tangentToBoth(placed[i], placed[j], r)) consider(p);
+  // a single-circle minimum: origin inside j's inflated disk, sit opposite c_j
+  for (const c of placed) {
+    const px = c.x - o.x, py = c.y - o.y, d = Math.hypot(px, py), R = c.r + r;
+    if (d < R && d > 0) consider({ x: o.x - (px / d) * (R - d), y: o.y - (py / d) * (R - d) });
+  }
+  if (!overlapsAny(o, r, placed)) consider(o);
+  return best;
+}
+
+// ---------------------------------------------------------------------------
+// Lowest notch by walking the skyline once around the origin: O(k * pieces).
+// Returns the position and how it was found.
+
+type Curve = { px: number; py: number; d: number; phi: number; R: number; full: boolean; alpha: number; c: C };
+
+function fval(cv: Curve, th: number) {
+  const a = cv.px * Math.cos(th) + cv.py * Math.sin(th);
+  const disc = cv.R * cv.R - cv.d * cv.d + a * a;
+  if (disc < 0) return -Infinity;
+  const root = a + Math.sqrt(disc);
+  return root < 0 ? -Infinity : root;
+}
+// value at a window edge, where the discriminant rounds slightly negative
+function fclamp(cv: Curve, th: number) {
+  const a = cv.px * Math.cos(th) + cv.py * Math.sin(th);
+  const disc = Math.max(0, cv.R * cv.R - cv.d * cv.d + a * a);
+  return Math.max(0, a + Math.sqrt(disc));
+}
+const TAU = 2 * Math.PI;
+const norm = (a: number, from: number) => {
+  // smallest angle >= from (mod 2pi)
+  let x = a;
+  while (x < from) x += TAU;
+  while (x >= from + TAU) x -= TAU;
+  return x;
+};
+
+export const ALLOW = { grazes: false };
+export type Notch ={ p: P; rho: number; kind: "cross" | "graze" | "single" | "origin" };
+
+export function lowestNotchWalk(o: P, placed: C[], r: number, stats?: { pieces: number }): Notch {
+  const curves: Curve[] = placed.map((c) => {
+    const px = c.x - o.x, py = c.y - o.y, d = Math.hypot(px, py), R = c.r + r;
+    return { px, py, d, phi: Math.atan2(py, px), R, full: d < R, alpha: d < R ? Math.PI : Math.asin(R / d), c };
+  });
+  const env = (th: number) => {
+    let m = 0, k = -1;
+    for (let j = 0; j < curves.length; j++) {
+      const v = fval(curves[j], th);
+      if (v > m) (m = v), (k = j);
+    }
+    return { m, k };
+  };
+  let best: Notch | null = null;
+  let graze: Notch | null = null;
+  const offer = (th: number, rho: number, kind: Notch["kind"]) => {
+    if (best && rho >= best.rho - 1e-12) return;
+    best = { p: { x: o.x + rho * Math.cos(th), y: o.y + rho * Math.sin(th) }, rho, kind };
+  };
+  const DEL = 1e-9;
+  let th = 0;
+  let cur = env(DEL).k;
+  let guard = 0;
+  while (th < TAU && guard++ < 100000) {
+    if (stats) stats.pieces++;
+    // next event after th
+    let te = Infinity;
+    if (cur < 0) {
+      for (const cv of curves) if (!cv.full) te = Math.min(te, norm(cv.phi - cv.alpha, th + 1e-12));
+      offer(th, 0, "origin");
+    } else {
+      const cc = curves[cur];
+      if (!cc.full) te = Math.min(te, norm(cc.phi + cc.alpha, th + 1e-12));
+      for (let k = 0; k < curves.length; k++) {
+        if (k === cur) continue;
+        const ck = curves[k];
+        for (const q of tangentToBoth(cc.c, ck.c, r)) {
+          const qx = q.x - o.x, qy = q.y - o.y;
+          const tq = norm(Math.atan2(qy, qx), th + 1e-12);
+          if (tq >= te) continue;
+          if (fval(ck, tq + DEL) > fval(cc, tq + DEL)) te = tq;
+        }
+        if (!ck.full) {
+          const ts = norm(ck.phi - ck.alpha, th + 1e-12);
+          if (ts < te && fval(ck, ts + DEL) > fval(cc, ts + DEL)) te = ts;
+        }
+      }
+      // interior minimum of a full-window curve
+      if (cc.full) {
+        const tm = norm(cc.phi + Math.PI, th);
+        if (tm <= Math.min(te, TAU)) offer(tm, cc.R - cc.d, "single");
+      }
+    }
+    if (te >= TAU) {
+      break;
+    }
+    const L = cur < 0 ? 0 : fclamp(curves[cur], te);
+    const nxt = env(te + DEL);
+    const Rv = nxt.k < 0 ? 0 : fclamp(curves[nxt.k], te);
+    // one-sided limits; equal at a crossing, differ at a graze
+    const lo = Math.min(L, Rv);
+    const kind = Math.abs(L - Rv) < 1e-6 ? "cross" : "graze";
+    if (stats && (stats as any).trace) (stats as any).trace.push([te, cur, nxt.k, L, Rv]);
+    if (lo > 0 && (kind === "cross" || ALLOW.grazes)) offer(te, lo, kind);
+    else if (lo > 0 && (!graze || lo < graze.rho))
+      graze = { p: { x: o.x + lo * Math.cos(te), y: o.y + lo * Math.sin(te) }, rho: lo, kind: "graze" };
+    th = te;
+    cur = nxt.k;
+  }
+  // no two-contact notch at all: the skyline's lowest point is the foot of a
+  // jump (a shadow edge); fall back to it
+  if (!best) FALLBACKS.count++;
+  return best ?? graze!;
+}
+export const FALLBACKS = { count: 0 };
+
+// ---------------------------------------------------------------------------
+// Greedy "nearest free spot" pack (the earlier helper), origin = (0,0).
+
+export function greedyPack(radii: number[], center: "origin" | "centroid" = "origin"): C[] {
+  const placed: C[] = [];
+  for (const r of radii) {
+    let cands: P[];
+    if (placed.length === 0) cands = [{ x: 0, y: 0 }];
+    else if (placed.length === 1) cands = [{ x: placed[0].r + r, y: 0 }];
+    else
+      cands = placed.flatMap((a, i) => placed.slice(i + 1).flatMap((b) => tangentToBoth(a, b, r)));
+    const c =
+      center === "origin"
+        ? { x: 0, y: 0 }
+        : {
+            x: placed.reduce((s, p) => s + p.x, 0) / (placed.length || 1),
+            y: placed.reduce((s, p) => s + p.y, 0) / (placed.length || 1),
+          };
+    let best = { x: NaN, y: NaN }, bc = Infinity;
+    for (const p of cands) {
+      const k = Math.hypot(p.x - c.x, p.y - c.y);
+      if (k < bc && !overlapsAny(p, r, placed)) (best = p), (bc = k);
+    }
+    placed.push({ ...best, r });
+  }
+  return placed;
+}

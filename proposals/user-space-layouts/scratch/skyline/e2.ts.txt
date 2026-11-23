@@ -1,0 +1,108 @@
+import { seafood } from "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/packages/gofish-graphics/src/data/catch.ts";
+import * as K from "./core.ts";
+import { skylinePack } from "./pack.ts";
+import { d3Instrumented } from "./d3inst.ts";
+
+const radius = (c: number) => 4.5 * Math.sqrt(c);
+const data = seafood.map((d) => radius(d.count));
+const sorted = [...data].sort((a, b) => b - a);
+
+const d3Angles = (rs: number[]) => d3Instrumented(rs).circles.map((c) => Math.atan2(c.y, c.x));
+
+const methods: Record<string, (rs: number[]) => K.C[]> = {
+  d3: (rs) => K.packSiblings(rs.map((r) => ({ r }))),
+  "greedy origin": (rs) => K.greedyPack(rs, "origin"),
+  "greedy centroid": (rs) => K.greedyPack(rs, "centroid"),
+  "notch, d3 origin": (rs) => skylinePack(rs, "d3", "notch"),
+  "notch, first center": (rs) => skylinePack(rs, "first", "notch"),
+  "notch, running centroid": (rs) => skylinePack(rs, "centroid", "notch"),
+  "golden, d3 origin": (rs) => skylinePack(rs, "d3", "golden"),
+  "golden, first center": (rs) => skylinePack(rs, "first", "golden"),
+  "golden, running centroid": (rs) => skylinePack(rs, "centroid", "golden"),
+  "d3 angles, d3 origin": (rs) => skylinePack(rs, "d3", { given: d3Angles(rs) }),
+};
+
+const mode = process.argv[2] ?? "seafood";
+if (mode === "seafood") {
+  console.log("method | data order R | largest first R | overlap?");
+  for (const [m, f] of Object.entries(methods)) {
+    const a = f(data), b = f(sorted);
+    const ov = Math.max(K.anyOverlap(a), K.anyOverlap(b));
+    console.log(`${m} | ${K.enclosingR(a).toFixed(2)} | ${K.enclosingR(b).toFixed(2)} | ${ov > 1e-6 ? "OVERLAP " + ov.toFixed(3) : "none"}`);
+  }
+}
+
+if (mode === "random") {
+  for (const kind of ["uniform", "heavy"] as const) {
+    for (const order of ["input", "largest first"]) {
+      const sets = K.randomSets(kind).map((s) => (order === "input" ? s : [...s].sort((a, b) => b - a)));
+      const ratios: Record<string, number[]> = {};
+      const worstOv: Record<string, number> = {};
+      for (const rs of sets) {
+        const base = K.enclosingR(methods.d3(rs));
+        for (const [m, f] of Object.entries(methods)) {
+          const out = f(rs);
+          (ratios[m] ??= []).push(K.enclosingR(out) / base);
+          worstOv[m] = Math.max(worstOv[m] ?? 0, K.anyOverlap(out));
+        }
+      }
+      console.log(`\n## ${kind}, ${order} (200 sets): enclosing R / d3's R`);
+      console.log("method | mean | min | max | worst overlap px");
+      for (const m of Object.keys(methods)) {
+        const r = ratios[m];
+        console.log(`${m} | ${(r.reduce((s, x) => s + x, 0) / r.length).toFixed(4)} | ${Math.min(...r).toFixed(3)} | ${Math.max(...r).toFixed(3)} | ${worstOv[m].toExponential(1)}`);
+      }
+    }
+  }
+}
+
+if (mode === "identity") {
+  // lowest-notch vs nearest-free-spot greedy, both with origin = first center
+  // (the greedy helper's frame), and both with the running centroid.
+  for (const [label, origin, center] of [["origin = first center", "first", "origin"], ["running centroid", "centroid", "centroid"]] as const) {
+    for (const kind of ["seafood", "uniform", "heavy"] as const) {
+      for (const order of ["input", "largest first"]) {
+        let sets = kind === "seafood" ? [data] : K.randomSets(kind);
+        sets = sets.map((s) => (order === "input" ? s : [...s].sort((a, b) => b - a)));
+        let same = 0, steps = 0, agree = 0, holes = 0, ties = 0;
+        K.FALLBACKS.count = 0;
+        for (const rs of sets) {
+          const g = K.greedyPack(rs, center);
+          const s = skylinePack(rs, origin, "notch");
+          const tx = g[0].x - s[0].x, ty = g[0].y - s[0].y; // skylinePack's centroid run starts in d3's frame
+          if (Math.max(...g.map((c, i) => Math.hypot(c.x - s[i].x - tx, c.y - s[i].y - ty))) < 1e-6) same++;
+          // per step, on greedy's own prefix: is greedy's pick the lowest notch?
+          for (let i = 2; i < rs.length; i++) {
+            const pre = g.slice(0, i);
+            const o = origin === "first" ? { x: 0, y: 0 } : { x: pre.reduce((a, p) => a + p.x, 0) / i, y: pre.reduce((a, p) => a + p.y, 0) / i };
+            const nt = K.lowestNotchWalk(o, pre, rs[i]);
+            steps++;
+            if (Math.hypot(nt.p.x - g[i].x, nt.p.y - g[i].y) < 1e-6) agree++;
+            else {
+              if (Math.abs(nt.rho - Math.hypot(g[i].x - o.x, g[i].y - o.y)) < 1e-6) ties++;
+              const th = Math.atan2(g[i].y - o.y, g[i].x - o.x);
+              if (K.skylineRho(th, o, pre, rs[i]) > Math.hypot(g[i].x - o.x, g[i].y - o.y) + 1e-6) holes++;
+            }
+          }
+        }
+        console.log(`${label} | ${kind} ${order} | identical layouts ${same}/${sets.length} | steps where greedy = lowest notch ${((100 * agree) / steps).toFixed(1)}% | of the rest, greedy in a hole ${holes}/${steps - agree}, same rho (tie) ${ties} | graze fallbacks ${K.FALLBACKS.count}`);
+      }
+    }
+  }
+}
+
+if (mode === "time") {
+  const R = K.rng(7);
+  for (const n of [30, 200, 1000]) {
+    const rs = Array.from({ length: n }, () => 2 + 18 * R());
+    const row: string[] = [];
+    for (const m of ["d3", "notch, d3 origin", "golden, d3 origin", "greedy origin"]) {
+      if (m === "greedy origin" && n === 1000 && !process.argv[3]) { row.push(`${m}: skipped`); continue; }
+      const reps = n === 30 ? 50 : n === 200 ? (m === "greedy origin" ? 1 : 5) : 1;
+      const t0 = performance.now();
+      for (let k = 0; k < reps; k++) methods[m](rs);
+      row.push(`${m}: ${((performance.now() - t0) / reps).toFixed(2)} ms`);
+    }
+    console.log(`n=${n} | ` + row.join(" | "));
+  }
+}

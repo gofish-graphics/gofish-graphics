@@ -1,0 +1,33 @@
+// Where the butt caps of a stroked center arc land at the outer and inner
+// edge of the stroke, as angles, against the intended start/end angles.
+import { readFileSync } from "node:fs";
+const DIR = "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/tests/tmp/iterate/proposals";
+const name = process.argv[2];
+const pole = process.argv[3].split(",").map(Number);
+const h = readFileSync(`${DIR}/user-space-d3-hierarchy--${name}.html`, "utf8");
+const TAU = 2 * Math.PI;
+const ang = ([x, y]) => { let a = Math.atan2(x - pole[0], -(y - pole[1])); if (a < -1e-9) a += TAU; return a; };
+let worst = 0;
+for (const m of h.matchAll(/<path d="([^"]*)"([^>]*)>/g)) {
+  if (!/fill="none"/.test(m[2])) continue;
+  const sw = +m[2].match(/stroke-width="([\d.]+)"/)[1];
+  const n = m[1].match(/-?[\d.]+/g).map(Number);
+  const P = []; for (let i = 0; i < n.length; i += 2) P.push([n[i], n[i + 1]]);
+  if (P.length < 4) continue;
+  const ends = [[P[0], P[1]], [P.at(-1), P.at(-2)]];
+  const out = ends.map(([p, c], k) => {
+    // tangent at the end, pointing along the path
+    let t = k === 0 ? [c[0] - p[0], c[1] - p[1]] : [p[0] - c[0], p[1] - c[1]];
+    const L = Math.hypot(...t); if (L < 1e-9) return NaN; t = [t[0] / L, t[1] / L];
+    // the two cap corners
+    const nrm = [-t[1], t[0]];
+    const corners = [1, -1].map((s) => [p[0] + (s * sw) / 2 * nrm[0], p[1] + (s * sw) / 2 * nrm[1]]);
+    const r = (q) => Math.hypot(q[0] - pole[0], q[1] - pole[1]);
+    const outer = corners.sort((a, b) => r(b) - r(a))[0];
+    const d = ((ang(outer) - ang(p) + 3 * Math.PI) % TAU) - Math.PI;
+    return d;
+  });
+  worst = Math.max(worst, ...out.filter((x) => !isNaN(x)).map(Math.abs));
+  console.log(`${m[2].match(/stroke="([^"]*)"/)[1]} segs ${(P.length - 1) / 3}  outer-corner angle - centerline end angle: start ${out[0].toFixed(4)}, end ${out[1].toFixed(4)} rad`);
+}
+console.log("worst", worst.toFixed(4));

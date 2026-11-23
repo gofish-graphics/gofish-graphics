@@ -1,0 +1,14 @@
+import * as d3 from "d3-force";
+const courses = ["Algorithms","Calc I","Calc II","Compilers","Crypto","Data Str","Discrete","Distributed","Graphics","Intro CS","Lin Alg","ML","OS","Prob","Systems","Vision"];
+const prereqs = [["Calc I","Calc II"],["Calc I","Lin Alg"],["Intro CS","Data Str"],["Intro CS","Systems"],["Data Str","Algorithms"],["Discrete","Algorithms"],["Data Str","Systems"],["Calc II","Prob"],["Discrete","Prob"],["Prob","ML"],["Lin Alg","ML"],["Algorithms","ML"],["Systems","OS"],["Algorithms","Compilers"],["Systems","Compilers"],["Lin Alg","Graphics"],["Data Str","Graphics"],["ML","Vision"],["Graphics","Vision"],["OS","Distributed"],["Algorithms","Distributed"],["Prob","Crypto"],["Algorithms","Crypto"]].map(([source, target]) => ({ source, target }));
+const lcg = (seed) => { let s = seed; return () => (s = (1664525 * s + 1013904223) % 4294967296) / 4294967296; };
+const [dist, charge, coll] = process.argv.slice(2).map(Number);
+const nodes = courses.map((id) => ({ id }));
+d3.forceSimulation(nodes).randomSource(lcg(42))
+  .force("link", d3.forceLink(prereqs.map((l) => ({ ...l }))).id((d) => d.id).distance(dist))
+  .force("charge", d3.forceManyBody().strength(charge))
+  .force("collide", d3.forceCollide(coll))
+  .force("center", d3.forceCenter(210, 150)).stop().tick(300);
+const xs = nodes.map((n) => n.x), ys = nodes.map((n) => n.y);
+console.log("x", Math.min(...xs).toFixed(1), Math.max(...xs).toFixed(1), "y", Math.min(...ys).toFixed(1), Math.max(...ys).toFixed(1));
+if (process.argv[5]) console.log(JSON.stringify(Object.fromEntries(nodes.map((n) => [n.id, [n.x, n.y]]))));

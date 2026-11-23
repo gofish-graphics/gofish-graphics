@@ -1,0 +1,382 @@
+// Checks the separation story's solver and plans against the algorithms they
+// replace (copied from UserSpaceTrees.stories.tsx) and the built-in swarm.
+import { readFileSync, writeFileSync } from "fs";
+
+const ROOT = "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal";
+const HERE = "/Users/jmp/.claude/jobs/a4ed3dcc/tmp/sep";
+const src = readFileSync(
+  `${ROOT}/packages/gofish-graphics/stories/_proposals/UserSpaceSeparation.stories.tsx`,
+  "utf8"
+)
+  .replace(`"../helper"`, `"${HERE}/stub-lib.mts"`)
+  .replace(`"../../src/lib"`, `"${HERE}/stub-lib.mts"`)
+  .replace(
+    `"../../src/data/penguins"`,
+    `"${ROOT}/packages/gofish-graphics/src/data/penguins.ts"`
+  );
+writeFileSync(`${HERE}/story-copy.mts`, src);
+const S: any = await import(`${HERE}/story-copy.mts`);
+const { separateOffsets } = await import(
+  `${ROOT}/packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts`
+);
+
+// ── reference: Kennedy's fold (UserSpaceTrees, part 3, byDepth) ──────────
+type Tree = { name: string; w?: number; children?: Tree[] };
+type Extent = [number, number][];
+const R = 7,
+  GAP = 10;
+const SEP = 2 * R + GAP;
+const wOf = (t: Tree) => t.w ?? 2 * R;
+const moveExtent = (e: Extent, dx: number): Extent =>
+  e.map(([l, r]) => [l + dx, r + dx]);
+const mergeExtents = (p: Extent, q: Extent): Extent =>
+  Array.from({ length: Math.max(p.length, q.length) }, (_, d) =>
+    !p[d] ? q[d] : !q[d] ? p[d] : [p[d][0], q[d][1]]
+  );
+const flip = (e: Extent): Extent => e.map(([l, r]) => [-r, -l]);
+const fitEdges = (p: Extent, q: Extent): number =>
+  Math.max(0, ...p.slice(0, q.length).map(([, r], d) => r - q[d][0] + GAP));
+const packLeft = (es: Extent[]): number[] => {
+  let acc: Extent = [];
+  return es.map((e) => {
+    const x = fitEdges(acc, e);
+    acc = mergeExtents(acc, moveExtent(e, x));
+    return x;
+  });
+};
+const packRight = (es: Extent[]) =>
+  packLeft(es.map(flip).reverse())
+    .map((x) => -x)
+    .reverse();
+const centered = (xs: number[]) =>
+  xs.map((x) => x - (xs[0] + xs[xs.length - 1]) / 2);
+const leftRule = (es: Extent[]) => centered(packLeft(es));
+const meanRule = (es: Extent[]) => {
+  const [l, r] = [packLeft(es), packRight(es)];
+  return l.map((x, i) => (x + r[i]) / 2);
+};
+type Placed = { offsets: number[]; extent: Extent; kids: Placed[] };
+const designBy =
+  (rule: (es: Extent[]) => number[]) =>
+  (t: Tree): Placed => {
+    const kids = (t.children ?? []).map(designBy(rule));
+    const offsets = rule(kids.map((k) => k.extent));
+    const extent: Extent = [
+      [-wOf(t) / 2, wOf(t) / 2],
+      ...kids.reduce<Extent>(
+        (acc, k, i) => mergeExtents(acc, moveExtent(k.extent, offsets[i])),
+        []
+      ),
+    ];
+    return { offsets, extent, kids };
+  };
+// TreeContours' `design` (centers, SEP): part 1 of UserSpaceTrees.
+const fitCenters = (p: Extent, q: Extent): number =>
+  Math.max(0, ...p.slice(0, q.length).map(([, r], d) => r - q[d][0] + SEP));
+const design = (t: Tree): Placed => {
+  const kids = (t.children ?? []).map(design);
+  const pl = (es: Extent[]) => {
+    let acc: Extent = [];
+    return es.map((e) => {
+      const x = fitCenters(acc, e);
+      acc = mergeExtents(acc, moveExtent(e, x));
+      return x;
+    });
+  };
+  const l = pl(kids.map((k) => k.extent));
+  const r = pl(kids.map((k) => flip(k.extent)).reverse())
+    .map((x) => -x)
+    .reverse();
+  const offsets = l.map((x, i) => (x + r[i]) / 2);
+  const extent = kids.reduce<Extent>(
+    (acc, k, i) => mergeExtents(acc, moveExtent(k.extent, offsets[i])),
+    []
+  );
+  return { offsets, extent: [[0, 0], ...extent], kids };
+};
+
+/** Absolute x of every node, root at 0. */
+const absX = (d: { offsets: number[]; kids: any[] }, x = 0, out: number[] = []) => {
+  out.push(x);
+  d.kids.forEach((k, i) => absX(k, x + d.offsets[i], out));
+  return out;
+};
+const maxDiff = (a: number[], b: number[]) => {
+  if (a.length !== b.length) throw new Error("length mismatch");
+  return Math.max(0, ...a.map((v, i) => Math.abs(v - b[i])));
+};
+
+console.log("── 1. Tidy tree");
+console.log(
+  "wedge start vs TreeSymmetryLeft:",
+  maxDiff(absX(S.sepTree(S.wedge, "start")), absX(designBy(leftRule)(S.wedge)))
+);
+console.log(
+  "wedge center vs TreeSymmetryMean:",
+  maxDiff(absX(S.sepTree(S.wedge, "center")), absX(designBy(meanRule)(S.wedge)))
+);
+console.log(
+  "files center vs TreeContours (design):",
+  maxDiff(absX(S.sepTree(S.files, "center")), absX(design(S.files)))
+);
+console.log(
+  "files center vs designBy(meanRule):",
+  maxDiff(absX(S.sepTree(S.files, "center")), absX(designBy(meanRule)(S.files)))
+);
+console.log(
+  "wedge start vs center (do they differ?):",
+  maxDiff(absX(S.sepTree(S.wedge, "start")), absX(S.sepTree(S.wedge, "center")))
+);
+
+let seed = 12345;
+const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+const randTree = (depth: number, widths: boolean): Tree => {
+  const n = depth <= 0 ? 0 : Math.floor(rand() * (depth > 4 ? 5 : 4));
+  return {
+    name: "",
+    w: widths ? 4 + Math.floor(rand() * 40) : undefined,
+    children: Array.from({ length: n }, () => randTree(depth - 1 - Math.floor(rand() * 2), widths)),
+  };
+};
+const count = (t: Tree): number => 1 + (t.children ?? []).reduce((a, c) => a + count(c), 0);
+for (const widths of [false, true]) {
+  let [ms, mc, nodes, minN, maxN] = [0, 0, 0, Infinity, 0];
+  for (let k = 0; k < 300; k++) {
+    const t = randTree(6, widths);
+    const n = count(t);
+    nodes += n;
+    minN = Math.min(minN, n);
+    maxN = Math.max(maxN, n);
+    ms = Math.max(ms, maxDiff(absX(S.sepTree(t, "start")), absX(designBy(leftRule)(t))));
+    mc = Math.max(mc, maxDiff(absX(S.sepTree(t, "center")), absX(designBy(meanRule)(t))));
+  }
+  console.log(
+    `300 random trees (${widths ? "random widths 4-43" : "circles"}; ${minN}-${maxN} nodes, mean ${(nodes / 300).toFixed(1)}): start vs left fold ${ms}, center vs mean fold ${mc}`
+  );
+}
+
+// ── 2. Layering ─────────────────────────────────────────────────────────
+type Link = { source: string; target: string };
+const layers = (nodes: string[], links: Link[]): Map<string, number> => {
+  const rank = new Map<string, number>();
+  const visit = (id: string): number => {
+    if (!rank.has(id)) {
+      const preds = links.filter((l) => l.target === id);
+      rank.set(id, Math.max(-1, ...preds.map((l) => visit(l.source))) + 1);
+    }
+    return rank.get(id)!;
+  };
+  nodes.forEach(visit);
+  return rank;
+};
+const rankDiff = (a: Map<string, number>, b: Map<string, number>, nodes: string[]) =>
+  nodes.filter((id) => a.get(id) !== b.get(id)).length;
+
+console.log("── 2. Layering");
+console.log(
+  "course graph, nodes whose rank differs:",
+  rankDiff(S.sepLayers(S.courses, S.prereqs, "start"), layers(S.courses, S.prereqs), S.courses)
+);
+let bad = 0,
+  totalNodes = 0,
+  totalLinks = 0;
+for (let k = 0; k < 200; k++) {
+  const n = 3 + Math.floor(rand() * 38);
+  const ids = Array.from({ length: n }, (_, i) => `v${i}`);
+  // a hidden topological order, then the nodes listed in a shuffled order
+  const links: Link[] = [];
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++)
+      if (rand() < 2.5 / n) links.push({ source: ids[i], target: ids[j] });
+  const shuffled = [...ids].sort(() => rand() - 0.5);
+  totalNodes += n;
+  totalLinks += links.length;
+  if (rankDiff(S.sepLayers(shuffled, links, "start"), layers(shuffled, links), ids)) bad++;
+}
+console.log(
+  `200 random DAGs (${totalNodes} nodes, ${totalLinks} links): DAGs with any rank differing: ${bad}`
+);
+for (const p of ["end", "center"]) {
+  const r = S.sepLayers(S.courses, S.prereqs, p);
+  console.log(p, Object.fromEntries(S.courses.map((c: string) => [c, r.get(c)])));
+}
+console.log("start", Object.fromEntries(S.courses.map((c: string) => [c, layers(S.courses, S.prereqs).get(c)])));
+let cycle = "";
+try {
+  S.solveSeparations(["a", "b"], [
+    { after: "a", before: "b", gap: 1 },
+    { after: "b", before: "a", gap: 1 },
+  ]);
+} catch (e: any) {
+  cycle = e.message;
+}
+console.log("cycle check:", cycle);
+
+// ── 3. Straightening ────────────────────────────────────────────────────
+const isDummy = (id: string) => id.includes(">");
+const heightOf = (id: string) => (isDummy(id) ? 8 : 22);
+const GAP_Y = 30;
+const splitLongEdges = (nodes: string[], links: Link[]) => {
+  const rank = layers(nodes, links);
+  const segments: Link[] = [];
+  for (const { source, target } of links) {
+    let prev = source;
+    for (let k = rank.get(source)! + 1; k < rank.get(target)!; k++) {
+      const dummy = `${source}>${target}@${k}`;
+      rank.set(dummy, k);
+      segments.push({ source: prev, target: dummy });
+      prev = dummy;
+    }
+    segments.push({ source: prev, target });
+  }
+  const rows: string[][] = [];
+  for (const id of new Set([...nodes, ...rank.keys()])) (rows[rank.get(id)!] ??= []).push(id);
+  return { rows, links: segments };
+};
+const crossings = (rows: string[][], links: Link[]): number => {
+  const at = new Map(rows.flatMap((row) => row.map((id, i) => [id, i])));
+  const layer = new Map(rows.flatMap((row, k) => row.map((id) => [id, k])));
+  let n = 0;
+  links.forEach((a, i) =>
+    links.slice(i + 1).forEach((b) => {
+      const sameGap = layer.get(a.source) === layer.get(b.source);
+      const ds = at.get(a.source)! - at.get(b.source)!;
+      const dt = at.get(a.target)! - at.get(b.target)!;
+      if (sameGap && ds * dt < 0) n++;
+    })
+  );
+  return n;
+};
+const order = (rows: string[][], links: Link[], sweeps = 4): string[][] => {
+  let best = rows;
+  for (let s = 0; s < sweeps; s++) {
+    const down = s % 2 === 0;
+    const ks = rows.map((_, k) => k);
+    for (const k of down ? ks.slice(1) : ks.reverse().slice(1)) {
+      const at = new Map(rows.flatMap((row) => row.map((id, i) => [id, i])));
+      const bary = (id: string) => {
+        const ns = links
+          .filter((l) => (down ? l.target : l.source) === id)
+          .map((l) => at.get(down ? l.source : l.target)!);
+        return ns.length ? ns.reduce((a, b) => a + b) / ns.length : at.get(id)!;
+      };
+      rows = rows.map((row, i) => (i === k ? [...row].sort((a, b) => bary(a) - bary(b)) : row));
+    }
+    if (crossings(rows, links) < crossings(best, links)) best = rows;
+  }
+  return best;
+};
+const straighten = (rows: string[][], links: Link[]): Map<string, number> => {
+  const y = new Map<string, number>();
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b) / xs.length;
+  rows.forEach((row, k) => {
+    const sep = row.map((id, i) => (i ? (heightOf(row[i - 1]) + heightOf(id)) / 2 + GAP_Y : 0));
+    const want = row.map((id, i) =>
+      k === 0
+        ? sep.slice(0, i + 1).reduce((a, b) => a + b)
+        : mean(links.filter((l) => l.target === id).map((l) => y.get(l.source)!))
+    );
+    const down = [...want];
+    for (let i = 1; i < row.length; i++) down[i] = Math.max(want[i], down[i - 1] + sep[i]);
+    const up = [...want];
+    for (let i = row.length - 2; i >= 0; i--) up[i] = Math.min(want[i], up[i + 1] - sep[i + 1]);
+    row.forEach((id, i) => y.set(id, (down[i] + up[i]) / 2));
+  });
+  return y;
+};
+console.log("── 3. Straightening");
+const g = splitLongEdges(S.courses, S.prereqs);
+const ordered = order(g.rows, g.links);
+console.log(
+  "rows identical to GraphStraightened's:",
+  JSON.stringify(ordered) === JSON.stringify(S.straightRows),
+  " links identical:",
+  JSON.stringify(g.links) === JSON.stringify(S.straightLinks)
+);
+const yRef = straighten(ordered, g.links);
+const ySep = S.sepStraighten(S.straightRows, S.straightLinks);
+const allIds = ordered.flat();
+console.log(
+  `max |y| difference over ${allIds.length} nodes (incl. dummies):`,
+  Math.max(...allIds.map((id) => Math.abs(yRef.get(id)! - ySep.get(id)!)))
+);
+// How infeasible is the one system: per node, least (down) vs greatest (up).
+let pushed = 0;
+{
+  const y = new Map<string, number>();
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b) / xs.length;
+  ordered.forEach((row, k) => {
+    if (!k) return row.forEach((id) => y.set(id, yRef.get(id)!));
+    const want = row.map((id) => mean(g.links.filter((l) => l.target === id).map((l) => yRef.get(l.source)!)));
+    const sep = row.map((id, i) => (i ? (heightOf(row[i - 1]) + heightOf(id)) / 2 + GAP_Y : 0));
+    const down = [...want];
+    for (let i = 1; i < row.length; i++) down[i] = Math.max(want[i], down[i - 1] + sep[i]);
+    const up = [...want];
+    for (let i = row.length - 2; i >= 0; i--) up[i] = Math.min(want[i], up[i + 1] - sep[i + 1]);
+    row.forEach((_, i) => {
+      if (down[i] - up[i] > 1e-9) pushed++;
+    });
+  });
+}
+console.log(`nodes (layers 1+) where least > greatest, i.e. the system is infeasible: ${pushed}`);
+
+// ── 4. Swarm ────────────────────────────────────────────────────────────
+console.log("── 4. Swarm");
+const xs: number[] = S.weighed.map((p: any) => S.xPx(p["Body Mass (g)"]));
+const items = xs.map((at) => ({ at, r: 3 }));
+const yB: number[] = separateOffsets(items, "start", 1);
+const yS: number[] = S.swarmY;
+const diffs = yS.map((y, i) => y - yB[i]);
+const nDiff = diffs.filter((d) => Math.abs(d) > 1e-6).length;
+console.log(`dots: ${xs.length}; differ by > 1e-6: ${nDiff}`);
+console.log(
+  `separation minus built-in: min ${Math.min(...diffs).toFixed(3)}, max ${Math.max(...diffs).toFixed(3)}, mean over differing ${(diffs.filter((d) => Math.abs(d) > 1e-6).reduce((a, b) => a + b, 0) / Math.max(1, nDiff)).toFixed(3)}`
+);
+console.log(
+  `top of swarm (max center + r): separation ${(Math.max(...yS) + 3).toFixed(2)}, built-in ${(Math.max(...yB) + 3).toFixed(2)}`
+);
+// The direction problem: built-in pairs within reach where the later dot is BELOW the earlier.
+let below = 0,
+  dotsBelow = new Set<number>(),
+  pairs = 0;
+for (let j = 0; j < xs.length; j++)
+  for (let i = 0; i < j; i++) {
+    const dx = Math.abs(xs[j] - xs[i]);
+    if (dx >= 7) continue;
+    pairs++;
+    if (yB[j] < yB[i] - 1e-9) {
+      below++;
+      dotsBelow.add(j);
+    }
+  }
+console.log(
+  `pairs within reach (i earlier, |dx| < 2r + pad): ${pairs}; built-in puts the later dot BELOW the earlier in ${below} pairs, involving ${dotsBelow.size} later dots`
+);
+// Does fixing the plan's direction from the built-in reproduce it? For each
+// pair, separate in the direction the built-in chose.
+const ids = xs.map((_, j) => `${j}`);
+const seps: any[] = ids.map((id) => ({ after: "zero", before: id, gap: 3 }));
+for (let j = 0; j < xs.length; j++)
+  for (let i = 0; i < j; i++) {
+    const dx = xs[j] - xs[i];
+    if (Math.abs(dx) >= 7) continue;
+    const gap = Math.sqrt(49 - dx * dx);
+    seps.push(yB[j] >= yB[i] - 1e-9 ? { after: ids[i], before: ids[j], gap } : { after: ids[j], before: ids[i], gap });
+  }
+const yD = S.solveSeparations(["zero", ...ids], seps, { policy: "start" });
+const dd = ids.map((id, i) => Math.abs(yD.get(id) - yB[i]));
+console.log(
+  `with the built-in's above/below choice per pair as the plan: dots differing ${dd.filter((d) => d > 1e-6).length}, max diff ${Math.max(...dd).toExponential(2)}`
+);
+// Overlap check of the separation swarm.
+let overl = 0;
+for (let j = 0; j < xs.length; j++)
+  for (let i = 0; i < j; i++)
+    if (Math.hypot(xs[j] - xs[i], yS[j] - yS[i]) < 7 - 1e-6) overl++;
+console.log("overlapping pairs in the separation swarm (with pad):", overl);
+
+console.log("── layering policies: crossings after barycenter order, dummies");
+for (const p of ["start", "end", "center"]) {
+  const L = S.layered(p);
+  console.log(p, "rows", L.rows.length, "crossings", crossings(L.rows, L.links), "dummies", L.rows.flat().filter(isDummy).length);
+}

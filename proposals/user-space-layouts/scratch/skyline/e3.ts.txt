@@ -1,0 +1,103 @@
+import { penguins } from "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/packages/gofish-graphics/src/data/penguins.ts";
+import { seafood } from "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/packages/gofish-graphics/src/data/catch.ts";
+import { skyline, cartesian, polar } from "./skyline.ts";
+import { skylinePack } from "./pack.ts";
+import * as K from "./core.ts";
+import { writeFileSync } from "node:fs";
+
+const weighed = penguins.filter((p: any) => p["Body Mass (g)"] !== null);
+const xPx = (m: number) => ((m - 2500) / (6500 - 2500)) * 420;
+const R = 3, PAD = 1, EPS = 1e-6;
+const xs = weighed.map((p: any) => xPx(p["Body Mass (g)"]));
+
+// Built-in replica: nearest free spot (base, or any interval end) on the allowed side.
+function nearestFree(side: "start" | "middle") {
+  const ys: number[] = [];
+  xs.forEach((x, i) => {
+    const iv: [number, number][] = [];
+    for (let j = 0; j < i; j++) {
+      const dx = x - xs[j], dr = 2 * R + PAD;
+      if (Math.abs(dx) >= dr) continue;
+      const dy = Math.sqrt(dr * dr - dx * dx);
+      iv.push([ys[j] - dy, ys[j] + dy]);
+    }
+    const base = side === "start" ? R : 0;
+    const cands = [base, ...iv.flat()].filter((c) => (side === "start" ? c >= base - EPS : true));
+    const free = (c: number) => iv.every(([lo, hi]) => !(c > lo + EPS && c < hi - EPS));
+    let best = NaN, bd = Infinity;
+    for (const c of cands) if (free(c) && Math.abs(c - base) < bd - 1e-12) (best = c), (bd = Math.abs(c - base));
+    ys.push(best);
+  });
+  return ys;
+}
+
+// One-sided skyline: lane = x, depth = y, floor = r (the dot sits on the line).
+const sky1 = skyline(xs.map((x) => ({ x, r: R })), cartesian, { lane: (d) => d.x, floor: R, pad: PAD }).map((p) => p.y);
+const nf1 = nearestFree("start");
+
+// Two-sided: each dot slides toward the line from above and from below; it
+// takes the side with the smaller |y| (up on a tie).
+function twoSided() {
+  const ys: number[] = [];
+  xs.forEach((x, i) => {
+    let up = 0, down = 0;
+    for (let j = 0; j < i; j++) {
+      const dx = x - xs[j], dr = 2 * R + PAD;
+      if (Math.abs(dx) >= dr) continue;
+      const dy = Math.sqrt(dr * dr - dx * dx);
+      up = Math.max(up, ys[j] + dy);
+      down = Math.min(down, ys[j] - dy);
+    }
+    ys.push(up <= -down ? up : down);
+  });
+  return ys;
+}
+const sky2 = twoSided();
+const nf2 = nearestFree("middle");
+
+const cmp = (a: number[], b: number[]) => a.filter((v, i) => Math.abs(v - b[i]) > 1e-6).length;
+console.log("n dots", xs.length);
+console.log("one-sided: skyline vs nearest-free replica differ", cmp(sky1, nf1));
+console.log("two-sided: skyline-per-side vs nearest-free replica differ", cmp(sky2, nf2), " |y| equal but sign differs", sky2.filter((v, i) => Math.abs(v - nf2[i]) > 1e-6 && Math.abs(Math.abs(v) - Math.abs(nf2[i])) < 1e-6).length);
+// where the first divergence happens and why
+const first = (a: number[], b: number[]) => a.findIndex((v, i) => Math.abs(v - b[i]) > 1e-6);
+const f1 = first(sky1, nf1), f2 = first(sky2, nf2);
+console.log("one-sided first divergence at dot", f1, "skyline y", sky1[f1]?.toFixed(3), "nearest-free y", nf1[f1]?.toFixed(3));
+console.log("two-sided first divergence at dot", f2, "skyline y", sky2[f2]?.toFixed(3), "nearest-free y", nf2[f2]?.toFixed(3));
+// Per-step (same prefix): how often does nearest-free take a hole?
+let holes1 = 0;
+{
+  xs.forEach((x, i) => {
+    let up = R;
+    for (let j = 0; j < i; j++) {
+      const dx = x - xs[j], dr = 2 * R + PAD;
+      if (Math.abs(dx) >= dr) continue;
+      up = Math.max(up, nf1[j] + Math.sqrt(dr * dr - dx * dx));
+    }
+    if (nf1[i] < up - 1e-6) holes1++;
+  });
+}
+console.log("one-sided nearest-free: dots sitting in a hole (under an overhang) given its own prefix", holes1);
+console.log("heights: skyline max y", Math.max(...sky1).toFixed(2), "nearest-free max y", Math.max(...nf1).toFixed(2));
+console.log("two-sided extents: skyline", Math.min(...sky2).toFixed(2), Math.max(...sky2).toFixed(2), "nearest-free", Math.min(...nf2).toFixed(2), Math.max(...nf2).toFixed(2));
+writeFileSync("/Users/jmp/.claude/jobs/a4ed3dcc/tmp/skyline/swarm.json", JSON.stringify({ xs, sky1, nf1, sky2, nf2 }));
+
+// Short function vs walk on the seafood pack
+const radius = (c: number) => 4.5 * Math.sqrt(c);
+for (const [nm, order] of [["data", seafood.map((_, k) => k)], ["sorted", seafood.map((_, k) => k).sort((a, b) => seafood[b].count - seafood[a].count)]] as const) {
+  const rs = order.map((k) => radius(seafood[k].count));
+  const short = skyline(rs.map((r) => ({ r })), polar);
+  const walk = skylinePack(rs, "first", "notch");
+  const diff = Math.max(...short.map((c, i) => Math.hypot(c.x - walk[i].x, c.y - walk[i].y)));
+  const golden = skyline(rs.map((r) => ({ r })), polar, { lane: (_, i) => i * 137.50776 * Math.PI / 180 });
+  console.log(nm, "short skyline pack R", K.enclosingR(short).toFixed(2), "walk(first) R", K.enclosingR(walk).toFixed(2), "max pos diff", diff.toExponential(2), "overlap", K.anyOverlap(short).toExponential(1), "| golden R", K.enclosingR(golden).toFixed(2));
+}
+// random sets: short vs walk
+let same = 0, tot = 0;
+for (const s of K.randomSets("uniform", 40)) {
+  const rs = s.slice(0, 80);
+  const a = skyline(rs.map((r) => ({ r })), polar), b = skylinePack(rs, "first", "notch");
+  tot++;
+  if (Math.max(...a.map((c, i) => Math.hypot(c.x - b[i].x, c.y - b[i].y))) < 1e-6) same++;
+}
+console.log("short == walk(first, notch) on", same, "/", tot, "random uniform sets (n=80); walk graze fallbacks so far", K.FALLBACKS.count);

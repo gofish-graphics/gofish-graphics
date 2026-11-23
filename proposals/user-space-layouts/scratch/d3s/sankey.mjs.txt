@@ -1,0 +1,38 @@
+import { sankey, sankeyLeft, sankeyRight, sankeyCenter, sankeyJustify } from "d3-sankey";
+import { writeFileSync } from "fs";
+import { energyNodes, energyLinks } from "./data.mjs";
+const W = 420, H = 300;
+export const run = ({ align = sankeyJustify, iterations = 0, nodeSort = null } = {}) =>
+  sankey()
+    .nodeId((d) => d.name)
+    .nodeAlign(align)
+    .nodeWidth(12)
+    .nodePadding(10)
+    .extent([[0, 0], [W, H]])
+    .iterations(iterations)
+    .nodeSort(nodeSort)({
+    nodes: energyNodes.map((name) => ({ name })),
+    links: energyLinks.map((l) => ({ ...l })),
+  });
+const out = {};
+for (const [k, a] of Object.entries({ left: sankeyLeft, right: sankeyRight, center: sankeyCenter, justify: sankeyJustify })) {
+  out[k] = Object.fromEntries(run({ align: a }).nodes.map((n) => [n.name, n.layer]));
+}
+out.depth = Object.fromEntries(run().nodes.map((n) => [n.name, n.depth]));
+out.height = Object.fromEntries(run().nodes.map((n) => [n.name, n.height]));
+const pick = (g) => ({
+  nodes: Object.fromEntries(g.nodes.map((n) => [n.name, [n.x0, n.x1, n.y0, n.y1, n.value]])),
+  links: g.links.map((l) => [l.source.name, l.target.name, l.y0, l.y1, l.width]),
+});
+const g0 = run();
+out.ky = g0.links[0].width / g0.links[0].value;
+out.stacked = pick(g0);
+out.relaxed = pick(run({ iterations: 6 }));
+out.relaxedSorted = pick(run({ iterations: 6, nodeSort: undefined }));
+out.stackedRight = pick(run({ align: sankeyRight }));
+out.stackedLeft = pick(run({ align: sankeyLeft }));
+out.stackedCenter = pick(run({ align: sankeyCenter }));
+writeFileSync(new URL("./sankey.json", import.meta.url), JSON.stringify(out, null, 1));
+console.log(JSON.stringify({ left: out.left, right: out.right, center: out.center, justify: out.justify, depth: out.depth, height: out.height, ky: out.ky }));
+console.log("stacked", JSON.stringify(out.stacked.nodes));
+console.log("stacked links", JSON.stringify(out.stacked.links));

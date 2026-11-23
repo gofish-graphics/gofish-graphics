@@ -1,0 +1,24 @@
+import { stack, stackOffsetNone, stackOffsetExpand, stackOffsetDiverging, stackOffsetSilhouette, stackOffsetWiggle, stackOrderNone, stackOrderInsideOut } from "d3-shape";
+import { writeFileSync } from "fs";
+// Same formula as the story's `streams`.
+export const SERIES = ["A", "B", "C", "D", "E", "F"];
+export const XS = Array.from({ length: 24 }, (_, j) => j);
+const PEAK = [4, 9, 13, 17, 7, 20];
+const WIDTH = [3, 4, 2.5, 5, 6, 3];
+const AMP = [18, 25, 30, 14, 10, 22];
+export const amount = (i, j) =>
+  Math.round(2 + AMP[i] * Math.exp(-(((j - PEAK[i]) / WIDTH[i]) ** 2)) + 2 * (1 + Math.sin(j * 0.9 + i)));
+const table = XS.map((j) => Object.fromEntries([["x", j], ...SERIES.map((s, i) => [s, amount(i, j)])]));
+const offsets = { none: stackOffsetNone, expand: stackOffsetExpand, diverging: stackOffsetDiverging, silhouette: stackOffsetSilhouette, wiggle: stackOffsetWiggle };
+const orders = { none: stackOrderNone, insideOut: stackOrderInsideOut };
+const out = { table };
+for (const [on, o] of Object.entries(orders))
+  for (const [fn, f] of Object.entries(offsets)) {
+    const sz = stack().keys(SERIES).order(o).offset(f)(table);
+    out[`${fn}/${on}`] = Object.fromEntries(sz.map((s) => [s.key, s.map((d) => [d[0], d[1]])]));
+    out[`${fn}/${on}/order`] = [...sz].sort((a, b) => a.index - b.index).map((s) => s.key);
+  }
+writeFileSync(new URL("./stack.json", import.meta.url), JSON.stringify(out));
+console.log("insideOut order", out["none/insideOut/order"]);
+console.log("table row 0", table[0], "max total", Math.max(...table.map((r) => SERIES.reduce((a, s) => a + r[s], 0))));
+console.log("wiggle baseline", SERIES.map(() => 0) && out["wiggle/none"].A.map((d) => d[0].toFixed(3)).join(" "));

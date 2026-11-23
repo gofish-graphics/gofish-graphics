@@ -1,0 +1,137 @@
+// Compare the existing idiomatic stories (Forward Syntax/Pie/Basic, Low Level
+// Syntax/Icicle Chart/Default) and the fluent pies against d3.
+import { readFileSync } from "node:fs";
+const ROOT = "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal";
+const PN = `${ROOT}/node_modules/.pnpm`;
+const { hierarchy, partition } = await import(`${PN}/d3-hierarchy@3.1.2/node_modules/d3-hierarchy/src/index.js`);
+const { pie } = await import(`${PN}/d3-shape@3.2.0/node_modules/d3-shape/src/index.js`);
+const { seafood } = await import(`${ROOT}/packages/gofish-graphics/src/data/catch.ts`);
+const { titanic } = await import(`${ROOT}/packages/gofish-graphics/src/data/titanic.ts`);
+const TAU = 2 * Math.PI;
+const f = (x: number, d = 5) => (Math.abs(x) < 5e-13 ? 0 : x).toFixed(d);
+const maxAbs = (xs: number[]) => Math.max(...xs.map(Math.abs));
+
+const center3 = ([ax, ay]: number[], [bx, by]: number[], [cx, cy]: number[]) => {
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-6) return null;
+  const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+  return [(a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d, (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d];
+};
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const clock = ([x, y]: number[], [cx, cy]: number[]) => Math.atan2(x - cx, -(y - cy));
+
+/** Filled wedges: on-curve points, the pole from the first arc points, and
+ *  each wedge's angular extent (unwrapped along the path). */
+function wedges(file: string, fillFilter = (a: string) => !/fill="none"/.test(a)) {
+  const h = readFileSync(file, "utf8");
+  const paths = [...h.matchAll(/<path d="([^"]*)"([^>]*)>/g)].filter((m) => fillFilter(m[2])).map((m) => {
+    const n = m[1].match(/-?[\d.]+/g)!.map(Number);
+    const P: number[][] = [];
+    for (let i = 0; i < n.length; i += 2) P.push([n[i], n[i + 1]]);
+    return P.filter((_, i) => i % 3 === 0);
+  });
+  const cs = paths.filter((p) => p.length >= 5).map((p) => center3(p[0], p[1], p[2])).filter(Boolean) as number[][];
+  const pole = [median(cs.map((c) => c[0])), median(cs.map((c) => c[1]))];
+  return {
+    pole,
+    arcs: paths.map((P) => {
+      const rad = (p: number[]) => Math.hypot(p[0] - pole[0], p[1] - pole[1]);
+      const rmax = Math.max(...P.map(rad));
+      const far = P.filter((p) => rad(p) > rmax - 0.5); // the outer arc
+      const [a, z] = [far[0], far.at(-1)!];
+      if (far.length > 2 && Math.hypot(a[0] - z[0], a[1] - z[1]) < 0.01) far.pop(); // the path's closing point
+      let prev = clock(far[0], pole);
+      if (prev < -1e-3) prev += TAU;
+      const as = [prev];
+      for (const p of far.slice(1)) {
+        let a = clock(p, pole);
+        while (a - prev > Math.PI) a -= TAU;
+        while (a - prev < -Math.PI) a += TAU;
+        as.push(a);
+        prev = a;
+      }
+      const rs = far.map((p) => Math.hypot(p[0] - pole[0], p[1] - pole[1]));
+      return { a0: Math.min(...as), a1: Math.max(...as), r1: Math.max(...rs) };
+    }),
+  };
+}
+
+// ── Forward Syntax/Pie/Basic: seafood totals by species, first-seen order ──
+{
+  const order: string[] = [];
+  const tot = new Map<string, number>();
+  for (const d of seafood) {
+    if (!tot.has(d.species)) order.push(d.species);
+    tot.set(d.species, (tot.get(d.species) ?? 0) + d.count);
+  }
+  const d3a = pie().sort(null)(order.map((s) => tot.get(s)!));
+  const w = wedges(`${ROOT}/tests/tmp/iterate/forward-syntax/pie--basic.html`);
+  const g = w.arcs.slice(0, order.length);
+  console.log(`PIE/BASIC species ${order.join(",")} totals ${order.map((s) => tot.get(s)).join(",")}; pole ${w.pole.map((x) => x.toFixed(2))}; outer r ${g[0].r1.toFixed(2)}`);
+  const e: number[] = [];
+  d3a.forEach((d: any, i: number) => {
+    console.log(`  ${order[i].padEnd(8)} d3 [${f(d.startAngle, 4)}, ${f(d.endAngle, 4)}] drawn [${f(g[i].a0, 4)}, ${f(g[i].a1, 4)}]`);
+    e.push(g[i].a0 - d.startAngle, g[i].a1 - d.endAngle);
+  });
+  console.log(`  max |Δ| ${f(maxAbs(e))} rad`);
+}
+
+// ── fluent pies of the D3 hierarchy story ──
+const browsers = [64.7, 18.6, 5.2, 2.8, 2.6, 2.2];
+for (const [name, pad] of [["pie", 0], ["pie-spaced", 0.04], ["pie-spaced-closed", 0.04]] as const) {
+  const file = `${ROOT}/tests/tmp/iterate/proposals/user-space-d3-hierarchy--${name}.html`;
+  let w;
+  try { w = wedges(file); } catch { continue; }
+  const d3a = pie().sort(null).padAngle(pad)(browsers);
+  const g = w.arcs.slice(0, browsers.length);
+  const es: number[] = [], ee: number[] = [], eeNoPad: number[] = [];
+  d3a.forEach((d: any, i: number) => {
+    es.push(g[i].a0 - d.startAngle);
+    ee.push(g[i].a1 - d.endAngle);
+    eeNoPad.push(g[i].a1 - (d.endAngle - d.padAngle));
+  });
+  console.log(`${name.toUpperCase()} (pad ${pad}) wedges ${w.arcs.length}; pole ${w.pole.map((x) => x.toFixed(2))}; outer r ${g[0].r1.toFixed(2)}; max |Δstart| ${f(maxAbs(es))}, |Δend| ${f(maxAbs(ee))}, |Δ(end − pad)| ${f(maxAbs(eeNoPad))} rad`);
+  console.log(`  drawn [${g.map((x) => `${f(x.a0, 4)}..${f(x.a1, 4)}`).join(" ")}]`);
+}
+
+// ── Low Level Syntax/Icicle Chart/Default: titanic class > sex > survived ──
+{
+  const h = readFileSync(`${ROOT}/tests/tmp/iterate/low-level-syntax/icicle-chart--default.html`, "utf8");
+  const rects = [...h.matchAll(/<rect ([^>]*)>/g)].map((m) => {
+    const a = Object.fromEntries([...m[1].matchAll(/([\w-]+)="([^"]*)"/g)].map((q) => [q[1], q[2]]));
+    return { x: +a.x, y: +a.y, w: +a.width, h: +a.height };
+  });
+  // the tree in the story's groupBy order
+  const groups = (rows: any[], key: string) => {
+    const m = new Map<string, any[]>();
+    for (const r of rows) m.set(r[key], [...(m.get(r[key]) ?? []), r]);
+    return [...m.entries()];
+  };
+  const tree = {
+    name: "all",
+    children: groups(titanic, "class").map(([c, rs]) => ({
+      name: c,
+      children: groups(rs, "sex").map(([s, rs2]) => ({
+        name: `${c}/${s}`,
+        children: groups(rs2, "survived").map(([v, rs3]) => ({ name: `${c}/${s}/${v}`, value: rs3.reduce((a: number, r: any) => a + r.count, 0) })),
+      })),
+    })),
+  };
+  const total = titanic.reduce((a: number, r: any) => a + r.count, 0);
+  // d3: size [depth extent, value extent]; the story's value axis is count/10 px
+  const root = hierarchy(tree).sum((d: any) => d.value ?? 0);
+  partition().size([total / 10, 4])(root);
+  const pre: any[] = [];
+  root.eachBefore((n: any) => pre.push(n));
+  console.log(`ICICLE/DEFAULT rects ${rects.length}, d3 nodes ${pre.length}, total/10 = ${total / 10}`);
+  // DOM order is preorder; the value axis is y (top-down), with x the depth
+  const o = rects[0];
+  const e: number[] = [];
+  pre.forEach((n, i) => {
+    const r = rects[i];
+    if (!r) return;
+    e.push(r.y - o.y - n.x0, r.y + r.h - o.y - n.x1);
+  });
+  console.log(`  value axis: max edge diff ${f(maxAbs(e), 4)} px over ${pre.length} nodes`);
+  console.log(`  depth axis (x, w) by depth: ${[0, 1, 2, 3].map((d) => { const i = pre.findIndex((n) => n.depth === d); return `${d}:[${rects[i].x - o.x}, ${rects[i].x - o.x + rects[i].w}]`; }).join(" ")}`);
+}

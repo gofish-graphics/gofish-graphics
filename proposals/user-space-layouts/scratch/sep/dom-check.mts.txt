@@ -1,0 +1,21 @@
+// Do the built-in's drawn centers equal separateOffsets on the xPx scale, and
+// do SepSwarm's drawn centers equal the solver's output?
+import { readFileSync } from "fs";
+const ROOT = "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal";
+const S: any = await import("/Users/jmp/.claude/jobs/a4ed3dcc/tmp/sep/story-copy.mts");
+const { separateOffsets } = await import(
+  `${ROOT}/packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts`
+);
+const dots = (f: string) =>
+  [...readFileSync(`${ROOT}/tests/tmp/iterate/proposals/${f}`, "utf8").matchAll(
+    /<ellipse cx="([-\d.]+)" cy="([-\d.]+)"/g
+  )].map((m) => [+m[1], +m[2]]);
+const xs: number[] = S.weighed.map((p: any) => S.xPx(p["Body Mass (g)"]));
+const check = (f: string, ys: number[]) => {
+  const d = dots(f);
+  const off = d[0][0] - xs[0];
+  const err = Math.max(...d.map(([x, y], i) => Math.max(Math.abs(x - off - xs[i]), Math.abs(y - ys[i]))));
+  console.log(f, "dots", d.length, "max |drawn - computed| (in data order)", err.toFixed(4));
+};
+check("user-space-separation--builtin-swarm-one-sided.html", separateOffsets(xs.map((at) => ({ at, r: 3 })), "start", 1));
+check("user-space-separation--sep-swarm.html", S.swarmY);

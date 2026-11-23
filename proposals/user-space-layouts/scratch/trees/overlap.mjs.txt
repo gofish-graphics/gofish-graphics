@@ -1,0 +1,20 @@
+// Scratch: smallest horizontal gap between rects that overlap vertically.
+import fs from "node:fs";
+for (const f of process.argv.slice(2)) {
+  const rs = (fs.readFileSync(f, "utf8").match(/<rect[^>]*>/g) ?? []).map(
+    (el) =>
+      ["x", "y", "width", "height"].map(
+        (k) => +el.match(new RegExp(` ${k}="([-\\d.e]+)"`))[1]
+      )
+  );
+  let min = Infinity;
+  rs.forEach((a, i) =>
+    rs.slice(i + 1).forEach((b) => {
+      if (a[1] < b[1] + b[3] && b[1] < a[1] + a[3]) {
+        const gap = Math.max(b[0] - (a[0] + a[2]), a[0] - (b[0] + b[2]));
+        min = Math.min(min, gap);
+      }
+    })
+  );
+  console.log(f.split("/").pop(), `min horizontal gap between vertically overlapping rects = ${min}`);
+}

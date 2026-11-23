@@ -1,0 +1,16 @@
+export const energyNodes = [
+  "Coal", "Gas", "Oil", "Renewables",
+  "Power", "Refinery", "Heat",
+  "Grid", "Fuels", "Exports",
+  "Homes", "Industry", "Transport", "Losses",
+];
+export const energyLinks = [
+  ["Coal", "Power", 30], ["Coal", "Heat", 10],
+  ["Gas", "Power", 25], ["Gas", "Heat", 15], ["Gas", "Homes", 12],
+  ["Oil", "Refinery", 50], ["Renewables", "Grid", 18],
+  ["Power", "Grid", 35], ["Power", "Losses", 20],
+  ["Refinery", "Fuels", 38], ["Refinery", "Exports", 7], ["Refinery", "Losses", 5],
+  ["Heat", "Homes", 17], ["Heat", "Industry", 8],
+  ["Grid", "Homes", 24], ["Grid", "Industry", 22], ["Grid", "Losses", 7],
+  ["Fuels", "Transport", 30], ["Fuels", "Industry", 8],
+].map(([source, target, value]) => ({ source, target, value }));

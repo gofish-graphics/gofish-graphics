@@ -1,0 +1,163 @@
+// Scratch: evaluate the story's pure layout code (GoFish calls stubbed) and
+// check mirror symmetry and agreement with d3-hierarchy's tree().
+import fs from "node:fs";
+import { createRequire } from "node:module";
+const repoRoot = process.argv[2];
+const require = createRequire(
+  repoRoot + "/packages/gofish-graphics/package.json"
+);
+const ts = require("typescript");
+const { hierarchy, tree } = require("d3-hierarchy");
+
+let src = fs.readFileSync(
+  repoRoot +
+    "/packages/gofish-graphics/stories/_proposals/UserSpaceTrees.stories.tsx",
+  "utf8"
+);
+src = src
+  .replace(/^import[\s\S]*?;\n/gm, "")
+  .replace(/^export default meta;$/m, "")
+  .replace(/^export /gm, "");
+const js = ts.transpileModule(src, {
+  compilerOptions: { target: 99, module: 99, jsx: 1 },
+}).outputText;
+const stub = new Proxy(function () {}, {
+  get: (t, k) => (k === Symbol.toPrimitive ? () => 0 : stub),
+  apply: () => stub,
+});
+const names =
+  "Constraint Spacing circle layer line ref spread rect blank createMark text initializeContainer".split(
+    " "
+  );
+const L = new Function(
+  ...names,
+  js +
+    "\nreturn { designBy, byDepth, byPosition, leftRule, meanRule, spreadRule, wedge, repo, wOf, hOf, VGAP, repoRows, SEP, LEVEL };"
+)(...names.map(() => stub));
+
+const positions = (d, x = 0, path = "n", out = new Map()) => {
+  out.set(path, x);
+  d.kids.forEach((k, i) =>
+    positions(k, x + d.offsets[i], `${path}.${i}`, out)
+  );
+  return out;
+};
+const mirror = (t) => ({
+  ...t,
+  children: t.children && [...t.children].reverse().map(mirror),
+});
+const mirrorPath = (t, path) => {
+  const idx = path.split(".").slice(1).map(Number);
+  let node = t,
+    out = "n";
+  for (const i of idx) {
+    out += "." + (node.children.length - 1 - i);
+    node = node.children[i];
+  }
+  return out;
+};
+const width = (t, pos) => {
+  let lo = Infinity,
+    hi = -Infinity;
+  const walk = (n, p) => {
+    const x = pos.get(p);
+    lo = Math.min(lo, x - L.wOf(n) / 2);
+    hi = Math.max(hi, x + L.wOf(n) / 2);
+    n.children?.forEach((c, i) => walk(c, `${p}.${i}`));
+  };
+  walk(t, "n");
+  return hi - lo;
+};
+const mirrorErr = (F, rule, t) => {
+  const p = positions(L.designBy(F, rule)(t));
+  const q = positions(L.designBy(F, rule)(mirror(t)));
+  return Math.max(
+    ...[...p].map(([path, x]) => Math.abs(x + q.get(mirrorPath(t, path))))
+  );
+};
+
+const r = (x) => Math.round(x * 100) / 100;
+for (const [name, rule] of [
+  ["Left", L.leftRule],
+  ["Mean", L.meanRule],
+  ["Spread", L.spreadRule],
+]) {
+  const pos = positions(L.designBy(L.byDepth, rule)(L.wedge));
+  const mids = [1, 2, 3].map((i) => r(pos.get(`n.${i}`)));
+  console.log(
+    `TreeSymmetry${name}: mirrorMaxErr=${r(mirrorErr(L.byDepth, rule, L.wedge))} width=${r(width(L.wedge, pos))} A=${r(pos.get("n.0"))} middles=${mids} B=${r(pos.get("n.4"))}`
+  );
+}
+
+const root = tree()
+  .nodeSize([L.SEP, L.LEVEL])
+  .separation(() => 1)(hierarchy(L.wedge));
+const ours = positions(L.designBy(L.byDepth, L.spreadRule)(L.wedge));
+const pathOf = (n) => {
+  const idx = [];
+  for (let v = n; v.parent; v = v.parent)
+    idx.unshift(v.parent.children.indexOf(v));
+  return ["n", ...idx].join(".");
+};
+let maxd = 0;
+root.each((n) => {
+  maxd = Math.max(maxd, Math.abs(n.x - ours.get(pathOf(n))));
+});
+console.log(
+  `d3 tree() vs Spread: nodes=${root.descendants().length} maxDiff=${maxd}`
+);
+console.log(
+  "d3 A, middles, B:",
+  root.children.map((c) => r(c.x))
+);
+
+// Random trees: Spread vs d3, and mirror error of each rule.
+let seed = 1;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const randTree = (depth) => ({
+  name: "x",
+  children:
+    depth > 0 && rand() < 0.8
+      ? Array.from({ length: 1 + Math.floor(rand() * 4) }, () =>
+          randTree(depth - 1 - (rand() < 0.3 ? 1 : 0))
+        )
+      : undefined,
+});
+let worst = 0,
+  n = 0;
+const worstMirror = { Left: 0, Mean: 0, Spread: 0 };
+for (let k = 0; k < 500; k++) {
+  const t = randTree(5);
+  if (!t.children) continue;
+  n++;
+  const rt = tree()
+    .nodeSize([L.SEP, L.LEVEL])
+    .separation(() => 1)(hierarchy(t));
+  const o = positions(L.designBy(L.byDepth, L.spreadRule)(t));
+  rt.each((v) => {
+    worst = Math.max(worst, Math.abs(v.x - o.get(pathOf(v))));
+  });
+  for (const [name, rule] of [
+    ["Left", L.leftRule],
+    ["Mean", L.meanRule],
+    ["Spread", L.spreadRule],
+  ])
+    worstMirror[name] = Math.max(
+      worstMirror[name],
+      mirrorErr(L.byDepth, rule, t)
+    );
+}
+console.log(
+  `random trees: ${n}; Spread vs d3 maxDiff=${worst}; mirror max err`,
+  worstMirror
+);
+
+for (const [name, F] of [
+  ["byDepth(mean)", L.byDepth],
+  ["byPosition(mean)", L.byPosition],
+]) {
+  const pos = positions(L.designBy(F, L.meanRule)(L.repo));
+  console.log(
+    `repo ${name}: width=${r(width(L.repo, pos))} mirrorMaxErr=${r(mirrorErr(F, L.meanRule, L.repo))}`
+  );
+}

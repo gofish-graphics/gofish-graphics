@@ -1,0 +1,43 @@
+import { type C, type P, lowestNotchWalk, lowestNotchBrute, skylineRho } from "./core.ts";
+
+// skylinePack: first two circles touch on the x axis (as in d3); then every
+// circle takes rho = skyline at its angle; the angle is the lowest notch,
+// the golden angle, or given.
+
+export type OriginRule = "d3" | "first" | "centroid";
+export type AngleRule = "notch" | "golden" | { given: number[] } | "brute";
+
+export function skylinePack(radii: number[], origin: OriginRule, angle: AngleRule, stats?: any): C[] {
+  const placed: C[] = [];
+  const n = radii.length;
+  if (n === 0) return placed;
+  const r0 = radii[0];
+  const r1 = n > 1 ? radii[1] : 0;
+  if (origin === "first") placed.push({ x: 0, y: 0, r: r0 });
+  else placed.push({ x: -r1, y: 0, r: r0 });
+  if (n > 1) placed.push({ x: origin === "first" ? r0 + r1 : r0, y: 0, r: r1 });
+  for (let i = 2; i < n; i++) {
+    const r = radii[i];
+    const o: P =
+      origin === "centroid"
+        ? {
+            x: placed.reduce((s, p) => s + p.x, 0) / placed.length,
+            y: placed.reduce((s, p) => s + p.y, 0) / placed.length,
+          }
+        : { x: 0, y: 0 };
+    let p: P;
+    if (angle === "notch") {
+      const nt = lowestNotchWalk(o, placed, r, stats);
+      if (stats) stats[nt.kind] = (stats[nt.kind] ?? 0) + 1;
+      p = nt.p;
+    } else if (angle === "brute") {
+      p = lowestNotchBrute(o, placed, r)!;
+    } else {
+      const th = angle === "golden" ? (i * 137.50776 * Math.PI) / 180 : angle.given[i];
+      const rho = skylineRho(th, o, placed, r);
+      p = { x: o.x + rho * Math.cos(th), y: o.y + rho * Math.sin(th) };
+    }
+    placed.push({ ...p, r });
+  }
+  return placed;
+}

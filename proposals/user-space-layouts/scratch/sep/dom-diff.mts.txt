@@ -1,0 +1,30 @@
+// Compare the drawn shapes of each separation story with the story it redoes.
+import { readFileSync } from "fs";
+const DIR =
+  "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/tests/tmp/iterate/proposals";
+const pairs = [
+  ["user-space-trees--tree-symmetry-left", "user-space-separation--sep-tree-start"],
+  ["user-space-trees--tree-symmetry-mean", "user-space-separation--sep-tree-center"],
+  ["user-space-trees--tree-contours", "user-space-separation--sep-tree-center-files"],
+  ["user-space-trees--graph-straightened", "user-space-separation--sep-graph-straightened"],
+  ["user-space-trees--graph-barycenter", "user-space-separation--sep-graph-layers"],
+];
+const nums = (f: string) => {
+  const html = readFileSync(`${DIR}/${f}.html`, "utf8");
+  // every shape's geometry attributes, in document order
+  return [...html.matchAll(/<(ellipse|rect|text|path|line)[^>]*>/g)].map((m) =>
+    [...m[0].matchAll(/ (cx|cy|x|y|width|height|d|x1|y1|x2|y2)="([^"]*)"/g)]
+      .map((a) => `${a[1]}=${a[2]}`)
+      .join(" ")
+  );
+};
+for (const [a, b] of pairs) {
+  const [A, B] = [nums(a), nums(b)];
+  const same = A.length === B.length && A.every((s, i) => s === B[i]);
+  const identical = readFileSync(`${DIR}/${a}.html`, "utf8") === readFileSync(`${DIR}/${b}.html`, "utf8");
+  console.log(`${b} vs ${a}: shapes ${A.length}/${B.length}, geometry identical: ${same}, whole DOM identical: ${identical}`);
+  if (!same) {
+    const k = A.findIndex((s, i) => s !== B[i]);
+    console.log("  first diff:", A[k], "|", B[k]);
+  }
+}

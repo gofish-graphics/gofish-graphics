@@ -551,9 +551,10 @@
             <td>a stack per x on a baseline that d3 gives by a formula</td>
             <td>symbolic, today, with a workaround</td>
             <td>
-              <span class="ev exact">exact</span> 1e-4 px. The baseline goes in
-              as an invisible first band, because a stack has no public baseline
-              per group.
+              <span class="ev exact">exact</span> 1e-4 px. The prototype puts
+              the baseline in as an invisible first band.
+              <code>Baseline.wiggle()</code> landed on main after it was written
+              (#1375) and has not been compared with d3 yet.
             </td>
           </tr>
           <tr>
@@ -770,9 +771,11 @@
         </div>
         {{code:d3-stack}}
         <p class="note">
-          All match d3 at every x. Wiggle's baseline and the inside-out order
-          are plans (17 and 15 lines of d3's formulas). d3's diverging offset
-          was not tested. It needs two stacks per x that meet at zero.
+          All match d3 at every x. In the prototype, wiggle's baseline and the
+          inside-out order are plans (17 and 15 lines of d3's formulas). Main
+          now has <code>Baseline.wiggle()</code>, which should replace the
+          first. d3's diverging offset was not tested. It needs two stacks per x
+          that meet at zero.
         </p>
       </div>
 
@@ -1251,12 +1254,10 @@
         pixels after layout.
       </li>
       <li>
-        <b
-          >An angle axis that wraps, and a baseline per group on
-          <code>stack</code>.</b
-        >
-        Small, and they remove the two workarounds in the pie and streamgraph
-        prototypes.
+        <b>An angle axis that wraps.</b> Small, and it removes the workaround in
+        the pie and chord prototypes. The other workaround, a baseline per group
+        on <code>stack</code>, is already on main as
+        <code>Baseline.wiggle()</code> (#1375).
       </li>
       <li>
         <b><code>choose</code></b

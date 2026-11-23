@@ -1,0 +1,17 @@
+CLUSTER nodes 24/24; max |dx| 0.0000 px, max |dy| 0.0000 px (relative to the root)
+ICICLE rects 48/24; max edge diff 0.0001 px; root drawn 360.0000x80.0000
+ICICLE-SPACED vs d3 padding 2: max edge diff 28.0000 px
+SUNBURST paths 24/24; pole 150.00,150.00
+  Budget: degenerate path (start = end), d="150,131.25 150,131.25" sw 38; d3 [0.0000, 6.2832] rad, r [0.0000, 37.5000]
+  max |Δθ| 0.00000 rad, max |Δr| 0.250 px (over the non-degenerate 23)
+PIE (padAngle 0) slices 6; pole 140.00,140.00; r [-0.25, 140.25]
+  max |Δstart| 0.00000  max |Δend| 0.00000  max |Δ(end - pad)| 0.00000 rad
+PIE-SPACED (padAngle 0.04) slices 6; pole 140.00,140.00; r [-0.25, 140.25]
+  max |Δstart| 0.03909  max |Δend| 0.01307  max |Δ(end - pad)| 0.04000 rad
+  drawn gaps 0.0400 0.0400 0.0400 0.0400 0.0400; wrap gap 0.0000
+PIE-SPACED-CLOSED (padAngle 0.04) slices 6; pole 140.00,140.00; r [-0.25, 140.25]
+  max |Δstart| 0.00000  max |Δend| 0.04000  max |Δ(end - pad)| 0.00000 rad
+  drawn gaps 0.0400 0.0400 0.0400 0.0400 0.0400; wrap gap 0.0400
+CHORD sub-arcs drawn 25/25; pole 138.00,138.00; r [119.75, 138.25]
+  max |Δ| groups 0.00001 rad, subgroups 0.00001 rad
+  drawn gaps 0.0500 0.0500 0.0500 0.0500; wrap gap 0.0500

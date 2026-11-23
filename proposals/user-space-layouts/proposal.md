@@ -235,7 +235,7 @@ a stack per x on a baseline that d3 gives by a formula
 
 symbolic, today, with a workaround
 
-(exact) 1e-4 px. The baseline goes in as an invisible first band, because a stack has no public baseline per group.
+(exact) 1e-4 px. The prototype puts the baseline in as an invisible first band. `Baseline.wiggle()` landed on main after it was written (\#1375) and has not been compared with d3 yet.
 
 treemap: squarify, binary, slice, dice
 
@@ -442,7 +442,7 @@ stack({ by: "series", dir: "y", size: field("amount").normalize() });
 spread({ by: "x", dir: "x", spacing: 14, alignment: "middle" });
 ```
 
-All match d3 at every x. Wiggle's baseline and the inside-out order are plans (17 and 15 lines of d3's formulas). d3's diverging offset was not tested. It needs two stacks per x that meet at zero.
+All match d3 at every x. In the prototype, wiggle's baseline and the inside-out order are plans (17 and 15 lines of d3's formulas). Main now has `Baseline.wiggle()`, which should replace the first. d3's diverging offset was not tested. It needs two stacks per x that meet at zero.
 
 #### Treemap: one tiling, many settings (today)
 
@@ -988,7 +988,7 @@ const links = chart(edges)
 4.  **One sequential tiling with settings.** `squarify`, strip, spiral, pivot, `slice` and `dice` become presets of it. The built-in `binary` is not shown to be one.
 5.  **Custom members (\#1101, \#692).** So a function that returns GoFish can be passed as `tiling:` and work in `.flow()`.
 6.  **`measure`, in lengths.** Only the box exists in lengths in the engine today. The circle, the outline and a contour exist only in pixels after layout.
-7.  **An angle axis that wraps, and a baseline per group on `stack`.** Small, and they remove the two workarounds in the pie and streamgraph prototypes.
+7.  **An angle axis that wraps.** Small, and it removes the workaround in the pie and chord prototypes. The other workaround, a baseline per group on `stack`, is already on main as `Baseline.wiggle()` (\#1375).
 8.  **`choose`**, from the choice proposal, with `min` in the size algebra (\#630).
 9.  **A relation vocabulary that names its solver.** Needed before a second solver exists, so the first one's relations are not special.
 

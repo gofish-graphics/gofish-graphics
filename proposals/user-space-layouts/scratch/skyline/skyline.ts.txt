@@ -1,0 +1,78 @@
+export const STRICT = { on: false };
+type Pos = { x: number; y: number };
+type Placed = Pos & { r: number };
+
+/** A family of straight rays: `at(lane, depth)` is the point `depth` along
+ *  the ray `lane`, and `laneOf(p)` is the ray through `p`. */
+type Rays = {
+  at: (lane: number, depth: number) => Pos;
+  laneOf: (p: Pos) => number;
+};
+
+/**
+ * Each item, in order, slides in along a ray from far away until it first
+ * touches an item already placed (or reaches `floor`). The ray is given by
+ * `lane`, or, without it, chosen: the ray whose resting point is deepest
+ * in, among the rays through the spots that touch two placed items.
+ */
+export function skyline<T extends { r: number }>(
+  items: T[],
+  rays: Rays,
+  opts: { lane?: (item: T, i: number) => number; floor?: number; pad?: number } = {}
+): Placed[] {
+  const { lane, floor = 0, pad = 0 } = opts;
+  const placed: Placed[] = [];
+  // How deep the item can go on ray l: past every placed circle's far side.
+  const depth = (l: number, r: number) => {
+    const o = rays.at(l, 0);
+    const u = rays.at(l, 1);
+    const ux = u.x - o.x, uy = u.y - o.y;
+    let d = floor;
+    for (const q of placed) {
+      const wx = q.x - o.x, wy = q.y - o.y;
+      const a = wx * ux + wy * uy;
+      const R = q.r + r + pad;
+      const disc = R * R - (wx * wx + wy * wy) + a * a;
+      if (disc >= 0) d = Math.max(d, a + Math.sqrt(disc));
+    }
+    return d;
+  };
+  items.forEach((item, i) => {
+    let best = lane ? lane(item, i) : 0;
+    if (!lane) {
+      let bestDepth = depth(best, item.r);
+      for (const [a, b] of pairs(placed))
+        for (const p of touching(a, b, item.r + pad)) {
+          const l = rays.laneOf(p);
+          const d = depth(l, item.r);
+          const o = rays.at(l, 0);
+          const onSkyline = Math.abs(d - Math.hypot(p.x - o.x, p.y - o.y)) < 1e-6;
+          if (d < bestDepth - 1e-9 && (!STRICT.on || onSkyline)) (best = l), (bestDepth = d);
+        }
+    }
+    placed.push({ ...rays.at(best, depth(best, item.r)), r: item.r });
+  });
+  return placed;
+}
+
+const pairs = <T,>(xs: T[]) => xs.flatMap((a, i) => xs.slice(i + 1).map((b) => [a, b] as const));
+
+// The two centers where a circle of radius r touches both a and b.
+function touching(a: Placed, b: Placed, r: number): Pos[] {
+  const ra = a.r + r, rb = b.r + r;
+  const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+  if (d > ra + rb || d < Math.abs(ra - rb) || d === 0) return [];
+  const along = (d * d + ra * ra - rb * rb) / (2 * d);
+  const h = Math.sqrt(Math.max(0, ra * ra - along * along));
+  const mx = a.x + (along * dx) / d, my = a.y + (along * dy) / d;
+  return [
+    { x: mx - (h * dy) / d, y: my + (h * dx) / d },
+    { x: mx + (h * dy) / d, y: my - (h * dx) / d },
+  ];
+}
+
+export const cartesian: Rays = { at: (x, y) => ({ x, y }), laneOf: (p) => p.x };
+export const polar: Rays = {
+  at: (t, d) => ({ x: d * Math.cos(t), y: d * Math.sin(t) }),
+  laneOf: (p) => Math.atan2(p.y, p.x),
+};

@@ -1,0 +1,25 @@
+// Line counts of the solver and each plan region of the story.
+import { readFileSync } from "fs";
+const lines = readFileSync(
+  "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/packages/gofish-graphics/stories/_proposals/UserSpaceSeparation.stories.tsx",
+  "utf8"
+).split("\n");
+const region = (a: number, b: number) => lines.slice(a, b);
+const stats = (name: string, ls: string[]) => {
+  const nonblank = ls.filter((l) => l.trim());
+  let inDoc = false;
+  const code = nonblank.filter((l) => {
+    const t = l.trim();
+    if (t.startsWith("/**") || t.startsWith("/*")) inDoc = !t.includes("*/");
+    else if (inDoc) {
+      if (t.includes("*/")) inDoc = false;
+      return false;
+    } else if (!t.startsWith("//")) return true;
+    return false;
+  });
+  console.log(`${name}: ${nonblank.length} nonblank lines, ${code.length} code lines (no comments)`);
+};
+const find = (s: string) => lines.findIndex((l) => l.includes(s));
+stats("solver", region(find("/** pos[before]"), find("// 1. Tidy tree") - 1));
+for (const p of ["tree", "layers", "straighten", "swarm"])
+  stats(`plan ${p}`, region(find(`// <plan: ${p}>`) + 1, find(`// </plan: ${p}>`)));

@@ -1,0 +1,30 @@
+// Scratch: bounding box of all nodes (rects / ellipses / circles) and links
+// in a normalized capture DOM.
+import fs from "node:fs";
+for (const f of process.argv.slice(2)) {
+  const s = fs.readFileSync(f, "utf8");
+  let lo = [Infinity, Infinity],
+    hi = [-Infinity, -Infinity];
+  const add = (x0, y0, x1, y1) => {
+    lo = [Math.min(lo[0], x0), Math.min(lo[1], y0)];
+    hi = [Math.max(hi[0], x1), Math.max(hi[1], y1)];
+  };
+  const attr = (el, k) => +(el.match(new RegExp(` ${k}="([-\\d.e]+)"`)) ?? [])[1];
+  let n = 0;
+  for (const el of s.match(/<rect[^>]*>/g) ?? []) {
+    const [x, y, w, h] = ["x", "y", "width", "height"].map((k) => attr(el, k));
+    add(x, y, x + w, y + h);
+    n++;
+  }
+  for (const el of s.match(/<(ellipse|circle)[^>]*>/g) ?? []) {
+    const [cx, cy] = [attr(el, "cx"), attr(el, "cy")];
+    const rx = attr(el, "rx") || attr(el, "r"),
+      ry = attr(el, "ry") || attr(el, "r");
+    add(cx - rx, cy - ry, cx + rx, cy + ry);
+    n++;
+  }
+  console.log(
+    f.split("/").pop(),
+    `nodes=${n} x=[${lo[0]}, ${hi[0]}] y=[${lo[1]}, ${hi[1]}] w=${hi[0] - lo[0]} h=${hi[1] - lo[1]}`
+  );
+}

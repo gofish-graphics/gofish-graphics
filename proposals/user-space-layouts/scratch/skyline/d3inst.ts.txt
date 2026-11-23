@@ -1,0 +1,75 @@
+// d3-hierarchy 3.1.2 src/pack/siblings.js, copied with instrumentation:
+// records, per circle, the pair it was finally placed against, the number of
+// front-chain splices, and the front chain at that moment. Coordinates are in
+// d3's working frame (before the final translation).
+
+function place(b: any, a: any, c: any) {
+  var dx = b.x - a.x, x, a2, dy = b.y - a.y, y, b2, d2 = dx * dx + dy * dy;
+  if (d2) {
+    a2 = a.r + c.r, a2 *= a2;
+    b2 = b.r + c.r, b2 *= b2;
+    if (a2 > b2) {
+      x = (d2 + b2 - a2) / (2 * d2);
+      y = Math.sqrt(Math.max(0, b2 / d2 - x * x));
+      c.x = b.x - x * dx - y * dy;
+      c.y = b.y - x * dy + y * dx;
+    } else {
+      x = (d2 + a2 - b2) / (2 * d2);
+      y = Math.sqrt(Math.max(0, a2 / d2 - x * x));
+      c.x = a.x + x * dx - y * dy;
+      c.y = a.y + x * dy + y * dx;
+    }
+  } else {
+    c.x = a.x + c.r;
+    c.y = a.y;
+  }
+}
+function intersects(a: any, b: any) {
+  var dr = a.r + b.r - 1e-6, dx = b.x - a.x, dy = b.y - a.y;
+  return dr > 0 && dr * dr > dx * dx + dy * dy;
+}
+function score(node: any) {
+  var a = node._, b = node.next._, ab = a.r + b.r,
+    dx = (a.x * b.r + b.x * a.r) / ab, dy = (a.y * b.r + b.y * a.r) / ab;
+  return dx * dx + dy * dy;
+}
+function Node(this: any, circle: any) { this._ = circle; this.next = null; this.previous = null; }
+
+export type Rec = { pair: [number, number]; splices: number; chain: number[] };
+
+export function d3Instrumented(radii: number[]) {
+  const circles = radii.map((r, i) => ({ r, x: 0, y: 0, i }));
+  const recs: Rec[] = [];
+  const n = circles.length;
+  var a: any, b: any, c: any, aa, ca, i, j: any, k: any, sj, sk;
+  a = circles[0], a.x = 0, a.y = 0;
+  b = circles[1], a.x = -b.r, b.x = a.r, b.y = 0;
+  place(b, a, c = circles[2]);
+  recs[2] = { pair: [1, 0], splices: 0, chain: [0, 1] };
+  a = new (Node as any)(a), b = new (Node as any)(b), c = new (Node as any)(c);
+  a.next = c.previous = b; b.next = a.previous = c; c.next = b.previous = a;
+  const chainOf = (start: any) => { const out = [start._.i]; let q = start.next; while (q !== start) { out.push(q._.i); q = q.next; } return out; };
+  let splices = 0;
+  pack: for (i = 3; i < n; ++i) {
+    const chainBefore = chainOf(a);
+    place(a._, b._, c = circles[i]), c = new (Node as any)(c);
+    j = b.next, k = a.previous, sj = b._.r, sk = a._.r;
+    do {
+      if (sj <= sk) {
+        if (intersects(j._, c._)) { b = j, a.next = b, b.previous = a, --i; splices++; continue pack; }
+        sj += j._.r, j = j.next;
+      } else {
+        if (intersects(k._, c._)) { a = k, a.next = b, b.previous = a, --i; splices++; continue pack; }
+        sk += k._.r, k = k.previous;
+      }
+    } while (j !== k.next);
+    recs[i] = { pair: [a._.i, b._.i], splices, chain: chainOf(a) };
+    void chainBefore;
+    splices = 0;
+    c.previous = a, c.next = b, a.next = b.previous = b = c;
+    aa = score(a);
+    while ((c = c.next) !== b) { if ((ca = score(c)) < aa) { a = c, aa = ca; } }
+    b = a.next;
+  }
+  return { circles, recs };
+}

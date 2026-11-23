@@ -1,0 +1,203 @@
+// Compare the drawn geometry of "Proposals/User Space D3 Hierarchy" against
+// d3's own layouts for the same input.
+import { readFileSync } from "node:fs";
+const PN = "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/node_modules/.pnpm";
+const { hierarchy, cluster, partition } = await import(`${PN}/d3-hierarchy@3.1.2/node_modules/d3-hierarchy/src/index.js`);
+const { pie } = await import(`${PN}/d3-shape@3.2.0/node_modules/d3-shape/src/index.js`);
+const { chord } = await import(`${PN}/d3-chord@3.0.1/node_modules/d3-chord/src/index.js`);
+const DIR = "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/tests/tmp/iterate/proposals";
+const html = (s) => readFileSync(`${DIR}/${process.argv[3] ?? "user-space-d3-hierarchy--" + s}.html`, "utf8");
+const story = (process.argv[2] ?? "all").toLowerCase();
+const want = (s) => story === "all" || story === s;
+const f = (x, d = 4) => (Math.abs(x) < 5e-13 ? 0 : x).toFixed(d);
+
+// --- data (copied from the story) ---
+const leaf = (name, value) => ({ name, value });
+const budget = {
+  name: "Budget",
+  children: [
+    { name: "Safety", children: [leaf("Police", 412), leaf("Fire", 268), leaf("Courts", 95)] },
+    { name: "Transport", children: [
+      { name: "Roads", children: [leaf("Repair", 180), leaf("New", 74)] },
+      { name: "Transit", children: [leaf("Bus", 210), leaf("Rail", 132)] },
+      leaf("Parking", 28) ] },
+    { name: "Parks", children: [leaf("Upkeep", 88), leaf("Programs", 41)] },
+    { name: "Health", children: [leaf("Clinics", 156), leaf("Outreach", 37), leaf("Labs", 52)] },
+    leaf("Admin", 120),
+    { name: "Libraries", children: [leaf("Branches", 64), leaf("Digital", 19)] },
+  ],
+};
+const browsers = [64.7, 18.6, 5.2, 2.8, 2.6, 2.2];
+const trips = [
+  [11, 58, 23, 37, 89],
+  [42, 9, 31, 18, 77],
+  [19, 35, 14, 52, 61],
+  [44, 12, 47, 8, 70],
+  [63, 81, 39, 55, 21],
+];
+const W = 360, H = 320, DX = 20, DY = 80, PAD = 0.04, CHORD_PAD = 0.05;
+
+// --- DOM helpers ---
+const num = (s) => +s;
+const ellipses = (h) => [...h.matchAll(/<ellipse cx="([-\d.]+)" cy="([-\d.]+)"/g)].map((m) => [num(m[1]), num(m[2])]);
+const rects = (h) => [...h.matchAll(/<rect ([^>]*)>/g)].map((m) => {
+  const a = Object.fromEntries([...m[1].matchAll(/([\w-]+)="([^"]*)"/g)].map((q) => [q[1], q[2]]));
+  return { x: +a.x, y: +a.y, w: +a.width, h: +a.height };
+});
+/** Polar rects are stroked center arcs: on-curve points of each path. */
+const arcs = (h) => [...h.matchAll(/<path d="([^"]*)"([^>]*)>/g)].map((m) => {
+  const nums = m[1].match(/-?[\d.]+/g).map(Number);
+  const pts = [];
+  for (let i = 0; i < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
+  // M p0 C c1 c2 p1 C ...: on-curve are index 0, 3, 6, ...
+  const on = pts.filter((_, i) => i % 3 === 0);
+  const sw = +(m[2].match(/stroke-width="([\d.]+)"/)?.[1] ?? 0);
+  const fill = m[2].match(/fill="([^"]*)"/)?.[1];
+  return { on, sw, fill, attrs: m[2] };
+});
+/** Circle center through three points. */
+const center3 = ([ax, ay], [bx, by], [cx, cy]) => {
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-6) return null;
+  const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+  return [(a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d, (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d];
+};
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+const poleOf = (as) => {
+  const cs = as.filter((a) => a.on.length >= 3).map((a) => center3(a.on[0], a.on[Math.floor(a.on.length / 2)], a.on.at(-1))).filter(Boolean);
+  return [median(cs.map((c) => c[0])), median(cs.map((c) => c[1]))];
+};
+const TAU = 2 * Math.PI;
+/** Clock angle (0 at 12 o'clock, clockwise) of a screen point. */
+const clockAngle = ([x, y], [cx, cy]) => { const a = Math.atan2(x - cx, -(y - cy)); return a < -1e-9 ? a + TAU : a; };
+const arcGeom = (a, pole) => {
+  const rc = a.on.reduce((s, p) => s + Math.hypot(p[0] - pole[0], p[1] - pole[1]), 0) / a.on.length;
+  let a0 = clockAngle(a.on[0], pole), a1 = clockAngle(a.on.at(-1), pole);
+  if (a0 > TAU - 1e-3) a0 -= TAU; // 12 o'clock read as 2π
+  if (a1 < a0 + 1e-6) a1 += TAU; // wraps past 12 o'clock
+  return { a0, a1, r0: rc - a.sw / 2, r1: rc + a.sw / 2, rc };
+};
+const maxAbs = (xs) => Math.max(...xs.map(Math.abs));
+
+// ── 1. Cluster ──────────────────────────────────────────────────────────
+if (want("cluster")) {
+  const root = hierarchy(budget);
+  cluster().nodeSize([DX, DY]).separation(() => 1)(root);
+  const pre = root.descendants(); // preorder? d3 descendants() is breadth-first
+  const preorder = []; root.eachBefore((n) => preorder.push(n));
+  const leaves = preorder.filter((n) => !n.children);
+  const inner = preorder.filter((n) => n.children);
+  const dom = ellipses(html("cluster"));
+  // DOM order: the spread's leaves, then the inner nodes in preorder.
+  const ordered = [...leaves, ...inner];
+  const rootDom = dom[leaves.length]; // the first inner node is the root
+  let dx = [], dy = [];
+  ordered.forEach((n, i) => {
+    dx.push(dom[i][0] - rootDom[0] - n.x);
+    dy.push(dom[i][1] - rootDom[1] - n.y);
+  });
+  console.log(`CLUSTER nodes ${dom.length}/${preorder.length}; max |dx| ${f(maxAbs(dx))} px, max |dy| ${f(maxAbs(dy))} px (relative to the root)`);
+  console.log("  d3 leaf y", leaves[0].y, "root x", root.x, " d3 x range", f(Math.min(...pre.map((n) => n.x))), f(Math.max(...pre.map((n) => n.x))));
+}
+
+// ── 2. Partition: icicle ────────────────────────────────────────────────
+const partitioned = (size, padding = 0) => {
+  const root = hierarchy(budget).sum((d) => (d.children ? 0 : d.value));
+  partition().size(size).padding(padding)(root);
+  const pre = []; root.eachBefore((n) => pre.push(n));
+  return pre;
+};
+if (want("icicle")) {
+  const pre = partitioned([W, H]);
+  const dom = rects(html("icicle"));
+  const o = dom[0];
+  const e = [];
+  pre.forEach((n, i) => {
+    const r = dom[i];
+    e.push(r.x - o.x - n.x0, r.x + r.w - o.x - n.x1, r.y - o.y - n.y0, r.y + r.h - o.y - n.y1);
+  });
+  console.log(`ICICLE rects ${dom.length}/${pre.length}; max edge diff ${f(maxAbs(e))} px; root drawn ${f(o.w)}x${f(dom[0].h)}`);
+  // d3's padding, for the report
+  const p2 = partitioned([W, H], 2);
+  console.log("  d3 padding 2: root", [p2[0].x0, p2[0].x1, p2[0].y0, p2[0].y1].map((x) => f(x, 2)).join(" "),
+    "| Safety", [p2[1].x0, p2[1].x1, p2[1].y0, p2[1].y1].map((x) => f(x, 2)).join(" "),
+    "| Transport", [p2[5].x0, p2[5].x1].map((x) => f(x, 2)).join(" "));
+}
+if (want("icicle-spaced")) {
+  const pre = partitioned([W, H], 2);
+  const dom = rects(html("icicle-spaced"));
+  const o = dom[0];
+  const e = [];
+  pre.forEach((n, i) => {
+    const r = dom[i];
+    e.push(r.x - o.x - n.x0, r.x + r.w - o.x - (n.x1), r.y - o.y - n.y0, r.y + r.h - o.y - n.y1);
+  });
+  console.log(`ICICLE-SPACED vs d3 padding 2: max edge diff ${f(maxAbs(e))} px`);
+  pre.slice(0, 8).forEach((n, i) => console.log("  ", n.data.name.padEnd(10), "d3", [n.x0, n.x1, n.y0, n.y1].map((x) => f(x, 2)).join(" "), " drawn", [dom[i].x - o.x, dom[i].x + dom[i].w - o.x, dom[i].y - o.y, dom[i].y + dom[i].h - o.y].map((x) => f(x, 2)).join(" ")));
+}
+
+// ── 2b. Sunburst ────────────────────────────────────────────────────────
+if (want("sunburst")) {
+  const RADIUS = 150;
+  const pre = partitioned([TAU, RADIUS]);
+  const as = arcs(html("sunburst"));
+  const pole = poleOf(as);
+  console.log(`SUNBURST paths ${as.length}/${pre.length}; pole ${pole.map((x) => f(x, 2))}`);
+  const ea = [], er = [];
+  pre.forEach((n, i) => {
+    const a = as[i];
+    if (a.on.length < 2 || (Math.hypot(a.on[0][0] - a.on.at(-1)[0], a.on[0][1] - a.on.at(-1)[1]) < 1e-6 && a.on.length <= 2)) {
+      console.log(`  ${n.data.name}: degenerate path (start = end), d="${a.on.map((p) => p.join(",")).join(" ")}" sw ${a.sw}; d3 [${f(n.x0)}, ${f(n.x1)}] rad, r [${f(n.y0)}, ${f(n.y1)}]`);
+      return;
+    }
+    const g = arcGeom(a, pole);
+    ea.push(g.a0 - n.x0, g.a1 - n.x1); er.push(g.r0 - n.y0, g.r1 - n.y1);
+    if (i < 4) console.log(`  ${n.data.name.padEnd(10)} d3 θ [${f(n.x0)}, ${f(n.x1)}] r [${f(n.y0, 2)}, ${f(n.y1, 2)}]  drawn θ [${f(g.a0)}, ${f(g.a1)}] r [${f(g.r0, 2)}, ${f(g.r1, 2)}]`);
+  });
+  console.log(`  max |Δθ| ${f(maxAbs(ea), 5)} rad, max |Δr| ${f(maxAbs(er), 3)} px (over the non-degenerate ${ea.length / 2})`);
+}
+
+// ── 3. Pie ──────────────────────────────────────────────────────────────
+const pieCompare = (name, pad) => {
+  const d3a = pie().sort(null).padAngle(pad)(browsers);
+  const as = arcs(html(name));
+  const pole = poleOf(as);
+  const g = as.map((a) => arcGeom(a, pole));
+  const es = [], ee = [], eeNoPad = [];
+  d3a.forEach((d, i) => {
+    es.push(g[i].a0 - d.startAngle);
+    ee.push(g[i].a1 - d.endAngle);
+    eeNoPad.push(g[i].a1 - (d.endAngle - d.padAngle));
+  });
+  console.log(`${name.toUpperCase()} (padAngle ${pad}) slices ${as.length}; pole ${pole.map((x) => f(x, 2))}; r [${f(g[0].r0, 2)}, ${f(g[0].r1, 2)}]`);
+  d3a.forEach((d, i) => console.log(`  d3 [${f(d.startAngle)}, ${f(d.endAngle)}]  drawn [${f(g[i].a0)}, ${f(g[i].a1)}]`));
+  console.log(`  max |Δstart| ${f(maxAbs(es), 5)}  max |Δend| ${f(maxAbs(ee), 5)}  max |Δ(end - pad)| ${f(maxAbs(eeNoPad), 5)} rad`);
+  if (pad) {
+    const gaps = g.slice(1).map((x, i) => x.a0 - g[i].a1);
+    console.log(`  drawn gaps ${gaps.map((x) => f(x)).join(" ")}; wrap gap ${f(TAU - g.at(-1).a1 + g[0].a0)}`);
+  }
+};
+if (want("pie")) pieCompare("pie", 0);
+if (want("pie-spaced")) pieCompare("pie-spaced", PAD);
+if (want("pie-spaced-closed")) pieCompare("pie-spaced-closed", PAD);
+
+// ── 4. Chord ────────────────────────────────────────────────────────────
+if (want("chord")) {
+  const c = chord().padAngle(CHORD_PAD)(trips);
+  const n = trips.length;
+  const subs = Array.from({ length: n }, () => []);
+  for (const ch of c) { subs[ch.source.index].push(ch.source); if (ch.target !== ch.source) subs[ch.target.index].push(ch.target); }
+  subs.forEach((s) => s.sort((a, b) => a.startAngle - b.startAngle));
+  const as = arcs(html("chord")).filter((a) => / stroke-width="(?!0")/.test(a.attrs) && !/opacity="0\.6"/.test(a.attrs));
+  const pole = poleOf(as);
+  const g = as.map((a) => arcGeom(a, pole));
+  console.log(`CHORD sub-arcs drawn ${as.length}/${n * n}; pole ${pole.map((x) => f(x, 2))}; r [${f(g[0].r0, 2)}, ${f(g[0].r1, 2)}]`);
+  const es = [];
+  subs.flat().forEach((s, k) => es.push(g[k].a0 - s.startAngle, g[k].a1 - s.endAngle));
+  const eg = [];
+  c.groups.forEach((gr, i) => eg.push(g[i * n].a0 - gr.startAngle, g[i * n + n - 1].a1 - gr.endAngle));
+  c.groups.forEach((gr, i) => console.log(`  group ${i} d3 [${f(gr.startAngle)}, ${f(gr.endAngle)}] drawn [${f(g[i * n].a0)}, ${f(g[i * n + n - 1].a1)}]`));
+  console.log(`  max |Δ| groups ${f(maxAbs(eg), 5)} rad, subgroups ${f(maxAbs(es), 5)} rad`);
+  const gaps = c.groups.slice(1).map((_, i) => g[(i + 1) * n].a0 - g[i * n + n - 1].a1);
+  console.log(`  drawn gaps ${gaps.map((x) => f(x)).join(" ")}; wrap gap ${f(TAU - g.at(-1).a1 + g[0].a0)}`);
+}

@@ -1,0 +1,19 @@
+// Stubs for the GoFish names the story imports: the checks only call its pure
+// solver and plans.
+const noop: any = () => noop;
+export const Constraint = noop;
+export const Overlap = noop;
+export const Spacing = noop;
+export const blank = noop;
+export const chart = noop;
+export const circle = noop;
+export const createMark = noop;
+export const layer = noop;
+export const line = noop;
+export const offset = noop;
+export const rect = noop;
+export const ref = noop;
+export const scatter = noop;
+export const spread = noop;
+export const text = noop;
+export const initializeContainer = noop;

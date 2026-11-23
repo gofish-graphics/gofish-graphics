@@ -1,0 +1,98 @@
+import { seafood } from "/Users/jmp/gofish-20250316/.claude/worktrees/layout-dsl-proposal/packages/gofish-graphics/src/data/catch.ts";
+import * as K from "./core.ts";
+import { d3Instrumented } from "./d3inst.ts";
+
+const radius = (c: number) => 4.5 * Math.sqrt(c);
+const data = seafood.map((d) => radius(d.count));
+const sorted = [...data].sort((a, b) => b - a);
+
+type Origin = "frame" | "touch" | "first" | "centroid";
+const ORIGINS: Origin[] = ["frame", "touch", "first", "centroid"];
+
+function originFor(kind: Origin, cs: K.C[], i: number): K.P {
+  const r0 = cs[0].r, r1 = cs[1].r;
+  if (kind === "frame") return { x: 0, y: 0 };
+  if (kind === "touch") return { x: -r1 + r0, y: 0 };
+  if (kind === "first") return { x: -r1, y: 0 };
+  const pre = cs.slice(0, i);
+  return { x: pre.reduce((s, p) => s + p.x, 0) / i, y: pre.reduce((s, p) => s + p.y, 0) / i };
+}
+
+type Tally = {
+  n: number; match: number; diffs: number[];
+  blockerOnChain: number; blockerOffChain: number; spliced: number; splicedMatch: number;
+  pairOnly: number; // mismatch where the only blocker beyond is one of the circles it touches? (impossible) - sanity
+};
+const newT = (): Tally => ({ n: 0, match: 0, diffs: [], blockerOnChain: 0, blockerOffChain: 0, spliced: 0, splicedMatch: 0, pairOnly: 0 });
+
+function analyse(radii: number[], T: Record<Origin, Tally>, check = false) {
+  const { circles, recs } = d3Instrumented(radii);
+  if (check) {
+    // my copy reproduces d3 up to the final translation
+    const ref = K.packSiblings(radii.map((r) => ({ r })));
+    const tx = ref[0].x - circles[0].x, ty = ref[0].y - circles[0].y;
+    const err = Math.max(...ref.map((c: any, i: number) => Math.hypot(c.x - circles[i].x - tx, c.y - circles[i].y - ty)));
+    if (err > 1e-9) throw new Error("copy differs " + err);
+    // recover frame origin from d3's output: c0 + (r1, 0)
+    const o = { x: ref[0].x + radii[1], y: ref[0].y };
+    if (Math.hypot(o.x - tx, o.y - ty) > 1e-9) throw new Error("origin recovery");
+  }
+  const cs = circles as K.C[];
+  for (let i = 2; i < cs.length; i++) {
+    const pre = cs.slice(0, i);
+    for (const ok of ORIGINS) {
+      const o = originFor(ok, cs, i);
+      const th = Math.atan2(cs[i].y - o.y, cs[i].x - o.x);
+      const rho = Math.hypot(cs[i].x - o.x, cs[i].y - o.y);
+      const sky = K.skylineRho(th, o, pre, cs[i].r);
+      const t = T[ok];
+      t.n++;
+      const rec = recs[i];
+      if (rec.splices > 0) t.spliced++;
+      if (Math.abs(rho - sky) < 1e-6) {
+        t.match++;
+        if (rec.splices > 0) t.splicedMatch++;
+      } else {
+        t.diffs.push(rho - sky);
+        // the circle beyond on the ray
+        let bj = -1, bm = 0;
+        pre.forEach((c, j) => { const v = K.outerRoot(th, o, c, cs[i].r); if (v > bm) (bm = v), (bj = j); });
+        if (ok === "frame") {
+          const ch = rec.chain, L = ch.length, ib = ch.indexOf(bj);
+          const hop = Math.min(...rec.pair.map((p) => { const ip = ch.indexOf(p); const d = Math.abs(ip - ib); return Math.min(d, L - d); }));
+          HOPS.push(hop);
+        }
+        if (rec.chain.includes(bj)) t.blockerOnChain++;
+        else t.blockerOffChain++;
+      }
+    }
+  }
+}
+
+const q = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : NaN; };
+function report(name: string, T: Record<Origin, Tally>) {
+  console.log(`\n## ${name}`);
+  console.log("origin | steps | match% | mismatch d3rho-sky: min / median / max | blocker on chain / off | spliced steps (match among them)");
+  for (const ok of ORIGINS) {
+    const t = T[ok];
+    const d = t.diffs;
+    console.log(`${ok} | ${t.n} | ${((100 * t.match) / t.n).toFixed(1)} | ${d.length ? `${Math.min(...d).toFixed(2)} / ${q(d, 0.5).toFixed(2)} / ${Math.max(...d).toFixed(4)}` : "-"} | ${t.blockerOnChain} / ${t.blockerOffChain} | ${t.spliced} (${t.splicedMatch})`);
+  }
+}
+
+let HOPS: number[] = [];
+const run = (name: string, sets: number[][]) => {
+  HOPS = [];
+  const T = Object.fromEntries(ORIGINS.map((o) => [o, newT()])) as Record<Origin, Tally>;
+  sets.forEach((s, k) => analyse(s, T, k < 5));
+  report(name, T);
+  const hist: Record<string, number> = {};
+  for (const h of HOPS) hist[h > 4 ? ">4" : String(h)] = (hist[h > 4 ? ">4" : String(h)] ?? 0) + 1;
+  console.log("frame-origin blocker hops along chain from the pair:", JSON.stringify(hist));
+};
+run("seafood data order", [data]);
+run("seafood largest first", [sorted]);
+run("uniform 2-20, 200 sets", K.randomSets("uniform"));
+run("uniform 2-20, 200 sets, largest first", K.randomSets("uniform").map((s) => [...s].sort((a, b) => b - a)));
+run("heavy-tailed (Pareto a=2, 2..80), 200 sets", K.randomSets("heavy"));
+run("heavy-tailed, largest first", K.randomSets("heavy").map((s) => [...s].sort((a, b) => b - a)));
