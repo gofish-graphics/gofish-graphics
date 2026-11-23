@@ -5,6 +5,7 @@ A proposal for issue #1395, a request for tooltips.
 - Add `.tooltip()` to every mark and every operator.
 - It is sugar for one more layer over the focused mark, the same construct as `.label()`.
 - The box floats, so the chart never moves when it opens, and its content is ordinary GoFish.
+- Version 1 (draft PR #1401) builds `.tooltip()` and `.tooltip([fields])` on marks, in JS and Python, and a public `.name()` on operators. Everything else here is proposed.
 
 **Recommendation:** build `.tooltip(content?, options?)` as a rewrite into a layer over the focus, and make that rewrite public as `.layer(fn)` on marks and operators, so third parties add modifiers as imported functions.
 
@@ -96,7 +97,7 @@ rect({ w: "share" }).label(content, { on: pointer() });
 - **No argument:** one row per field with a single value on this mark. That is every field that is constant across the mark's rows, plus each field the mark draws, shown with its drawn value (a stacked segment's summed count). This joins Vega-Lite's "data" and "encoding" contents.
 - **A list of fields:** order is row order. This form is plain data, so it serializes and works in Python and in the notebook widget with no Python callback.
 - **A function from the rows to any mark:** the content is ordinary GoFish, so a chart in a tooltip needs nothing new. JavaScript only at first.
-- **Options:** `by` groups the marks by a field and makes the group the focus. `radius` is how near counts, in pixels. `position` takes the same `Place` family and the same chooser that labels use, so the box stays inside the chart and flips sides. That chooser is a first-fit `choose` over sides (the choice and cost proposal, #486), so keeping the box inside needs no rule of its own, and a box can fall back to shorter content with the same operator: `.tooltip(choose([fullTable, shortTable]))`.
+- **Options:** `by` groups the marks by a field and makes the group the focus. `radius` is the reach: how far from a mark's outline the pointer may be, in pixels (16 by default). `position` takes the same `Place` family and the same chooser that labels use, so the box stays inside the chart and flips sides. That chooser is a first-fit `choose` over sides (the choice and cost proposal, #486), so keeping the box inside needs no rule of its own, and a box can fall back to shorter content with the same operator: `.tooltip(choose([fullTable, shortTable]))`.
 
 ```js
 // no argument: every field with a single value on this mark
@@ -155,21 +156,31 @@ chart(seafood)
 
 ## Rule 3: the focus is one rule
 
-One rule, among the marks the tooltip is on. A pointer inside a mark picks that mark. Otherwise the focus is the mark nearest by position. A mark's position is where the layout put it, and its size does not count. So bars in a column are told apart by row, and a gap between two bars picks the nearer one. The current focus has a 4 px head start, so it does not flip back and forth at a boundary. All this applies while the pointer is within `radius` pixels (8 by default) of the convex hull of the drawn marks, and 4 px more once there is a focus. Farther out there is no focus. There is no mode to switch.
+One rule, among the marks the tooltip is on: reach first, then position. Only the marks drawn within 16 px of the pointer count, measured to each mark's outline. The current focus counts out to 20 px. Of those, a mark the pointer is inside wins, the one on top where marks overlap. Otherwise the focus is the mark nearest by position. A mark's position is where the layout put it, and its size does not count. So bars in a column are told apart by row, and a gap between two bars picks the nearer one. The current focus has a 4 px head start, so it does not flip back and forth at a boundary. With no mark in reach there is no focus and no box. There is no mode to switch.
 
-Written out, the rule is one line of user code (next section):
+So a donut's hole and a wide gap between bars show no box. The earlier rule measured to the convex hull of all the marks, which covers both.
+
+A line drawn through rows has a point per row. After a line is chosen, the focus snaps to its point nearest the pointer, with the same 4 px head start, and a marker is drawn on that point. Reach is measured to the line's path, so moving along the line between rows keeps the box. A line drawn from a function, or one connecting other marks, has no rows, and gets one box for the whole line.
+
+Written out, the rule is one line of user code (next section). The second form is the default; on a mark with no rows to snap to, `.snap(4)` changes nothing.
 
 ```js
-Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);
+Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(16);
+
+Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })])
+  .within(16)
+  .snap(4);
 ```
 
-The `radius` option is short for the same behavior with another number, so `radius: 30` is `.within(30)`.
+The `radius` option is short for the same behavior with another reach, so `radius: 30` is `.within(30)`.
 
-In Declarative Dragging (#1294) each reachable state is one point. The drag follows the nearest point, with a head start for the current one, and it falls back when the pointer is far from the points' convex hull. This rule is that one, with a mark's placed position as its point, plus the direct hit, which dragging does not need.
+The box is one per chart: the marks of every `.tooltip()` in a chart are candidates together. It is no pointer target, so a mark under it is reached as if it were not there, and over the box with no mark in reach it closes. On a touch screen a tap opens it, and it stays open until the next tap. It sits right of the mark, else left of it, centered on its row; else under or over it, flush with its end; else it is moved inside the chart. This is what version 1 builds.
+
+In Declarative Dragging (#1294) each reachable state is one point. The drag follows the nearest point, with a head start for the current one. This rule is that one, with a mark's placed position as its point, plus the direct hit, which dragging does not need, plus the reach, which narrows the marks before the nearest is picked.
 
 #849 sketches a rule per kind of space (distance to a point, distance to a polyline, membership in a band). A candidate's `position` leaves out an axis where the mark only has a size, so the distance to a bar in a row is its distance in y. That is the dispatch on the kind of space, carried as data. Compare Plot's `pointer` (a 40 px `maxRadius`), Vega-Lite's `nearest: true` (which does not work on lines), and Plotly's `hoverdistance`.
 
-Story "Proposals/Tooltips/Scatter Nearest". The red cross is the pinned pointer. It is on no point, so the point nearest it within 30 pixels is the focus. The ring is one more layer over the focus.
+Story "Proposals/Tooltips/Scatter Nearest". The red cross is the pinned pointer. It is on no point, so the point nearest it, among the points within 30 pixels, is the focus. The reach is wider than the default 16 because the points are small. The ring is one more layer over the focus.
 
 ![A penguin scatterplot with the nearest point ringed](img/scatter-nearest.png)
 
@@ -183,9 +194,25 @@ chart(penguins)
   .mark(circle({ r: 3, fill: "Species" }).tooltip(fields, { radius: 30 }));
 ```
 
+Story "Proposals/Tooltips/Donut". A filled shape is a region, so a pointer inside a wedge picks it. The hole is near no wedge, so it shows no box. The prototype places the box by hand, right of the ring and level with the wedge's middle, because a `ref` to a wedge has its box in the clock space, not on screen.
+
+![A donut of five species with a box for Trout](img/donut.png)
+
+```js
+chart(seafood, { coord: Coord.clock() })
+  .flow(stack({ by: "species", dir: "x", y: 50, h: 50 }))
+  .mark(rect({ w: "count", fill: "species" }).tooltip(["species", "count"]));
+```
+
+```python
+chart(seafood, coord=Coord.clock()).flow(
+    stack(by="species", dir="x", y=50, h=50)
+).mark(rect(w="count", fill="species").tooltip(["species", "count"]))
+```
+
 ## Focus behaviors in user space
 
-The focus rule is user code. A focus behavior is a plain function, as a Dragology drag behavior is: it gets a frame and returns a choice and a gap. The `Focus` family holds the built-in behaviors, and a user function works anywhere a behavior is an argument. The prototype's version is `stories/_proposals/tooltips/focus.ts`, pure functions with no DOM and no GoFish internals.
+The focus rule is user code. A focus behavior is a plain function: it gets a frame and returns a mark, or nothing. The `Focus` family holds the built-in behaviors, and a user function works anywhere a behavior is an argument. The prototype's version is `stories/_proposals/tooltips/focus.ts`, pure functions with no DOM and no GoFish internals. Version 1 runs the default behavior inside `.tooltip()`; `Focus` is internal there and not exported, so this section is proposed.
 
 ```ts
 type Candidate = {
@@ -193,8 +220,18 @@ type Candidate = {
   datum: unknown[]; // the mark's rows
   box: Box; // the drawn box
   position: { x?: number; y?: number }; // where the layout placed it
-  outline: Outline; // the drawn boxes and circles
+  outline: Outline; // what it is drawn as
+  points?: Candidate[]; // a line's rows, each at its drawn point
 };
+
+// A part is a box, a circle (a round box), a segment of a stroked path,
+// or a region, a filled path given by the segments of its edge.
+type Outline = {
+  box: Box;
+  round: boolean;
+  segment?: [Point, Point];
+  region?: [Point, Point][];
+}[];
 
 type Frame = {
   pointer: Point | undefined; // undefined off the chart
@@ -203,30 +240,32 @@ type Frame = {
   clicked: boolean; // true on the frame of a click
 };
 
-type FocusBehavior = (frame: Frame) => {
-  choice: Candidate | undefined;
-  gap: number; // the pointer's distance to the choice, in px
-};
+type FocusBehavior = (frame: Frame) => Candidate | undefined;
 ```
+
+A candidate's `position` leaves out an axis where the mark only has a size. A line has no position, so it is as near as its path. A behavior keeps no memory of its own: the runtime remembers the last choice and passes it as `current`, and the head start and the wider reach of the current focus both read it.
 
 A call starts a behavior or joins several independent ones, and a chained method transforms the one behavior it is called on. So the rule reads in the order it is said:
 
 ```js
-Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);
+Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })])
+  .within(16)
+  .snap(4);
 ```
 
-| Member                                      | What it picks                                                                                                                                                                   | Dragology                                                                                         |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `Focus.hit()`                               | The mark the pointer is inside. Gap 0.                                                                                                                                          | None. A drag has no direct hit.                                                                   |
-| `Focus.closest({ to, stickiness, radius })` | The nearest candidate, measured to its `position` (the default), its `center` or its `outline`. The current focus gets `stickiness` px of head start. Nothing past `radius` px. | `d.closest(states, { stickiness })` over `d.fixed` states                                         |
-| `Focus.first([a, b, ...])`                  | What the first behavior that makes a choice picks.                                                                                                                              | None. `d.closest` over behaviors picks the lowest gap instead.                                    |
-| `.within(gap)`                              | The same, but nothing when the pointer is more than `gap` px from the hull of the drawn marks, or `gap + 4` once there is a focus.                                              | `.whenFar(other, { gapIn, gapOut })` on the gap of `d.between`, which is the distance to the hull |
-| `.onClick()`                                | The same, but only on a click. Between clicks the focus stays.                                                                                                                  | None.                                                                                             |
-| `Focus.from(fn)`                            | What `fn` picks, with the chained methods.                                                                                                                                      | `d.custom(fn)`                                                                                    |
+| Member                                      | What it picks                                                                                                                                                                                                                            | Dragology                                                                                                                                          |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Focus.hit()`                               | The mark the pointer is inside, the one on top where marks overlap.                                                                                                                                                                      | None. A drag has no direct hit.                                                                                                                    |
+| `Focus.closest({ to, stickiness, radius })` | The nearest candidate, measured to its `position` (the default), its `center` or its `outline`. A candidate with no position is measured to its outline. The current focus gets `stickiness` px of head start. Nothing past `radius` px. | `d.closest(states, { stickiness })` over `d.fixed` states                                                                                          |
+| `Focus.first([a, b, ...])`                  | What the first behavior that picks a mark picks.                                                                                                                                                                                         | None. `d.closest` over behaviors picks the one with the lowest gap instead.                                                                        |
+| `.within(reach)`                            | The same, run only on the marks whose outline is within `reach` px of the pointer, and the current focus out to `reach + 4`. With none, nothing.                                                                                         | `.whenFar(other, { gapIn, gapOut })`, turned around. It limits the gap to the target the behavior chose. Here the reach narrows the targets first. |
+| `.snap(stickiness)`                         | Then, on a line drawn through rows, its point nearest the pointer, with a head start for the current point.                                                                                                                              | `d.closest` over the line's rows                                                                                                                   |
+| `.onClick()`                                | The same, but only on a click. Between clicks the focus stays.                                                                                                                                                                           | None.                                                                                                                                              |
+| `Focus.from(fn)`                            | What `fn` picks, with the chained methods.                                                                                                                                                                                               | `d.custom(fn)`                                                                                                                                     |
 
-Another name for `.within(8)` is `.near(8)`, if `.within` stays the region clamp of #830. Third parties add behaviors as functions that a user imports and passes as an argument, never as new methods, so the patching problem of the Extending section does not come back.
+Another name for `.within(16)` is `.near(16)`, if `.within` stays the region clamp of #830. The two do different things: the clamp keeps a value inside a region, and this step keeps only the marks near the pointer. Third parties add behaviors as functions that a user imports and passes as an argument, never as new methods, so the patching problem of the Extending section does not come back.
 
-Fork: how to say "try these in order". Pick `Focus.first([...])`: it depends on no proposal that is not signed off. The other option is `choose([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8)`. The choice and cost proposal (#486) makes `choose` take the first fit in list order by default, which is this rule. If it lands, one operator says "try these in order" in layout, in placement and in focus.
+Fork: how to say "try these in order". Pick `Focus.first([...])`: it depends on no proposal that is not signed off. The other option is `choose([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(16)`. The choice and cost proposal (#486) makes `choose` take the first fit in list order by default, which is this rule. If it lands, one operator says "try these in order" in layout, in placement and in focus.
 
 The same value plugs in at two places. The sugar is `.tooltip({ focus })`. The explicit form is `pointer().snap(selection, { focus })`, a dataset of zero or one mark that any layer reads, and it changes only when the chosen key changes. So layout re-runs once per new focus, not once per pointer move. In the shared-lines example the box, the rule and the dots read the same focus:
 
@@ -234,7 +273,7 @@ The same value plugs in at two places. The sugar is `.tooltip({ focus })`. The e
 const focus = Focus.first([
   Focus.hit(),
   Focus.closest({ stickiness: 4 }),
-]).within(8);
+]).within(16);
 
 line({ x: "year", y: "count", stroke: "series" }).tooltip({
   by: "year",
@@ -253,45 +292,76 @@ chart(yearly)
   .layer(chart(hover).mark(circle({ r: 4, fill: "series", stroke: "white" })));
 ```
 
-The live switcher on the page runs seven behaviors on the issue's bar chart. Six are one or three lines. The seventh is a plain function of six lines, the bar with the largest share within 60 px, used as `.tooltip({ focus: largestNear })`, as an argument (`Focus.first([Focus.hit(), largestNear])`) or lifted to chain (`Focus.from(largestNear).within(8)`). What each did under the real mouse is in NOTES.md.
+The live switcher on the page runs seven behaviors on three charts: the issue's bars, 4 px apart; five bars 60 px apart; and the donut. Six behaviors are one to three lines. The fifth is the earlier default, a plain function `hullLimit` in the switcher's story file, on while the pointer is within 8 px of the convex hull of the marks. The seventh is a plain function of five lines, the mark with the largest share within 60 px, used as `.tooltip({ focus: largestNear })`, as an argument (`Focus.first([Focus.hit(), largestNear])`) or lifted to chain (`Focus.from(largestNear).within(16)`). What each picked under the real mouse:
+
+| Behavior                                     | 1 px under INF→VO | INF→PK's row, 14 px past its end | 70 px past INF→PK | middle of a 60 px gap | donut hole | 5 px into the hole |
+| -------------------------------------------- | ----------------- | -------------------------------- | ----------------- | --------------------- | ---------- | ------------------ |
+| Default                                      | INF→VO            | INF→PK                           | none              | none                  | none       | Bass               |
+| Hit only                                     | none              | none                             | none              | none                  | none       | none               |
+| Closest center, 40 px                        | PK→VO             | none                             | none              | none                  | none       | none               |
+| Closest outline, `.within(16)`               | INF→VO            | PK→INF                           | none              | none                  | none       | Bass               |
+| Earlier default, hull limit                  | INF→VO            | INF→PK                           | none              | other→other           | Salmon     | Bass               |
+| A plain function, largest share within 60 px | PK→PK             | VO→other                         | PK→INF            | INF→INF               | Bass       | Bass               |
+
+Each point was approached from off the chart. Click to pin picks what the default picks, on a click: a click on INF→VO pins it, and it stays through moves, leaving the chart and a click in a gap next to it. A click 70 px right of INF→PK clears it. Sweeping down across four bars, hit only closes in each 4 px gap and the default never closes.
+| A plain function, largest share within 60 px | PK→PK | VO→other | a bar within 60 px | INF→INF | Bass | Bass |
 
 ### Show regions
 
-Every live chart on the page has a **Show regions** box under it. It tints, for every place the pointer could be, the mark the current behavior would pick there, with the current focus stronger and the borders it would have with no focus dashed. It also draws what the behavior measures to, the hull of the marks, the `.within` limits, and a line from the pointer to the point the gap was measured to. The regions are found by running the behavior at every point of a 3 px grid, so they are right for any behavior, a plain function included. The idea and the look are from Dragology's overlay visualizer, which draws each drag operator's targets, hull and gap over the running demo.
+Every live chart on the page has a **Show regions** box under it. It tints, for every place the pointer could be, the mark the current behavior would pick there, with the current focus stronger and the borders it would have with no focus dashed. The marks stay untinted. It also draws each mark's reach, the 16 px band around its outline, and the current focus's 20 px reach dashed. It draws what the behavior measures to, and a line from the pointer to the measured point. The regions are found by running the behavior at every point of a 3 px grid, so they are right for any behavior, a plain function included. The idea and the look are from Dragology's overlay visualizer, which draws each drag operator's targets over the running demo.
 
-![The issue bar chart with Show regions on](img/focus-regions.png)
+![The issue bar chart with Show regions on: each bar's 16 px reach, and the focused bar's 20 px reach dashed](img/focus-regions.png)
+
+![The donut with Show regions on: the middle of the hole is untinted](img/donut-regions.png)
 
 ### What the runtime must provide
 
-The behaviors are user code today. The runtime around them is not. The prototype does each piece by hand in `focusRuntime.ts`, and with these public that file is one call to `pointer().snap`.
+The behaviors are user code today. The runtime around them is not. The prototype does each piece by hand in `focusRuntime.ts`. Version 1 builds each piece inside the library for `.tooltip()`, but none is public yet. With these public, `focusRuntime.ts` is one call to `pointer().snap`.
 
-| Piece                                          | The prototype, by hand                                                                                                                        | Public API that replaces it                                                                             | Issue |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----- |
-| Candidates                                     | Picks the drawn SVG elements with a CSS selector and a count, measures their boxes, reads their rows from the chart's private id-to-item map. | `snap(selectAll(name))` builds candidates from the layout frame, which already records each node's box. | #830  |
-| Placed position                                | Each story passes the axes that place its marks, such as `position: ["y"]`.                                                                   | The layout reports where it placed each mark and on which axes.                                         | #849  |
-| Stable key                                     | Each story passes a key function. Marks with one key are one candidate (a stack, a year).                                                     | Keys from spec position and data key.                                                                   | #673  |
-| The current focus, and re-running on a new key | Keeps the chosen key in a `signal`, set only when it changes, and finds `current` by key in each new frame.                                   | The result of `snap` changes only when its key changes.                                                 | #830  |
-| The pointer                                    | Listens on the container and converts to SVG pixels. A tap holds the pointer until the next tap.                                              | `pointer()` as the frame's pointer, holding a tap on touch.                                             |       |
-| The click                                      | A DOM `click` listener sets `clicked`.                                                                                                        | A click in the frame. `click()` today counts only a press and release on one mark.                      | #830  |
-| The box out of the pointer's way               | CSS that finds the box by its stroke color and sets `pointer-events: none`.                                                                   | A floating layer is never a pointer target.                                                             |       |
-| Registering the pointer                        | A `live()` channel reads `ping()`, so the chart builds its id-to-item map.                                                                    | `snap` registers its input itself.                                                                      | #830  |
-| Reading the frame, for a tool                  | `inspect(container)` hands Show regions the candidates, the current focus, the last pointer and result, and a call after each frame.          | The input's frame and result are data that any code can read.                                           | #830  |
+| Piece                                          | The prototype, by hand                                                                                                                                      | Public API that replaces it                                                                             | Issue |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----- |
+| Candidates                                     | Picks the drawn SVG elements with a CSS selector and a count, measures their boxes, reads their rows from the chart's private id-to-item map.               | `snap(selectAll(name))` builds candidates from the layout frame, which already records each node's box. | #830  |
+| Outlines                                       | Reads each element's shape: a rect is a box, an ellipse is round, a stroked path is its segments, a filled path is a region. A curve is sampled every 4 px. | The display item's outline, which the runtime already has (its box and a path's `d`).                   |       |
+| A line's rows                                  | Draws a circle per row with the same `scatter` as the line, hidden except the focused one, and reads the points off them.                                   | The line records where it drew each row. Version 1 does this inside the library.                        |       |
+| Placed position                                | Each story passes the axes that place its marks, such as `position: ["y"]`.                                                                                 | The layout reports where it placed each mark and on which axes.                                         | #849  |
+| Stable key                                     | Each story passes a key function. Marks with one key are one candidate (a stack, a year).                                                                   | Keys from spec position and data key.                                                                   | #673  |
+| The current focus, and re-running on a new key | Keeps the chosen key in a `signal`, set only when it changes, and finds `current` by key in each new frame, among the candidates and their points.          | The result of `snap` changes only when its key changes.                                                 | #830  |
+| The pointer                                    | Listens on the container and converts to SVG pixels. A tap holds the pointer until the next tap.                                                            | `pointer()` as the frame's pointer, holding a tap on touch.                                             |       |
+| The click                                      | A DOM `click` listener sets `clicked`.                                                                                                                      | A click in the frame. `click()` today counts only a press and release on one mark.                      | #830  |
+| The box out of the pointer's way               | CSS that finds the box by its stroke color and sets `pointer-events: none`.                                                                                 | A floating layer is never a pointer target.                                                             |       |
+| Registering the pointer                        | A `live()` channel reads `ping()`, so the chart builds its id-to-item map.                                                                                  | `snap` registers its input itself.                                                                      | #830  |
+| Reading the frame, for a tool                  | `inspect(container)` hands Show regions the candidates, the current focus, the last pointer and result, and a call after each frame.                        | The input's frame and result are data that any code can read.                                           | #830  |
 
 One hook of the first prototype is gone: re-targeting each pointer event to the focused mark's element. The adapter now writes the focus directly.
 
 ### Compared with Dragology
 
-Dragology's behavior is `(frame: DragFrame) => DragResult`, with a frame of only `{ pointer }` and a result that carries a preview, a drop state and a `gap`, the pointer's distance to where the behavior puts the grab point (`src/DragBehavior.tsx`). A focus behavior keeps that shape. Three things differ. A hover has no grab point, so a mark contributes its placed position. A direct hit exists. And a behavior keeps no memory: Dragology keeps memory in an operator object built fresh for each drag (`closest` keeps `lastBest`, `whenFar` keeps `inForeground`), while a hover has no start and end to build one for, so the runtime passes `current`, and the head start and the hysteresis read it.
+Dragology's behavior is `(frame: DragFrame) => DragResult`, with a frame of only `{ pointer }` and a result that carries a preview, a drop state and a `gap`, the pointer's distance to where the behavior puts the grab point (`src/DragBehavior.tsx`). A focus behavior keeps the shape of a function from a frame, and returns the mark it chose, or nothing. Four things differ.
+
+- A hover has no grab point, so a mark contributes its placed position and its outline.
+- A direct hit exists.
+- How near counts. Dragology's `whenFar` compares the gap of the target it chose. `within` drops the marks out of reach before the behavior chooses, because the mark nearest by position can be far from the pointer while another mark is near it.
+- A behavior keeps no memory. Dragology keeps memory in an operator object built fresh for each drag (`closest` keeps `lastBest`, `whenFar` keeps `inForeground`), while a hover has no start and end to build one for, so the runtime passes `current`.
 
 Dragology already spells composition this way. `d.closest(states, { stickiness: 4 }).whenFar(d.fixed(start), { gapIn: 8, gapOut: 12 })` is a call over a list, then a chained method. The focus family keeps that rule.
 
-The same frame could later serve dragging. There the candidates are the reachable states, each with the position the layout gives the dragged mark in that state, and `gap` means what it means in Dragology. A drag also needs a preview and a drop state, which a hover does not.
+Dragology also has two ways to follow the pointer. `d.closest` snaps to one of several states, and `d.between` moves continuously between them. `.snap` is the first: it picks one row of a line. A line drawn from a function has no rows, so version 1 shows one box for the whole line. The right box there shows the function's value at the pointer, which is `d.between`. It needs content that changes on every pointer move without a re-run of the layout, so it is a follow-up. A sketch:
+
+```js
+// The point of the line nearest the pointer, anywhere along it, and the
+// function's value there.
+line({ x: "t", y: (t) => Math.sin(t) }).tooltip({
+  focus: Focus.first([Focus.hit(), Focus.closest()]).within(16).between(),
+});
+```
+
+The same frame could later serve dragging. There the candidates are the reachable states, each with the position the layout gives the dragged mark in that state, and the gap means what it means in Dragology. A drag also needs a preview and a drop state, which a hover does not.
 
 ## Rule 4: groups come from structure
 
 A tooltip for a group comes from structure. There is no chart-wide mode.
 
-**On an operator.** `spread({ by: "lake", dir: "x" }).tooltip()` is a tooltip for each lake's whole stack. Its default content is a title from the group's key, one row per child of the group, and a total. This needs operators to take `.name()`, which today only marks do (#802).
+**On an operator.** `spread({ by: "lake", dir: "x" }).tooltip()` is a tooltip for each lake's whole stack. Its default content is a title from the group's key, one row per child of the group, and a total. This needs operators to take `.name()`, which on main only marks do (#802). Version 1 adds it.
 
 ![Lake C outlined with a tooltip listing every species and a total](img/stack-whole.png)
 
@@ -314,7 +384,25 @@ spread({ by: "lake", dir: "x" }).tooltip();
 rect({ h: "count", fill: "species" }).tooltip({ by: "lake" });
 ```
 
-**With `by` on a mark.** `line(...).tooltip({ by: "year" })` groups the rows of every line by year, so the focus is the point of each series at one year. No node in the tree holds that group. This is the shared tooltip that Plotly calls `hovermode: "x unified"`, ECharts `trigger: "axis"`, and Highcharts `shared`. Observable Plot does not have it (its issue 2003 is open). Other libraries need a chart-wide mode for this because their tooltip belongs to one mark, and the points of every series at one year are many marks.
+**A line, one row.** With no `by`, a line drawn through rows snaps to its row nearest the pointer (Rule 3). The box shows that row, and a marker sits on its point. This is built in version 1. Story "Proposals/Tooltips/Shared Line Tooltip", Pinned Row; live on the page:
+
+![Four lines with a marker on Construction at 2006 and a box for that row](img/lines-row.png)
+
+```js
+chart(yearly)
+  .flow(group({ by: "series" }))
+  .mark(line({ x: "year", y: "count", stroke: "series" }).tooltip());
+```
+
+```python
+chart(yearly).flow(group(by="series")).mark(
+    line(x="year", y="count", stroke="series").tooltip()
+)
+```
+
+The prototype draws a circle per row with the same `scatter` as the line, hidden except the focused one, because a line does not expose where it drew each row.
+
+**With `by` on a mark.** One box for every series at the nearest year is proposed, not built. `line(...).tooltip({ by: "year" })` groups the rows of every line by year, so the focus is the point of each series at one year. No node in the tree holds that group. This is the shared tooltip that Plotly calls `hovermode: "x unified"`, ECharts `trigger: "axis"`, and Highcharts `shared`. Observable Plot does not have it (its issue 2003 is open). Other libraries need a chart-wide mode for this because their tooltip belongs to one mark, and the points of every series at one year are many marks.
 
 The rule and the dots are not tooltip options. They are two more ordinary layers over the same focus. Here the focus is a part of each line, its point at one year, and not a whole mark. The prototype still gets those points from an extra layer of invisible circles, because a line does not yet expose where it placed each row. Story "Proposals/Tooltips/Shared Line Tooltip":
 
@@ -372,7 +460,7 @@ With floating boxes, 0 of 45 elements move when two boxes open (left). When the 
 
 ![Floating boxes](img/edge-flip.png) ![Boxes that take room](img/edge-naive.png)
 
-Across the pinned stories, 0 elements move in five of six (60 to 398 elements each). In the shared-lines story 85 of 95 move by 0.75 px. The cause is an empty layer in the closed render, a library bug of its own.
+Across the pinned stories, 0 elements move in five of six (60 to 398 elements each). In the shared-lines story 85 of 95 move by 0.75 px. The cause is an empty layer in the closed render, a library bug of its own. The one-box-for-the-year story now always draws its rule and hides it with no focus. The live one-row demo still moves its lines by 0.75 px when the box opens, because the box's layer is empty while it is closed.
 
 ## Rule 6: speed without a special tier
 
@@ -409,7 +497,7 @@ const focus = focusFrom(() => hitRow(p)?.path);
 
 ## Rule 7: static files and screen readers
 
-The same content is also written as an SVG `<title>` on the mark. A saved SVG and a static Python export still show the browser's own tooltip, and screen readers announce it. Vega-Lite does the same with its ARIA description. Keyboard focus and touch are not designed here. An anchored box is what makes them possible later.
+The same content is also written as an SVG `<title>` on the mark. A saved SVG and a static Python export still show the browser's own tooltip, and screen readers announce it. Vega-Lite does the same with its ARIA description. Version 1 writes this `<title>`. Touch is in Rule 3. Keyboard focus is not designed here. An anchored box is what makes it possible later.
 
 ```html
 <rect x="0" y="0" width="520" height="22">
@@ -516,7 +604,36 @@ The gaps every system leaves open:
 
 ## Findings
 
-The bugs below get fixed as part of implementing this, not filed separately.
+### Where this stands
+
+Version 1 is draft PR #1401. It builds `.tooltip()` and `.tooltip([fields])` on marks, in JS and Python, and a public `.name()` on operators. It runs the default focus behavior inside the library. `Focus` is internal and not exported. Everything else here is still proposed.
+
+#803 (build `.label()` from the public selection machinery) is advanced, not finished. Labels and tooltips now share one lowering, `lowerSelectionLayers`. Four gaps remain:
+
+- a layer that resolves after the axes;
+- a layer that is not framed as its own chart;
+- constraints across layers;
+- a placement hook that runs after the layout is solved.
+
+Fixed in version 1, from the findings below:
+
+- Nothing set `pointer-events`, so a box under the cursor stole the hit.
+- A pointer input had to be registered by a read in the spec.
+- A drag lost the pointer when it left the chart.
+- A static drawing had no `<title>` on its marks.
+
+Still open:
+
+- A layer with no marks moves the plot.
+- `filter` with no match still calls the mark with an empty list.
+- `pointer().dataPos()` is undefined when the chart sets its own size (#1403).
+- A relational mark paints under the marks it references.
+- A chart nested in another shares its scale for a field of the same name.
+- There is no number formatting outside tooltips.
+
+### What the prototype found
+
+The bugs below get fixed as part of implementing this, not filed separately. The prototype is eight stories, one helper file, the focus family in `focus.ts` and the runtime stand-ins in `focusRuntime.ts`. It edits no library code.
 
 | Finding                                                                            | What it means                                                                                                            | Issue                     |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
@@ -526,13 +643,13 @@ The bugs below get fixed as part of implementing this, not filed separately.
 | Node ids change on every re-run.                                                   | The focus is compared by key.                                                                                            | #673                      |
 | Every pointer move re-runs layout unless split by hand.                            | The prototype splits focus from position by hand.                                                                        | #674 is the long-term fix |
 | Hover cannot be captured for visual tests.                                         | The pictures pin the focus.                                                                                              | #672                      |
-| `pointer().dataPos()` is undefined when the chart sets its own `w`/`h`.            | The interactive line and scatter stories size the render instead.                                                        | unfiled                   |
-| A layer with no marks moves the plot.                                              | 0.75 px in the closed line story, and the x axis by 46 px in a render-sized chart.                                       | unfiled                   |
-| Nothing sets `pointer-events`.                                                     | A box under the cursor steals the hit and flickers.                                                                      | unfiled                   |
+| `pointer().dataPos()` is undefined when the chart sets its own `w`/`h`.            | The live line and scatter charts keep their own size and read where each row was drawn off the drawn marks.              | #1403                     |
+| A layer with no marks moves the plot.                                              | 0.75 px in the line stories, and the x axis by 46 px in a render-sized chart.                                            | unfiled                   |
+| Nothing sets `pointer-events`.                                                     | A box under the cursor steals the hit and flickers. The prototype fixes it with story CSS.                               | fixed in version 1        |
 | A chart nested in a tooltip shares the outer chart's scale for a same-named field. | The nested chart renames `count` to `n`.                                                                                 | unfiled                   |
 | A relational mark paints under the marks it references.                            | The box needed `.zOrder(1)`.                                                                                             | unfiled                   |
 | `filter` with no match still calls the mark with an empty list.                    | Each story adds a `group` after the filter.                                                                              | unfiled                   |
-| There is no number formatting.                                                     | The helpers carry their own formatters.                                                                                  | unfiled                   |
+| There is no number formatting.                                                     | The helpers carry their own formatters. Version 1 formats tooltip values only.                                           | unfiled                   |
 | The box's side is picked by hand.                                                  | A first-fit `choose` over sides should pick it, as the label chooser does. This is a declared shortcut in the prototype. | unfiled                   |
 
 Related issues:
@@ -555,6 +672,6 @@ Related issues:
 ## Not prototyped
 
 - `.layer(fn)` on a mark
-- `.name()` on an operator
+- `.name()` on an operator (built in version 1)
 - `.floating()`
 - `pointer().snap()`

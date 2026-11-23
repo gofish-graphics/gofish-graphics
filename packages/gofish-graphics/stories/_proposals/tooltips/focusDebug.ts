@@ -6,8 +6,9 @@
  * the chart, with the real candidates and the real current focus. So they are
  * right for every behavior, a plain user function included, with no geometry
  * re-derived per behavior. On top, it draws what the behavior declares it
- * reads (`reads` in focus.ts): the measured points, the hull and the
- * `.within` limits, and the pointer's line to the point it was measured to.
+ * reads (`reads` in focus.ts): each mark's reach (`.within`), the current
+ * focus's longer reach, the measured points, and the pointer's line to the
+ * point it was measured to.
  *
  * This file needs only the behavior, the candidates, the current focus and
  * the pointer, which `inspect` in focusRuntime.ts hands over. With
@@ -15,7 +16,15 @@
  * it knows is where to put its layer: in the chart's `<svg>`, under the
  * tooltip box.
  */
-import { hullOf, nearestInBox, readsOf, type Candidate, type FocusBehavior, type Point } from "./focus";
+import {
+  measuredPoint,
+  nearestOnOutline,
+  readsOf,
+  type Candidate,
+  type FocusBehavior,
+  type Outline,
+  type Point,
+} from "./focus";
 import { inspect, type Inspector } from "./focusRuntime";
 import { TOOLTIP_STROKE } from "./helpers";
 
@@ -27,13 +36,17 @@ const MAGENTA = "#d100d1";
 const TINTS = ["#f59f00", "#0ca678", "#7048e8", "#f76707", "#74b816"];
 const INK = "#1f2937";
 
+/** Every candidate a behavior can choose: the marks, and a line's points
+ *  after them, so a snap's regions are the rows'. */
+const choosable = (candidates: Candidate[]) => [...candidates, ...candidates.flatMap((c) => c.points ?? [])];
+
 /* ------------------------------- sampling -------------------------------- */
 
 export type Regions = {
   cell: number;
   cols: number;
   rows: number;
-  /** Per cell, the index of the chosen candidate, or -1 for no focus. */
+  /** Per cell, the index of the chosen candidate (`choosable`), or -1. */
   labels: Int32Array;
 };
 
@@ -57,7 +70,7 @@ export async function sampleRegions(
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
   const labels = new Int32Array(cols * rows);
-  const index = new Map(candidates.map((c, i) => [c, i]));
+  const index = new Map(choosable(candidates).map((c, i) => [c, i]));
   let ms = 0;
   let j = 0;
   while (j < rows) {
@@ -65,7 +78,7 @@ export async function sampleRegions(
     for (; j < rows && performance.now() - t < budget; j++)
       for (let i = 0; i < cols; i++) {
         const pointer = { x: (i + 0.5) * cell, y: (j + 0.5) * cell };
-        const { choice } = behavior({ pointer, candidates, current, clicked: true });
+        const choice = behavior({ pointer, candidates, current, clicked: true });
         labels[j * cols + i] = choice ? (index.get(choice) ?? -1) : -1;
       }
     ms += performance.now() - t;
@@ -80,8 +93,7 @@ export async function sampleRegions(
 /** One path per region (row runs) and one path of the borders between them.
  *  With `except`, a border that is also one of `except`'s is left out. */
 function regionPaths({ cell, cols, rows, labels }: Regions, except?: Int32Array) {
-  const differs = (a: number, b: number) =>
-    labels[a] !== labels[b] && !(except && except[a] !== except[b]);
+  const differs = (a: number, b: number) => labels[a] !== labels[b] && !(except && except[a] !== except[b]);
   const fills = new Map<number, string[]>();
   for (let j = 0; j < rows; j++) {
     let i = 0;
@@ -149,53 +161,68 @@ const el = (tag: string, attrs: Record<string, string | number>) => {
 };
 const thin = { "vector-effect": "non-scaling-stroke", fill: "none" };
 
-/** The hull grown by `r` px: its edges pushed out, joined by arcs. */
-function grown(hull: Point[], r: number): string {
-  if (hull.length < 3) return "";
-  const n = hull.length;
-  const c = hull.reduce((s, p) => ({ x: s.x + p.x / n, y: s.y + p.y / n }), { x: 0, y: 0 });
-  const normal = (a: Point, b: Point) => {
-    const [dx, dy] = [b.x - a.x, b.y - a.y];
-    const len = Math.hypot(dx, dy) || 1;
-    let [nx, ny] = [dy / len, -dx / len];
-    const mx = (a.x + b.x) / 2 - c.x;
-    const my = (a.y + b.y) / 2 - c.y;
-    if (nx * mx + ny * my < 0) [nx, ny] = [-nx, -ny];
-    return Math.atan2(ny, nx);
-  };
-  const pts: Point[] = [];
-  for (let i = 0; i < n; i++) {
-    const p = hull[i];
-    const a0 = normal(hull[(i - 1 + n) % n], p);
-    let a1 = normal(p, hull[(i + 1) % n]);
-    // turn the short way round the corner
-    while (a1 - a0 > Math.PI) a1 -= 2 * Math.PI;
-    while (a0 - a1 > Math.PI) a1 += 2 * Math.PI;
-    const steps = Math.max(1, Math.ceil(Math.abs(a1 - a0) / 0.2));
-    for (let s = 0; s <= steps; s++) {
-      const t = a0 + ((a1 - a0) * s) / steps;
-      pts.push({ x: p.x + r * Math.cos(t), y: p.y + r * Math.sin(t) });
-    }
+/**
+ * The parts of an outline as SVG shapes, each painted with `paint` and
+ * stroked `grow` px wide on each side with round joins: drawn so, a shape
+ * covers exactly the points within `grow` px of the part (a box becomes a
+ * rounded box, a segment a capsule).
+ */
+function parts(g: Element, outline: Outline, paint: string, grow: number) {
+  const stroke = { stroke: paint, "stroke-width": 2 * grow, "stroke-linejoin": "round", "stroke-linecap": "round" };
+  const solid = grow > 0 ? stroke : { stroke: "none" };
+  for (const { box: b, round, segment, region } of outline) {
+    if (segment)
+      g.appendChild(el("path", { d: `M${segment[0].x} ${segment[0].y}L${segment[1].x} ${segment[1].y}`, fill: "none", ...stroke, "stroke-width": Math.max(2 * grow, 2) }));
+    else if (region)
+      g.appendChild(el("path", { d: "M" + region.map(([a]) => `${a.x} ${a.y}`).join("L") + "Z", fill: paint, ...solid }));
+    else if (round) g.appendChild(el("circle", { cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, r: (b.x1 - b.x0) / 2, fill: paint, ...solid }));
+    else g.appendChild(el("rect", { x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0, fill: paint, ...solid }));
   }
-  return "M" + pts.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join("L") + "Z";
+}
+
+/**
+ * The edge of a candidate's reach, the points `reach` px from its outline,
+ * as a 1.2 px ring: the outline grown by `reach` plus half the ring, less
+ * the outline grown by `reach` less half, as a mask over a magenta rect.
+ * `dashed` paints the ring through a checker pattern.
+ */
+function reachRing(defs: Element, g: Element, id: string, c: Candidate, reach: number, w: number, h: number, dashed: boolean) {
+  const mask = el("mask", { id, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: w, height: h });
+  const outer = el("g", {});
+  const inner = el("g", {});
+  parts(outer, c.outline, "white", reach + 0.6);
+  parts(inner, c.outline, "black", Math.max(0, reach - 0.6));
+  mask.append(outer, inner);
+  defs.appendChild(mask);
+  g.appendChild(
+    el("rect", { x: 0, y: 0, width: w, height: h, fill: dashed ? `url(#${id}-dash)` : MAGENTA, "fill-opacity": dashed ? 1 : 0.7, mask: `url(#${id})` })
+  );
+  if (dashed) {
+    const pattern = el("pattern", { id: `${id}-dash`, patternUnits: "userSpaceOnUse", width: 8, height: 8 });
+    pattern.append(el("rect", { x: 0, y: 0, width: 4, height: 4, fill: MAGENTA }), el("rect", { x: 4, y: 4, width: 4, height: 4, fill: MAGENTA }));
+    defs.appendChild(pattern);
+  }
 }
 
 const center = (c: Candidate): Point => ({ x: (c.box.x0 + c.box.x1) / 2, y: (c.box.y0 + c.box.y1) / 2 });
 
-/** Where a closest read measures a candidate to, as a point, or as a line
- *  when the position has one axis. */
-function measuredMarks(g: Element, candidates: Candidate[], to: string, hull: Point[], radius: number) {
-  const xs = hull.map((p) => p.x);
-  const ys = hull.map((p) => p.y);
-  const [left, bottom] = [Math.min(...xs), Math.max(...ys)];
+/** Where a closest read measures a candidate to: a point, or a tick when the
+ *  position has one axis, or the outline. A mark with no position (a line)
+ *  is measured to its outline, which its reach ring already shows. */
+function measuredMarks(g: Element, candidates: Candidate[], to: string, radius: number) {
+  const left = Math.min(...candidates.map((c) => c.box.x0));
+  const bottom = Math.max(...candidates.map((c) => c.box.y1));
   for (const c of candidates) {
     if (to === "outline") {
-      for (const { box, round } of c.outline)
-        g.appendChild(
-          round
-            ? el("circle", { cx: (box.x0 + box.x1) / 2, cy: (box.y0 + box.y1) / 2, r: (box.x1 - box.x0) / 2, stroke: MAGENTA, "stroke-width": 1, ...thin })
-            : el("rect", { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0, stroke: MAGENTA, "stroke-width": 1, ...thin })
-        );
+      const lines = el("g", {});
+      parts(lines, c.outline, "none", 0);
+      for (const e of lines.children) {
+        e.setAttribute("fill", "none");
+        e.setAttribute("stroke", MAGENTA);
+        e.setAttribute("stroke-width", "1");
+        e.setAttribute("vector-effect", "non-scaling-stroke");
+      }
+      g.appendChild(lines);
       continue;
     }
     const at = to === "center" ? center(c) : c.position;
@@ -205,7 +232,7 @@ function measuredMarks(g: Element, candidates: Candidate[], to: string, hull: Po
         g.appendChild(el("circle", { cx: at.x, cy: at.y, r: radius, stroke: MAGENTA, "stroke-width": 0.75, "stroke-dasharray": "2 3", opacity: 0.6, ...thin }));
     } else if (at.y !== undefined) {
       // Placed in y only: a tick on the axis the bars start from.
-      g.appendChild(el("path", { d: `M${left} ${at.y}H${left + 7}`, stroke: MAGENTA, "stroke-width": 2, ...thin }));
+      g.appendChild(el("path", { d: `M${left} ${at.y}h7`, stroke: MAGENTA, "stroke-width": 2, ...thin }));
     } else if (at.x !== undefined) {
       g.appendChild(el("path", { d: `M${at.x} ${bottom - 7}V${bottom}`, stroke: MAGENTA, "stroke-width": 2, ...thin }));
     }
@@ -213,8 +240,9 @@ function measuredMarks(g: Element, candidates: Candidate[], to: string, hull: Po
 }
 
 /** Dragology's `DistanceLine`: a dashed magenta line on a white halo,
- *  labeled with the gap. */
-function distanceLine(g: Element, from: Point, to: Point, gap: number) {
+ *  labeled with the distance. */
+function distanceLine(g: Element, from: Point, to: Point) {
+  const gap = Math.hypot(to.x - from.x, to.y - from.y);
   const line = { x1: from.x, y1: from.y, x2: to.x, y2: to.y, "vector-effect": "non-scaling-stroke" };
   g.appendChild(el("line", { ...line, stroke: "white", "stroke-width": 5, "stroke-linecap": "round" }));
   g.appendChild(el("line", { ...line, stroke: MAGENTA, "stroke-width": 1.5, "stroke-dasharray": "4 3" }));
@@ -231,7 +259,7 @@ function distanceLine(g: Element, from: Point, to: Point, gap: number) {
     "text-anchor": "middle",
     "dominant-baseline": "central",
   });
-  label.textContent = Number.isFinite(gap) ? `${Math.round(gap)}px` : "∞";
+  label.textContent = `${Math.round(gap)}px`;
   g.appendChild(label);
 }
 
@@ -281,7 +309,7 @@ export function regionsOverlay(container: HTMLElement, cell = 3): RegionsOverlay
   let cells = 0;
   let jobs = 0;
   let pending = false;
-  const maskId = `focus-regions-mask-${++overlays}`;
+  const ids = `focus-regions-${++overlays}`;
   let shown: { regions: Regions; candidates: Candidate[] } | undefined;
   let stop: (() => void) | undefined;
   // A re-render draws a new <svg>: put the layer into it. Mutations made by
@@ -334,12 +362,16 @@ export function regionsOverlay(container: HTMLElement, cell = 3): RegionsOverlay
           if (job === jobs) pending = false;
         });
     }
-    // The live decision: from the pointer to the point the gap was measured to.
+    // The live decision: from the pointer to the point the choice was
+    // measured to (the pointer itself inside it).
     liveG!.replaceChildren();
     const p = f.pointer;
-    const r = f.result;
-    const choice = r?.choice && f.candidates.find((c) => c.key === r.choice!.key);
-    if (p && r && choice) distanceLine(liveG!, p, r.at ?? nearestInBox(p, choice.box), r.gap);
+    const choice = f.choice && choosable(f.candidates).find((c) => c.key === f.choice!.key);
+    if (p && choice) {
+      const close = readsOf(behavior).find((r) => r.kind === "closest");
+      const { at, d } = nearestOnOutline(p, choice.outline);
+      distanceLine(liveG!, p, d === 0 ? p : close?.kind === "closest" ? measuredPoint(p, choice, close.to) : at);
+    }
   }
 
   function paint(
@@ -350,60 +382,60 @@ export function regionsOverlay(container: HTMLElement, cell = 3): RegionsOverlay
     h: number,
     stale: () => boolean
   ) {
-      const hull = hullOf(f.candidates);
-      const reads = readsOf(behavior);
-      msWithout = 0;
-      cells = regions.cols * regions.rows;
-      shown = { regions, candidates: f.candidates };
-      regionsG!.replaceChildren();
-      const { fills, border } = regionPaths(regions);
-      const tint = tintsFor(regions, f.candidates.length);
-      const cur = f.current ? f.candidates.indexOf(f.current) : -1;
-      // The tints stop at the marks, so the marks keep their colors (even a
-      // faint tint turns blue bars gray); the borders still cross the marks.
-      const mask = el("mask", { id: maskId, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: w, height: h });
-      mask.appendChild(el("rect", { x: 0, y: 0, width: w, height: h, fill: "white" }));
-      for (const c of f.candidates)
-        for (const { box: b, round } of c.outline)
-          mask.appendChild(
-            round
-              ? el("circle", { cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, r: (b.x1 - b.x0) / 2, fill: "black" })
-              : el("rect", { x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0, fill: "black" })
-          );
-      const tints = el("g", { mask: `url(#${maskId})` });
-      for (const [l, d] of fills)
-        tints.appendChild(el("path", { d: d.join(""), fill: TINTS[tint[l]], "fill-opacity": l === cur ? 0.5 : 0.25 }));
-      regionsG!.append(mask, tints);
-      regionsG!.appendChild(el("path", { d: border, stroke: INK, "stroke-width": 1, "stroke-opacity": 0.75, ...thin }));
-      // The borders with no current focus, where they differ: a second pass,
-      // run after the first is shown.
-      if (f.current) {
-        const slot = el("g", {});
-        regionsG!.appendChild(slot);
-        pending = true;
-        sampleRegions(behavior, f.candidates, undefined, w, h, cell, stale)
-          .then((res) => {
-            if (!res) return;
-            msWithout = res.ms;
-            const d = regionPaths(res.regions, regions.labels).border;
-            if (d) slot.appendChild(el("path", { d, stroke: INK, "stroke-width": 1, "stroke-dasharray": "3 2", ...thin }));
-          })
-          .finally(() => {
-            if (!stale()) pending = false;
-          });
-      }
-      // The geometry the behavior declares it reads.
-      regionsG!.appendChild(el("path", { d: "M" + hull.map((p) => `${p.x} ${p.y}`).join("L") + "Z", stroke: MAGENTA, "stroke-width": 1.25, ...thin }));
-      const closests = reads.filter((r) => r.kind === "closest");
-      const geo = el("g", {});
-      if (!closests.length) measuredMarks(geo, f.candidates, "position", hull, Infinity);
-      for (const r of closests) measuredMarks(geo, f.candidates, r.to, hull, r.radius);
-      for (const r of reads)
-        if (r.kind === "within") {
-          regionsG!.appendChild(el("path", { d: grown(hull, r.gap), stroke: MAGENTA, "stroke-width": 1, ...thin }));
-          if (f.current) regionsG!.appendChild(el("path", { d: grown(hull, r.out), stroke: MAGENTA, "stroke-width": 1, "stroke-dasharray": "4 3", ...thin }));
-        }
-      regionsG!.appendChild(geo);
+    const reads = readsOf(behavior);
+    const all = choosable(f.candidates);
+    msWithout = 0;
+    cells = regions.cols * regions.rows;
+    shown = { regions, candidates: all };
+    regionsG!.replaceChildren();
+    const defs = el("defs", {});
+    regionsG!.appendChild(defs);
+    const { fills, border } = regionPaths(regions);
+    const tint = tintsFor(regions, all.length);
+    const cur = f.current ? all.findIndex((c) => c.key === f.current!.key) : -1;
+    // The tints stop at the marks, so the marks keep their colors (even a
+    // faint tint turns blue bars gray); the borders still cross the marks.
+    const mask = el("mask", { id: `${ids}-marks`, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: w, height: h });
+    mask.appendChild(el("rect", { x: 0, y: 0, width: w, height: h, fill: "white" }));
+    for (const c of f.candidates) parts(mask, c.outline, "black", c.outline.some((o) => o.segment) ? 1 : 0);
+    defs.appendChild(mask);
+    const tints = el("g", { mask: `url(#${ids}-marks)` });
+    for (const [l, d] of fills)
+      tints.appendChild(el("path", { d: d.join(""), fill: TINTS[tint[l]], "fill-opacity": l === cur ? 0.5 : 0.25 }));
+    regionsG!.appendChild(tints);
+    regionsG!.appendChild(el("path", { d: border, stroke: INK, "stroke-width": 1, "stroke-opacity": 0.75, ...thin }));
+    // The borders with no current focus, where they differ: a second pass,
+    // run after the first is shown.
+    if (f.current) {
+      const slot = el("g", {});
+      regionsG!.appendChild(slot);
+      pending = true;
+      sampleRegions(behavior, f.candidates, undefined, w, h, cell, stale)
+        .then((res) => {
+          if (!res) return;
+          msWithout = res.ms;
+          const d = regionPaths(res.regions, regions.labels).border;
+          if (d) slot.appendChild(el("path", { d, stroke: INK, "stroke-width": 1, "stroke-dasharray": "3 2", ...thin }));
+        })
+        .finally(() => {
+          if (!stale()) pending = false;
+        });
+    }
+    // The geometry the behavior declares it reads: each mark's reach, and
+    // the current focus's longer one dashed (a line's, for a row).
+    const current = f.current && f.candidates.find((c) => c.key === f.current!.key || c.points?.some((q) => q.key === f.current!.key));
+    for (const r of reads)
+      if (r.kind === "within")
+        f.candidates.forEach((c, i) => {
+          if (c === current) reachRing(defs, regionsG!, `${ids}-reach-${i}`, c, r.out, w, h, true);
+          else reachRing(defs, regionsG!, `${ids}-reach-${i}`, c, r.reach, w, h, false);
+        });
+    const geo = el("g", {});
+    const closests = reads.filter((r) => r.kind === "closest");
+    for (const r of closests) measuredMarks(geo, f.candidates, r.to, r.radius);
+    // A snap's points, measured to their own positions.
+    if (reads.some((r) => r.kind === "snap")) measuredMarks(geo, f.candidates.flatMap((c) => c.points ?? []), "position", Infinity);
+    regionsG!.appendChild(geo);
   }
 
   return {

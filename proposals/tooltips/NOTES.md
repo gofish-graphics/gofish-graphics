@@ -38,13 +38,93 @@ Story-side fixes made for the live demos:
   held where it tapped until the next tap.
 - `noPointer` (now `floatingOutOfTheWay` in `focusRuntime.ts`) also turns off hits for everything painted after the box, so a
   chart inside a tooltip does not take the hit and flicker.
-- The line rule is always drawn and hidden with no focus, so the y axis keeps
-  0 whether the box is open or not.
+- The line rule (one box for the year) is always drawn and hidden with no
+  focus, so the y axis keeps 0 whether the box is open or not. The live
+  one-row lines demo has no rule, and its box's layer is empty while closed,
+  so opening the box moves the lines by 0.75 px (the empty-layer bug).
 - A `live()` opacity on a `line` did not register the pointer. The rule's live
   opacity reads it instead.
 - `sideOf` opens the box to the left for the last lakes. Past the right edge
   the box widened the canvas and moved the axis labels.
 - `EdgeCases` has a new `InteractiveFlipped` story.
+
+## Version 1 alignment
+
+The proposal now follows version 1, draft PR #1401. What changed in the
+prototype and the page:
+
+- Reach first, then position. `.within(reach)` now keeps only the marks
+  whose outline is within `reach` px of the pointer (the current focus out to
+  `reach + 4`), then runs the behavior on them. It was a limit on the convex
+  hull of all the marks. The default reach is 16 (`TOOLTIP_REACH` in
+  `focus.ts`), and the default is
+  `Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(16).snap(4)`.
+- A behavior returns a candidate or `undefined`. There is no gap.
+- Outlines. A candidate's `outline` is a list of parts: a box, a round box, a
+  segment of a stroked path, or a region (a filled path, nonzero winding).
+  `focusRuntime.ts` reads them off the drawn elements and samples a curve
+  every 4 px. `Focus.hit` is "inside the outline", the topmost mark first.
+  `Focus.closest` measures a candidate with no position (a line) to its
+  outline.
+- `.snap(stickiness)`: on a line drawn through rows, the row nearest the
+  pointer, with a head start for the current row. A candidate's `points`
+  holds its rows. The lines demo is now one row with a marker, not one box
+  for the year; that form stays a static, proposed figure.
+- Nothing keeps the box open because the pointer is over it. The box is no
+  pointer target, so the mark under it is reached as usual.
+- New Donut story and live demo (`Donut.stories.tsx`): a wedge is a region,
+  and the hole shows no box. Shortcut: the box is placed by hand, right of
+  the ring and level with the wedge's middle, because a `ref` to a wedge has
+  its box in clock space. Version 1 seats it from the drawn geometry.
+- The switcher has seven behaviors: default, hit, center, outline, hull (the
+  earlier default, a plain function `hullLimit` in the story file, in place
+  of "no hull limit"), pin, custom. It runs on three charts: the issue bars,
+  bars 60 px apart (`Far Apart`) and the donut (`On Donut`).
+- Show regions draws each mark's 16 px reach, and the current focus's 20 px
+  reach dashed, in place of the hull and the limit lines. The marks stay
+  untinted.
+- Background: a "Where this stands" section (version 1 scope, #803 advanced
+  with four gaps, what is fixed, what is open); `dataPos` is #1403;
+  `pointer-events` is fixed in version 1.
+
+Measured with the real mouse (`focus.mjs`), each point approached from off
+the chart, svg px. Bars: rows 27 px apart with 4 px gaps; INF→VO at y 162 to
+185, PK→VO at 189 to 212; PK→INF ends at x 148 (y 323 to 346); INF→PK ends
+at x 136 (y 350 to 373). Far bars: rows at 0, 78, 156, 234, 312, 18 px tall,
+60 px gaps. Donut: center (120, 120), radii 50 and 100.
+
+| Point                                    | Default     | Hit         | Center 40 | Outline     | Hull        | Custom      |
+| ---------------------------------------- | ----------- | ----------- | --------- | ----------- | ----------- | ----------- |
+| Inside INF→VO                            | INF→VO      | INF→VO      | INF→VO    | INF→VO      | INF→VO      | PK→PK       |
+| Gap, 1 px under INF→VO                   | INF→VO      | closed      | PK→VO     | INF→VO      | INF→VO      | PK→PK       |
+| INF→PK's row, 2 px right of PK→INF's end | INF→PK      | closed      | closed    | PK→INF      | INF→PK      | VO→other    |
+| 12 px right of INF→PK                    | INF→PK      | closed      | closed    | INF→PK      | INF→PK      | VO→other    |
+| 70 px right of INF→PK                    | closed      | closed      | closed    | closed      | closed      | PK→INF      |
+| 30 px right of bar 2                     | INF→INF     | closed      | closed    | INF→INF     | other→other | VO→VO       |
+| 20 px under the last bar                 | closed      | closed      | VO→INF→VO | closed      | closed      | INF→PK      |
+| Far: 10 px under INF→INF                 | INF→INF     | closed      | closed    | INF→INF     | INF→INF     | INF→INF     |
+| Far: middle of a 60 px gap               | closed      | closed      | closed    | closed      | other→other | INF→INF     |
+| Far: inside other→other                  | other→other | other→other | closed    | other→other | other→other | other→other |
+| Donut: hole center                       | closed      | closed      | closed    | closed      | Salmon      | Bass        |
+| Donut: 5 px into the hole                | Bass        | closed      | closed    | Bass        | Bass        | Bass        |
+| Donut: inside Bass                       | Bass        | Bass        | Bass      | Bass        | Bass        | Bass        |
+| Donut: 10 px past the ring               | Bass        | closed      | closed    | Bass        | Bass        | Bass        |
+
+- The hole and the wide gap are quiet under the default (asserted in
+  `focus.mjs`, and in `check.mjs` for the donut on the Examples tab).
+- Center within 40 px is closed inside other→other on the far bars: the bar
+  is 18 px tall but long, so its center is more than 40 px from x 150.
+- Click to pin: a move opens nothing; a click on INF→VO pins it; it stays
+  through moves, leaving the chart, and a click in the gap under it; a click
+  12 px right of INF→PK moves it there; a click 70 px right clears it.
+- A sweep down across bars 5 to 8, 10 px in, 1 px steps: hit only went
+  VO→VO→VO, closed, INF→VO, closed, PK→VO, closed, VO→PK. The default went
+  VO→VO→VO, INF→VO, PK→VO, VO→PK and never closed. `check.mjs` sweeps the
+  Examples bars from bar 2 to bar 6 in 1 px steps: the box never closes.
+
+Known fault, not fixed: in the live lines demo, opening the box moves the
+lines by 0.75 px, because the box's layer is empty while it is closed (the
+empty-layer finding). `check.mjs` allows up to 1 px of movement there.
 
 ## The focus: direct hit, then nearest by position
 
@@ -64,10 +144,13 @@ Every live demo picks its focus with one rule. It was `focusAt` in
    the edge bars and the years) with a comment saying which operator or
    channel places the mark.
 3. The current focus has a head start of `stickiness` px (default 4) in rule 2. A direct hit on another mark always switches.
-4. Rule 2 applies while the pointer is within `radius` px of the convex hull
-   of the drawn marks (8 for bars and years, 30 for the scatter). Once there
-   is a focus it is kept out to `radius + 4` px. Farther out there is no
-   focus. The lines' hull is over the year dots and the drawn lines.
+4. Rules 1 and 2 run only on the marks drawn within the reach of the pointer,
+   measured to each mark's outline (16 px by default, 30 for the scatter).
+   The current focus counts out to reach + 4. With none in reach there is no
+   focus. (Until version 1 this was a limit on the convex hull of all the
+   marks, 8 px, 12 once focused. See "Version 1 alignment".)
+5. On a line drawn through rows, the focus then snaps to its row nearest the
+   pointer (`.snap(4)`), and a marker is drawn there.
 
 This is Declarative Dragging's rule (#1294): `closest` over one point per
 state with a stickiness bonus, and `whenFar` with in and out thresholds. Here a
@@ -80,7 +163,7 @@ PRIVATE HOOK (3), removed: `snapToNearest` re-targeted each real
 writes the focus key directly, so nothing reads the DOM hit. The lines'
 hull is now over the year dots alone, which cover the lines.
 
-Measured in the headless browser with the real mouse (probe page, client px):
+Measured in the headless browser with the real mouse (probe page, client px), with the earlier hull rule. Items a to d do not depend on the limit; e does, and was not re-measured with the reach. The reach measurements are under "Version 1 alignment".
 
 - **a. Issue bar, level with a short bar, to its right.** Bar 6 (INF→VO) at
   x 273, 288, 328 and 388: INF→VO each time. Bar 10 (other→VO) at x 208:
@@ -502,68 +585,45 @@ interactive story mounts through `snap(container, marks, focus)` in
 `focusRuntime.ts`. The default:
 
 ```js
-Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);
+Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })])
+  .within(16)
+  .snap(4);
 ```
 
 A call (`Focus.hit`, `Focus.closest`, `Focus.first`, `Focus.from`) starts a
-behavior or joins several; a chained method (`.within`, `.onClick`)
-transforms one.
+behavior or joins several; a chained method (`.within`, `.snap`,
+`.onClick`) transforms one.
 
 ### Line counts
 
-Prettier-formatted, code lines only (no blank or comment lines).
+Code lines only (no blank or comment lines), as of version 1 alignment.
 
-| What                                                                   | Lines |
-| ---------------------------------------------------------------------- | ----: |
-| `focus.ts`, all of it (types, family, geometry)                        |   137 |
-| of which the types                                                     |    23 |
-| of which the family (`from`, `hit`, `closest`, `first`, the default)   |    54 |
-| of which the geometry (box, outline and hull distances, the hull)      |    60 |
-| `focusRuntime.ts`, the missing runtime API                             |   101 |
-| Default behavior                                                       |     1 |
-| Hit only                                                               |     1 |
-| Closest center within 40 px                                            |     1 |
-| Closest outline, no stickiness                                         |     1 |
-| No hull limit                                                          |     1 |
-| Click to pin                                                           |     3 |
-| A plain function (largest share within 60 px), plus one line to use it |     6 |
+| What                                                      | Lines |
+| --------------------------------------------------------- | ----: |
+| `focus.ts`, all of it (types, family, geometry)           |   181 |
+| `focusRuntime.ts`, the missing runtime API                |   242 |
+| `focusDebug.ts`, Show regions                             |   372 |
+| Default behavior                                          |     3 |
+| Hit only                                                  |     1 |
+| Closest center within 40 px                               |     1 |
+| Closest outline within 16 px                              |     1 |
+| The earlier default (`hullLimit` and the hull), user code |    41 |
+| Click to pin                                              |     1 |
+| A plain function (largest share within 60 px)             |     5 |
 
 ### What each behavior did under the mouse
 
 The switcher on the page (story "Proposals/Tooltips/Focus Behaviors",
-`FocusSwitcher.stories.tsx`), the issue bar chart, driven with the real mouse
-in headless Chromium at 1280 px (`focus.mjs` in the live-check folder). Each
-point was approached from inside INF→VO, so stickiness had a current focus.
-
-| Pointer                                      | Default     | Hit only | Center 40 px | Outline | No hull limit | Plain function |
-| -------------------------------------------- | ----------- | -------- | ------------ | ------- | ------------- | -------------- |
-| Inside INF→VO (bar 6)                        | INF→VO      | INF→VO   | INF→VO       | INF→VO  | INF→VO        | PK→PK          |
-| Gap under INF→VO, 10 px from the bars' start | INF→VO      | closed   | closed       | INF→VO  | INF→VO        | PK→PK          |
-| Level with INF→PK, 20 px right of its end    | INF→PK      | closed   | closed       | PK→INF  | INF→PK        | VO→other       |
-| Level with INF→PK, 70 px right               | closed      | closed   | closed       | closed  | INF→PK        | closed         |
-| Level with INF→PK, far right of the plot     | closed      | closed   | closed       | closed  | INF→PK        | closed         |
-| Level with other→other, 30 px right          | other→other | closed   | closed       | INF→INF | other→other   | VO→VO          |
-| 20 px under the last bar                     | closed      | closed   | VO→INF→VO    | closed  | VO→INF→VO     | INF→PK         |
-
-- A slow sweep down across bars 5 to 8 at 10 px from their start: hit only
-  went VO→VO→VO, closed, INF→VO, closed, PK→VO, closed, VO→PK (three
-  closes, the flicker). The default went VO→VO→VO, INF→VO, PK→VO, VO→PK.
-- Outline picks the bar above when level with a short bar and right of it
-  (PK→INF for INF→PK, INF→INF for other→other): the box-distance rule that
-  picked the wrong bar.
-- Center within 40 px: on a long bar only the middle counts, and a short
-  bar's center is reachable from 20 px under it.
-- Click to pin: moving over a bar opened nothing. A click on INF→VO pinned
-  it; it stayed while the pointer moved to bar 2, left the chart, and moved
-  onto the box. A click right of INF→PK moved the pin there. A click far
-  right, outside the hull, cleared it. A click outside the chart's `<svg>`
-  is not seen, because the listener is on the chart.
-- Every one of them is the same `snap` call with a different behavior value;
-  the switcher itself is one more user function, `(f) => behaviors[name](f)`.
+`FocusSwitcher.stories.tsx`), driven with the real mouse in headless
+Chromium at 1280 px (`focus.mjs` in the live-check folder). The table is
+under "Version 1 alignment" above. Every behavior is the same `snap` call
+with a different behavior value; the switcher itself is one more user
+function, `(f) => behaviors[name](f)`. A click outside the chart's `<svg>`
+is not seen, because the listener is on the chart.
 
 ### Against the old prototype
 
-`compare.mjs` runs the same pointer paths on the bundle at HEAD and on the
+Before version 1 alignment, `compare.mjs` ran the same pointer paths on the bundle at HEAD and on the
 new one and prints the focus at each step. Issue bar (four offsets right of
 bar 6, bar 10, bar 13; a slow sweep; leaving down and coming back),
 stacked segments (three gap sweeps), stacks, scatter (leaving down; a
@@ -576,23 +636,25 @@ against 344.5) and closes 3 px sooner.
 
 ### What the runtime must provide
 
-| Piece                                          | The prototype, by hand                                                                                                              | Public API that replaces it                                  | Issue |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----- |
-| Candidates                                     | CSS selector and count over the drawn SVG; boxes measured; rows from the chart's private id-to-item map                             | `snap(selectAll(name))` builds them from the layout frame    | #830  |
-| Placed position                                | Each story passes the placing axes                                                                                                  | The layout reports them (the kind of space)                  | #849  |
-| Stable key                                     | Each story passes a key function; marks with one key are one candidate                                                              | Keys from spec position and data key                         | #673  |
-| The current focus, and re-running on a new key | The chosen key in a `signal`, set only on change; `current` found by key in each new frame                                          | `snap`'s result changes only when its key changes            | #830  |
-| The pointer                                    | Container listeners and the screen CTM; a tap holds the pointer until the next tap                                                  | `pointer()` as the frame's pointer, holding a tap on touch   |       |
-| The click                                      | A DOM `click` listener                                                                                                              | A click in the frame; `click()` counts only clicks on a mark | #830  |
-| The box out of the pointer's way               | CSS found by the box's stroke                                                                                                       | A floating layer is never a pointer target                   |       |
-| Registering the pointer                        | `ping()` read in a `live()` channel                                                                                                 | `snap` registers its input                                   | #830  |
-| Reading the frame, for a tool                  | `inspect(container)` hands Show regions the candidates, the current focus, the last pointer and result, and a call after each frame | The input's frame and result are data that any code can read | #830  |
+| Piece                                          | The prototype, by hand                                                                                                              | Public API that replaces it                                      | Issue |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----- |
+| Candidates                                     | CSS selector and count over the drawn SVG; boxes measured; rows from the chart's private id-to-item map                             | `snap(selectAll(name))` builds them from the layout frame        | #830  |
+| Outlines                                       | Each drawn element read as boxes, round boxes, segments or regions; a curve sampled every 4 px                                      | The display item's outline                                       |       |
+| A line's rows                                  | A hidden circle per row, drawn by the same `scatter` as the line                                                                    | The line records where it drew each row (built inside version 1) |       |
+| Placed position                                | Each story passes the placing axes                                                                                                  | The layout reports them (the kind of space)                      | #849  |
+| Stable key                                     | Each story passes a key function; marks with one key are one candidate                                                              | Keys from spec position and data key                             | #673  |
+| The current focus, and re-running on a new key | The chosen key in a `signal`, set only on change; `current` found by key in each new frame                                          | `snap`'s result changes only when its key changes                | #830  |
+| The pointer                                    | Container listeners and the screen CTM; a tap holds the pointer until the next tap                                                  | `pointer()` as the frame's pointer, holding a tap on touch       |       |
+| The click                                      | A DOM `click` listener                                                                                                              | A click in the frame; `click()` counts only clicks on a mark     | #830  |
+| The box out of the pointer's way               | CSS found by the box's stroke                                                                                                       | A floating layer is never a pointer target                       |       |
+| Registering the pointer                        | `ping()` read in a `live()` channel                                                                                                 | `snap` registers its input                                       | #830  |
+| Reading the frame, for a tool                  | `inspect(container)` hands Show regions the candidates, the current focus, the last pointer and result, and a call after each frame | The input's frame and result are data that any code can read     | #830  |
 
 ## Show regions
 
 Every live chart on the page has a **Show regions** checkbox under it, made
-by the page script once the demo is live (the 7 Examples demos and the
-switcher). The overlay is `focusDebug.ts`, user code over `inspect` from
+by the page script once the demo is live (the 8 Examples demos and the
+switcher's three charts). The overlay is `focusDebug.ts`, user code over `inspect` from
 `focusRuntime.ts` and the `reads` each behavior declares in `focus.ts`. It
 follows Dragology's overlay visualizer: each Dragology operator draws its
 targets, a magenta line from the pointer to the target labeled with the gap,
@@ -607,7 +669,7 @@ pass with no current focus draws its borders dashed where they differ. A
 pass runs only when the focus or the drawing changes: a sweep of 201 moves
 over the bars made 16 focus changes and 16 recomputes.
 
-Cost of one pass (Chrome, M-series Mac):
+Cost of one pass (Chrome, M-series Mac), before version 1 alignment:
 
 | Chart, behavior                       | Cells  | Work, ms       | Wall, ms       |
 | ------------------------------------- | ------ | -------------- | -------------- |
@@ -620,17 +682,31 @@ Cost of one pass (Chrome, M-series Mac):
 The scatter adds long tasks of 50 to 59 ms while regions are on (it has one
 52 ms task with them off); the bars add none.
 
-Agreement: at 24 random points per behavior (7) and per Examples demo (7),
-the real mouse picked the mark the regions show at 336 of 336 points.
+After version 1 alignment, `stats().ms` for one pass on each Examples demo:
+issue bars 15, stacked segments 22, whole stacks 12, lines 304, donut 76,
+scatter 425, chart in a tooltip 16, edge 5. The lines got much slower: every
+cell now measures the distance to each line's sampled path (one segment per
+4 px), and the regions run on the lines logged about 50 long tasks of 51 to
+69 ms, so the 8 ms slices overrun there. A coarser path sample or a
+bounding-box cull before the segment test would bring it down. Not done; the
+tooltip itself measures once per pointer move and is not affected.
+
+Agreement: at 24 random points per behavior (7) on each switcher chart (3),
+and per Examples demo (8), the real mouse picked the mark the regions show
+at 696 of 696 points (`regions.mjs`, after version 1 alignment).
 `check.mjs` and `focus.mjs` pass with the boxes on and off, with the same
 focus sweeps. Turning a box off removes the layer. The layer has
 `pointer-events="none"` and sits under the tooltip box.
 
-What the screenshots show: default, row bands that end 8 px past the hull,
-the focused row stronger and 2 px wider into each neighbor; hit, outlines on
+What the screenshots show (before version 1 alignment): default, row bands
+that end 8 px past the hull, the focused row stronger and 2 px wider into
+each neighbor; hit, outlines on
 the bars only; center, disks around the bar centers; outline, slanted bands
 toward the bar ends; scatter, Voronoi cells clipped by the grown hull;
-stacked segments, one band per segment in each column.
+stacked segments, one band per segment in each column. After: each mark's
+16 px reach as a solid band and the focus's 20 px reach dashed; the far
+bars' 60 px gaps untinted in the middle; the donut's hole untinted except a
+16 px ring inside the wedges; the lines as 16 px tubes around each path.
 
 Known faults: the dashed no-focus border zigzags along the hull's diagonal
 at 2x; the gap label can sit on its own line; a plain function declares no

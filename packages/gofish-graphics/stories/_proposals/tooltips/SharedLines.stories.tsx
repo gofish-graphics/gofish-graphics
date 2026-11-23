@@ -1,9 +1,11 @@
 /**
- * PROTOTYPE(#1395): several series over time, ONE tooltip for every series
- * at the x nearest the pointer (Plotly's "x unified", ECharts' trigger
- * "axis"). In GoFish it is the default tooltip applied to a different GROUP:
- * the points named "pts", grouped by `year`, filtered to the focused year.
- * The group is every mark that shares that x; the box lists its members.
+ * PROTOTYPE(#1395): several series over time, two tooltips. The live one is
+ * one line's, snapped to its row nearest the pointer (`lineRows`), as
+ * version 1 builds it. The static one is proposed and not built: ONE
+ * tooltip for every series at the x nearest the pointer (Plotly's "x
+ * unified", ECharts' trigger "axis"), `.tooltip({ by: "year" })`. It is the
+ * default tooltip applied to a different GROUP: the points named "pts",
+ * grouped by `year`, filtered to the focused year (`sharedLines`).
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
@@ -20,7 +22,7 @@ import {
   live,
 } from "../../../src/lib";
 import { unemployment } from "../../../src/data/unemployment";
-import { box, table, beside, thousands } from "./helpers";
+import { box, table, beside, thousands, rowTooltip, rowOf } from "./helpers";
 import { snap } from "./focusRuntime";
 
 // The lowercase and all-caps exports are builders, data and mounts, not stories.
@@ -160,24 +162,97 @@ export const Closed: StoryObj = {
   },
 };
 
+/** The key of a row's point: its series and year. */
+export const rowKey = (r: { series: string; year: number } | undefined) =>
+  r && `${r.series}|${r.year}`;
+
 /**
- * Live. The focus is the year nearest the pointer, by the same default rule
- * as every other story: a year's candidate is its column of dots (`r: 4`,
- * invisible except at the focused year; the dots share the key `year`), and
- * the hull is over the dots, which cover the lines. So the pointer never has
- * to be on a line. The pointer is registered by `ping`. Shared by the
- * Interactive story and the proposal page's demo bundle
- * (proposals/tooltips/demo).
+ * One line's tooltip, snapped to the row nearest the pointer: what
+ * `line(...).tooltip()` does in version 1 (draft PR #1401). The box shows
+ * the focused row's fields beside its point, with a marker on the point in
+ * the line's color. `focus` is the focused row's key (`rowKey`).
+ *
+ * The points are a layer of circles drawn at the rows, placed by the same
+ * `scatter` of the same fields as the lines. Each is hidden except the
+ * focused one, which is the marker. The live story reads the rows' points
+ * off them (`snap`'s `points`, focusRuntime.ts), because a line does not
+ * expose where it drew each row to user code. `ping`, in the live story,
+ * reads the pointer inside their `live()` opacity, which registers it.
+ */
+export function lineRows(
+  focus: () => string | undefined,
+  ping?: () => unknown,
+  size: { w?: number; h?: number } = SIZE
+) {
+  const shown = (d: any) => (rowKey(rowOf<any>(d)) === focus() ? 1 : 0);
+  return chart(yearly, {
+    ...size,
+    axes: { x: { title: false }, y: { title: "Unemployed (thousands)" } },
+  })
+    .flow(group({ by: "series" }))
+    .mark(line({ x: "year", y: "count", stroke: "series", strokeWidth: 2 }).name("lines"))
+    .layer(
+      chart(yearly)
+        .flow(scatter({ x: "year", y: "count" }))
+        .mark(
+          circle({
+            r: 4,
+            fill: "series",
+            stroke: "white",
+            strokeWidth: 1.5,
+            opacity: ping ? live((d: any) => (ping(), shown(d))) : shown,
+          }).name("pts")
+        )
+    )
+    .layer(
+      chart(selectAll("pts"))
+        .flow(
+          filter((pt: any) => rowKey(pt.datum[0]) === focus()),
+          group({ by: "series" })
+        )
+        .mark(((pt: any[]) => {
+          const row = pt[0].datum[0];
+          return beside(
+            pt[0],
+            rowTooltip(row, { format: { year: String, count: thousands } }),
+            // Keep it inside: past the middle year it opens to the left.
+            { side: row.year > 2005 ? "left" : "right" }
+          );
+        }) as any)
+    );
+}
+
+/** Static capture: the row of Construction at 2006 focused. */
+export const PinnedRow: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    lineRows(() => "Construction|2006").render(container);
+    return container;
+  },
+};
+
+/**
+ * Live, by the same default rule as every other story: each line is one
+ * candidate, as near as its path, and the focused line snaps to its row
+ * nearest the pointer. Shared by the Interactive story and the proposal
+ * page's demo bundle (proposals/tooltips/demo).
  */
 export function mountInteractive(container: HTMLElement) {
-  const { focus: year, ping } = snap(container, {
-    selector: 'ellipse[rx="4"]',
-    count: yearly.length,
-    // A year's position is the `x` channel; its dots differ in y, so y drops out.
-    position: ["x"],
-    key: (r) => r?.year,
+  const { focus: row, ping } = snap(container, {
+    // The lines: the stroked paths the chart draws for its marks.
+    selector: 'path[data-gf-id][fill="none"]',
+    count: SERIES.length,
+    // A line is drawn across its rows: it has no placed position.
+    position: [],
+    key: (r) => r?.series,
+    points: {
+      selector: 'ellipse[rx="4"]',
+      count: yearly.length,
+      key: rowKey,
+      line: (r) => r?.series,
+    },
   });
-  return sharedLines(year, ping).render(container);
+  return lineRows(row, ping).render(container);
 }
 
 export const Interactive: StoryObj = {

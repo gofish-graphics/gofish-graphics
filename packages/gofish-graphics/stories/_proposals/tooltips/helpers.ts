@@ -159,16 +159,20 @@ export function beside(
   const dir = side === "left" || side === "right" ? "x" : "y";
   // A y spread lays its first child at the top.
   const after = side === "right" || side === "bottom";
-  const placed = ink
-    ? Promise.resolve(content).then((n: any) => {
-        n.inkOn = [true, true]; // PRIVATE HOOK (1)
-        return n;
-      })
-    : content;
+  const placed = ink ? floating(content) : content;
   return spread(
     { dir, spacing: gap, alignment: align },
     after ? [anchor, placed] : [placed, anchor]
   );
+}
+
+/** `content` marked ink on both axes, so it takes no room: what
+ *  `.floating()` would name. PRIVATE HOOK (1), see `beside`. */
+export function floating(content: any) {
+  return Promise.resolve(content).then((n: any) => {
+    n.inkOn = [true, true]; // PRIVATE HOOK (1)
+    return n;
+  });
 }
 
 /* -------------------------------- focus --------------------------------- */

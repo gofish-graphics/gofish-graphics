@@ -118,15 +118,17 @@ export const Closed: StoryObj = {
   },
 };
 
-/** The scatter's default focus: the tooltip default with a wider reach. */
+/** The scatter's focus: the tooltip default with a wider reach, which is
+ *  what the proposed `{ radius: 30 }` option says. */
 export const scatterFocus = Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(RADIUS);
 
 /**
- * Live. The focus is the nearest point inside the points' hull, and the
- * nearest within RADIUS px outside it, read in true pixels off the drawn
- * points (`snap`, focusRuntime.ts). The spec re-runs only when the focused
- * point changes. Shared by the Interactive story, the proposal page's demo
- * bundle (proposals/tooltips/demo) and the focus switcher.
+ * Live. Only the points within RADIUS px of the pointer count; of those,
+ * the one under it, else the nearest, read in true pixels off the drawn
+ * points (`snap`, focusRuntime.ts). Far from every point there is no box.
+ * The spec re-runs only when the focused point changes. Shared by the
+ * Interactive story and the proposal page's demo bundle
+ * (proposals/tooltips/demo).
  */
 export function mountInteractive(container: HTMLElement, focus: FocusBehavior = scatterFocus) {
   const { focus: id, ping } = snap(

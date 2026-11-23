@@ -718,11 +718,20 @@
         the mark.
       </li>
       <li>
-        A pointer inside a mark picks that mark. Otherwise the focus is the mark
-        nearest by position, where the layout put it. This holds within
-        <code>radius</code> pixels of the marks' convex hull.
+        Reach first, then position. Only marks drawn within 16 px of the pointer
+        count. Of those, a mark the pointer is inside wins. Otherwise the focus
+        is the mark nearest by position, where the layout put it. With no mark
+        in reach there is no box.
       </li>
-      <li>The box floats. It takes no room and is not a pointer target.</li>
+      <li>
+        The box floats. It takes no room and is not a pointer target. A chart
+        opens one box at a time.
+      </li>
+      <li>
+        Version 1 (draft PR #1401) builds <code>.tooltip()</code> and
+        <code>.tooltip([fields])</code> on marks, in JS and Python. Everything
+        else on this page is proposed.
+      </li>
     </ul>
 
     <article class="card">
@@ -983,72 +992,105 @@ chart(seafood, { w: 420, h: 320 })
 
     <article class="card">
       <div class="head">
-        <h3>Several lines, one shared tooltip</h3>
+        <h3>Several lines</h3>
         <p>
-          Other libraries need a chart-wide mode for this because their tooltip
-          belongs to one mark, and the points of every series at one year are
-          many marks. Here <code>by: "year"</code> groups them, and the group is
-          the focus. The rule and the dots are not tooltip options. They are two
-          more ordinary layers over the same focus. Here the focus is a part of
-          each line, its point at one year, and not a whole mark. The prototype
-          still gets those points from an extra layer of invisible circles,
-          because a line does not yet expose where it placed each row.
+          A line drawn through rows snaps to its row nearest the pointer. The
+          box shows that row, and a marker sits on its point. Reach is measured
+          to the line's path, so the pointer can be anywhere along it. A line
+          drawn from a function, or one connecting other marks, has no rows. It
+          gets one box for the whole line.
+        </p>
+        <p>
+          One box for every series at the nearest year is proposed, not built.
+          Other libraries need a chart-wide mode for it, because their tooltip
+          belongs to one mark. Here <code>by: "year"</code> groups the points of
+          every line at one year, and the group is the focus.
         </p>
       </div>
       <div class="figs">
         <figure>
           <div class="frame" data-demo="lines-shared">
             <img
+              src="img/lines-row.png"
+              alt="Four unemployment lines with a marker on Construction at 2006 and a box listing its series, year and count"
+            />
+          </div>
+          <figcaption>
+            <span class="static-note">Prototype, Construction in 2006.</span>
+            <span class="live-note"
+              >Live. Move the pointer along a line, or tap one.</span
+            >
+            Story: Proposals/Tooltips/Shared Line Tooltip, Pinned Row.
+          </figcaption>
+        </figure>
+        <figure>
+          <div class="frame">
+            <img
               src="img/lines-shared.png"
               alt="Four unemployment lines with a gray rule at 2003, a dot on each line, and one box listing all four series"
             />
           </div>
           <figcaption>
-            <span class="static-note">Prototype, 2003.</span>
-            <span class="live-note"
-              >Live. Move the pointer along the lines, or tap a year.</span
-            >
-            Story: Proposals/Tooltips/Shared Line Tooltip.
+            Proposed: one box for the year. Prototype, 2003, not live. Story:
+            Proposals/Tooltips/Shared Line Tooltip, Pinned.
           </figcaption>
         </figure>
       </div>
       <div class="codes">
         <div>
-          <span class="label">Proposed</span>
+          <span class="label">Proposed, and built in version 1</span>
           <pre><code class="language-javascript">chart(yearly)
   .flow(group({ by: "series" }))
-  .mark(
-    line({ x: "year", y: "count", stroke: "series" }).tooltip({ by: "year" })
-  );</code></pre>
+  .mark(line({ x: "year", y: "count", stroke: "series" }).tooltip());</code></pre>
         </div>
         <div>
-          <span class="label">Proposed, with the rule and the dots</span>
-          <pre><code class="language-javascript">// The focus the tooltip uses, bound to a constant and reused.
-// The rule and the dots are a sketch: two ordinary layers over it.
-const hover = pointer().snap(selectAll("lines"), { by: "year" });
-
-chart(yearly)
-  .flow(group({ by: "series" }))
-  .mark(
-    line({ x: "year", y: "count", stroke: "series" })
-      .name("lines")
-      .tooltip({ by: "year" })
-  )
-  // the rule
-  .layer(
-    chart(hover)
-      .flow(scatter({ by: "year", x: "year" }))
-      .mark(rect({ w: 1, fill: "gray" }))
-  )
-  // the dots
-  .layer(chart(hover).mark(circle({ r: 4, fill: "series", stroke: "white" })));</code></pre>
+          <span class="label">Proposed, one box for the year</span>
+          <pre><code class="language-javascript">line({ x: "year", y: "count", stroke: "series" }).tooltip({ by: "year" });</code></pre>
         </div>
         <div>
           <span class="label">Proposed, Python</span>
-          <pre><code class="language-python">line(x="year", y="count", stroke="series").tooltip(by="year")</code></pre>
+          <pre><code class="language-python">line(x="year", y="count", stroke="series").tooltip()
+line(x="year", y="count", stroke="series").tooltip(by="year")</code></pre>
         </div>
         <details>
-          <summary>Runs today (prototype)</summary>
+          <summary>Runs today (prototype), one row</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">// A line does not expose where it drew each row, so the prototype draws
+// a circle per row and reads the points off them. Each circle is hidden
+// except the focused one, which is the marker.
+const shown = (d) =&gt; (rowKey(rowOf(d)) === focus() ? 1 : 0);
+
+chart(yearly, { w: 520, h: 300 })
+  .flow(group({ by: "series" }))
+  .mark(line({ x: "year", y: "count", stroke: "series", strokeWidth: 2 }))
+  .layer(
+    chart(yearly)
+      .flow(scatter({ x: "year", y: "count" }))
+      .mark(
+        circle({ r: 4, fill: "series", stroke: "white", opacity: shown }).name(
+          "pts"
+        )
+      )
+  )
+  .layer(
+    chart(selectAll("pts"))
+      .flow(
+        filter((pt) =&gt; rowKey(pt.datum[0]) === focus()),
+        group({ by: "series" })
+      )
+      .mark((pt) =&gt; {
+        const row = pt[0].datum[0];
+        return beside(
+          pt[0],
+          rowTooltip(row, { format: { year: String, count: thousands } }),
+          { side: row.year &gt; 2005 ? "left" : "right" } // picked by hand
+        );
+      })
+  );</code></pre>
+          </div>
+        </details>
+        <details>
+          <summary>Runs today (prototype), one box for the year</summary>
           <div class="inner">
             <pre><code class="language-javascript">chart(yearly, { w: 520, h: 300 })
   .flow(group({ by: "series" }))
@@ -1108,12 +1150,96 @@ chart(yearly)
 
     <article class="card">
       <div class="head">
+        <h3>Donut, a wedge</h3>
+        <p>
+          A filled shape is a region. A pointer inside a wedge picks it. The
+          hole is near no wedge, so it shows no box. The box shows the species
+          and its summed count.
+        </p>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame" data-demo="donut">
+            <img
+              src="img/donut.png"
+              alt="Donut of five species with a box to its right for Trout"
+            />
+          </div>
+          <figcaption>
+            <span class="static-note">Prototype, Trout.</span>
+            <span class="live-note"
+              >Live. Point at a wedge, then at the hole.</span
+            >
+            Story: Proposals/Tooltips/Donut.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed, and built in version 1</span>
+          <pre><code class="language-javascript">chart(seafood, { coord: Coord.clock() })
+  .flow(stack({ by: "species", dir: "x", y: 50, h: 50 }))
+  .mark(rect({ w: "count", fill: "species" }).tooltip(["species", "count"]));</code></pre>
+        </div>
+        <div>
+          <span class="label">Proposed, Python</span>
+          <pre><code class="language-python">chart(seafood, coord=Coord.clock()).flow(
+    stack(by="species", dir="x", y=50, h=50)
+).mark(rect(w="count", fill="species").tooltip(["species", "count"]))</code></pre>
+        </div>
+        <details>
+          <summary>Runs today (prototype)</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">// A ref to a wedge has its box in the clock space, not on screen, so
+// beside() cannot seat the box by the wedge. The prototype places it by
+// hand: right of the ring, level with the wedge's middle.
+layer([
+  chart(seafood, { coord: Coord.clock(), w: 300, h: 300 })
+    .flow(stack({ by: "species", dir: "x", y: 50, h: 50 }))
+    .mark(rect({ w: "count", fill: "species" }).name("wedges")),
+  chart(selectAll("wedges"))
+    .flow(
+      filter((w) =&gt; w.datum[0].species === focus()),
+      group({ by: "species" })
+    )
+    .mark((w) =&gt; {
+      const rows = w[0].datum;
+      const species = rows[0].species;
+      const count = rows.reduce((t, r) =&gt; t + r.count, 0);
+      const turn = (2 * Math.PI * (BEFORE.get(species) + count / 2)) / TOTAL;
+      const y = R - R * Math.cos(turn);
+      return floating(
+        position({ x: 2 * R + 10, y: y - 60 }, [
+          beside(
+            rect({ w: 0, h: 120, fill: "none" }),
+            box(
+              table([
+                ["species", species],
+                ["count", thousands(count)],
+              ])
+            ),
+            { side: "right", gap: 0 }
+          ),
+        ])
+      );
+    }),
+  // the canvas, with room right of the ring for the box
+  rect({ x: 0, y: 0, w: 2 * R + 150, h: 2 * R, fill: "none" }),
+]);</code></pre>
+          </div>
+        </details>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="head">
         <h3>Scatterplot, the nearest point</h3>
         <p>
-          The focus is the point nearest the pointer, while the pointer is
-          within 30 pixels of the points' convex hull. So the pointer does not
-          have to be on a point. The ring is one more layer over the focus. In
-          the pinned picture, the red cross is the pointer.
+          The focus is the point nearest the pointer, among the points drawn
+          within 30 pixels of it. So the pointer does not have to be on a point.
+          The reach is wider than the default 16 because the points are small.
+          The ring is one more layer over the focus. In the pinned picture, the
+          red cross is the pointer.
         </p>
       </div>
       <div class="figs">
@@ -1490,8 +1616,9 @@ chart(pathTypes)
         </li>
         <li>
           <strong>Options:</strong> <code>by</code> groups the marks by a field
-          and makes the group the focus. <code>radius</code> is how near counts,
-          in pixels. <code>position</code> takes the same
+          and makes the group the focus. <code>radius</code> is the reach: how
+          far from a mark's outline the pointer may be, in pixels (16 by
+          default). <code>position</code> takes the same
           <code>Place</code> family and the same chooser that labels use, so the
           box stays inside the chart and flips sides. That chooser is a
           first-fit <code>choose</code> over sides (the choice and cost
@@ -1535,6 +1662,49 @@ circle(r=3).tooltip(by="year")</code></pre>
         The focus is one rule, a focus behavior written in user code, and the
         <a href="#focus">Focus tab</a> states it and lets you try others.
       </p>
+    </div>
+
+    <div class="section">
+      <h2>The box</h2>
+      <p>Version 1 builds the box this way.</p>
+      <ul>
+        <li>
+          <strong>When it opens:</strong> only marks drawn within 16 px of the
+          pointer count. The open box keeps its mark out to 20 px. With no mark
+          in reach there is no box, so a donut's hole and a wide gap between
+          bars show none.
+        </li>
+        <li>
+          <strong>Which mark:</strong> of the marks in reach, the one under the
+          pointer, the one on top where marks overlap. Off every mark, the
+          nearest by where the layout placed it: a bar by its row, a dot by its
+          center. The open box keeps its mark until another is 4 px nearer.
+        </li>
+        <li>
+          <strong>Lines:</strong> a line is as near as its path. A line drawn
+          through rows snaps to the row whose point is nearest, with a dot in
+          the line's color on that point. A line with no rows gets one box,
+          beside the end of the line.
+        </li>
+        <li>
+          <strong>One box per chart:</strong> the marks of every
+          <code>.tooltip()</code> in a chart are candidates together.
+        </li>
+        <li>
+          <strong>Not a pointer target:</strong> a mark under the box is reached
+          as if the box were not there. Over the box with no mark in reach, the
+          box closes.
+        </li>
+        <li>
+          <strong>Touch:</strong> a tap opens the box, and it stays open until
+          the next tap.
+        </li>
+        <li>
+          <strong>Where it sits:</strong> right of the mark, else left of it,
+          centered on its row. Else under or over it, flush with its end. Else
+          it is moved inside the chart.
+        </li>
+      </ul>
     </div>
 
     <div class="section">
@@ -1693,7 +1863,9 @@ const focus = focusFrom(() =&gt; hitRow(p)?.path);</code></pre>
         designed here. An anchored box is what makes them possible later.
       </p>
       <div>
-        <span class="label">Proposed, in the drawn SVG</span>
+        <span class="label"
+          >Proposed, and built in version 1, in the drawn SVG</span
+        >
         <pre><code class="language-xml">&lt;rect x="0" y="0" width="520" height="22"&gt;
   &lt;title&gt;path: VO→VO
 length: 2
@@ -1851,11 +2023,16 @@ option = {
     <ul class="rules">
       <li>
         A focus behavior is a plain function. It gets a frame and returns a
-        choice and a gap, as a Dragology drag behavior does.
+        mark, or nothing.
       </li>
       <li>
         The <code>Focus</code> family holds the built-in behaviors. A user
         function works anywhere a behavior is an argument.
+      </li>
+      <li>
+        Version 1 runs the default behavior inside <code>.tooltip()</code>.
+        <code>Focus</code> is internal there and not exported, so the rest of
+        this tab is proposed.
       </li>
       <li>
         The same value plugs into <code>.tooltip({ focus })</code> and into
@@ -1867,10 +2044,11 @@ option = {
       <div class="head">
         <h3>Focus behaviors, live</h3>
         <p>
-          One chart, seven behaviors. Pick one, then move the pointer over the
-          bars, into the gaps between them, and to the right of the short ones.
-          Each behavior is a few lines of user code against
-          <code>focus.ts</code>.
+          Three charts, seven behaviors. Pick one, then move the pointer over
+          the marks, into the gaps between them, past the ends of the short
+          bars, and into the hole of the donut. The far-apart bars have 60 px
+          gaps. Each behavior is a few lines of user code against
+          <code>focus.ts</code>. The positions below are in the chart's pixels.
         </p>
         <div class="switch" role="group" aria-label="Focus behavior">
           <button type="button" data-behavior="default" aria-pressed="true">
@@ -1885,8 +2063,8 @@ option = {
           <button type="button" data-behavior="outline" aria-pressed="false">
             Closest outline
           </button>
-          <button type="button" data-behavior="unlimited" aria-pressed="false">
-            No hull limit
+          <button type="button" data-behavior="hull" aria-pressed="false">
+            Earlier default, hull limit
           </button>
           <button type="button" data-behavior="pin" aria-pressed="false">
             Click to pin
@@ -1909,87 +2087,123 @@ option = {
               >Prototype picture. The switcher needs the live demo, which did
               not load, so this is the default behavior on the top bar.</span
             >
-            <span class="live-note"
-              >Live. The buttons switch the focus behavior.</span
+            <span class="live-note">Live. Bars 4 px apart.</span>
+            Story: Proposals/Tooltips/Focus Behaviors, Bars.
+          </figcaption>
+        </figure>
+        <figure>
+          <div class="frame" data-demo="focus-far">
+            <img
+              src="img/focus-far.png"
+              alt="Five bars with 60 px gaps between them and a tooltip on the third bar"
+            />
+          </div>
+          <figcaption>
+            <span class="static-note"
+              >Prototype picture, default behavior.</span
             >
-            Story: Proposals/Tooltips/Focus Behaviors.
+            <span class="live-note">Live. Bars 60 px apart.</span>
+            Story: Proposals/Tooltips/Focus Behaviors, Far Apart.
+          </figcaption>
+        </figure>
+        <figure>
+          <div class="frame" data-demo="focus-donut">
+            <img
+              src="img/donut.png"
+              alt="Donut of five species with a box to its right for Trout"
+            />
+          </div>
+          <figcaption>
+            <span class="static-note"
+              >Prototype picture, default behavior.</span
+            >
+            <span class="live-note">Live. The hole is 100 px across.</span>
+            Story: Proposals/Tooltips/Focus Behaviors, On Donut.
           </figcaption>
         </figure>
       </div>
       <div class="codes">
         <div class="behavior" data-behavior="default">
-          <span class="label">Runs today (prototype), and proposed</span>
-          <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+          <span class="label">Proposed, and built in version 1</span>
+          <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(16);</code></pre>
           <p>
-            In the gap under INF→VO the box stays on INF→VO. Level with INF→PK,
-            20 px right of its end, it picks INF→PK, and 70 px right it closes,
-            because that is outside the hull. A slow sweep down across four bars
-            never closes the box.
+            One pixel under INF→VO, in the 4 px gap, the box stays on INF→VO. In
+            the row of INF→PK, 14 px right of its end and 8 px from the end of
+            PK→INF above, it picks INF→PK, by row. Twelve px right of INF→PK it
+            still picks INF→PK, and 70 px right it closes. On the far-apart bars
+            it opens 10 px under a bar and closes in the middle of a gap. The
+            donut's hole is quiet, and 5 px into the hole or 10 px outside the
+            ring it picks the wedge there.
           </p>
         </div>
         <div class="behavior" data-behavior="hit" hidden>
-          <span class="label">Runs today (prototype), and proposed</span>
+          <span class="label">Proposed</span>
           <pre><code class="language-javascript">// What Vega-Lite and plain SVG do.
 Focus.hit();</code></pre>
           <p>
             The box closes in every gap between bars and anywhere past a bar's
             end. A slow sweep down across four bars closed it three times. This
-            is the flicker reported on the first prototype.
+            is the flicker reported on the first prototype. On the donut it
+            opens only inside a wedge.
           </p>
         </div>
         <div class="behavior" data-behavior="center" hidden>
-          <span class="label">Runs today (prototype), and proposed</span>
+          <span class="label">Proposed</span>
           <pre><code class="language-javascript">// Observable Plot's pointer: the nearest center within 40 px.
 Focus.closest({ to: "center", radius: 40 });</code></pre>
           <p>
-            The pointer must be within 40 px of a bar's center. In the gap under
-            INF→VO, 10 px from the bars' start, the box closes, because a long
-            bar's center is far away. Yet 20 px under the shortest bar it opens
-            on VO→INF→VO, whose center is near.
+            One pixel under INF→VO it picks PK→VO, the bar below, whose center
+            is nearer. Inside a long bar, far from its center, it opens nothing:
+            inside other→other on the far-apart bars there is no box. On the
+            donut it opens only near the middle of a wedge.
           </p>
         </div>
         <div class="behavior" data-behavior="outline" hidden>
-          <span class="label">Runs today (prototype), and proposed</span>
-          <pre><code class="language-javascript">// The prototype's first rule: distance to each bar's box.
-Focus.closest({ to: "outline" }).within(8);</code></pre>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">// The prototype's first rule: distance to each mark's outline.
+Focus.closest({ to: "outline" }).within(16);</code></pre>
           <p>
-            Level with other→other, 30 px right of its end, it picks INF→INF,
-            the longer bar above, whose box is nearer. Level with INF→PK, 20 px
-            right, it picks PK→INF, again the bar above. This is the rule that
-            picked the wrong bar.
+            In the row of INF→PK, 14 px right of its end and 8 px from the end
+            of PK→INF above, it picks PK→INF, the bar above, whose outline is
+            nearer. This is the rule that picked the wrong bar. Elsewhere it
+            agrees with the default.
           </p>
         </div>
-        <div class="behavior" data-behavior="unlimited" hidden>
-          <span class="label">Runs today (prototype), and proposed</span>
-          <pre><code class="language-javascript">// The default without .within(8).
-Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]);</code></pre>
+        <div class="behavior" data-behavior="hull" hidden>
+          <span class="label">Runs today (prototype)</span>
+          <pre><code class="language-javascript">// The earlier default: on while the pointer is within 8 px of the
+// convex hull of the marks (12 px once focused). A plain function,
+// hullLimit, in the switcher's story file.
+Focus.from(
+  hullLimit(Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]))
+);</code></pre>
           <p>
-            The box never closes while the pointer is on the chart. Level with
-            INF→PK it stays on INF→PK out to the right edge of the plot, and 20
-            px under the last bar it still shows VO→INF→VO.
+            The hull covers every gap and the donut's hole. In the middle of a
+            60 px gap between far-apart bars it still shows a bar. At the center
+            of the donut's hole it shows Salmon. This is why the default now
+            measures reach to each mark's own outline.
           </p>
         </div>
         <div class="behavior" data-behavior="pin" hidden>
-          <span class="label">Runs today (prototype), and proposed</span>
+          <span class="label">Proposed</span>
           <pre><code class="language-javascript">// The default, run only on a click. Between clicks the focus stays.
 Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })])
-  .within(8)
+  .within(16)
   .onClick();</code></pre>
           <p>
-            Moving over a bar opens nothing. A click on INF→VO pins it, and it
-            stays while the pointer moves to other bars, leaves the chart, or
-            moves onto the box. A click right of INF→PK moves the pin there. A
-            click far right, outside the hull, clears it.
+            Moving over a bar opens nothing. A click picks what the default
+            would pick there, and the box stays while the pointer moves to other
+            bars or leaves the chart. A click 70 px right of INF→PK, or in the
+            donut's hole, clears it.
           </p>
         </div>
         <div class="behavior" data-behavior="custom" hidden>
-          <span class="label">Runs today (prototype), and proposed</span>
-          <pre><code class="language-javascript">// A plain function: the bar with the largest share within 60 px.
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">// A plain function: the mark with the largest share within 60 px.
 const largestNear = ({ pointer, candidates }) =&gt; {
-  if (!pointer) return { choice: undefined, gap: Infinity };
+  if (!pointer) return undefined;
   const near = candidates.filter((c) =&gt; boxDistance(pointer, c.box) &lt;= 60);
-  const choice = near.sort((a, b) =&gt; b.datum[0].share - a.datum[0].share)[0];
-  return { choice, gap: choice ? boxDistance(pointer, choice.box) : Infinity };
+  return near.sort((a, b) =&gt; b.datum[0].share - a.datum[0].share)[0];
 };
 
 rect({ w: "share" }).tooltip({ focus: largestNear });
@@ -1997,11 +2211,13 @@ rect({ w: "share" }).tooltip({ focus: largestNear });
 // As an argument to a call:
 Focus.first([Focus.hit(), largestNear]);
 // Lifted, so it can be chained:
-Focus.from(largestNear).within(8);</code></pre>
+Focus.from(largestNear).within(16);</code></pre>
           <p>
-            Inside INF→VO it picks PK→PK, two rows up, the largest share within
-            60 px. Level with INF→PK, 20 px right, it picks VO→other. At 70 px
-            right no bar is within 60 px, so the box closes.
+            One pixel under INF→VO it picks PK→PK, two rows up, the largest
+            share within 60 px. Right of INF→PK it picks VO→other, two rows up.
+            Even 70 px right it opens, on PK→INF. The donut's rows have no
+            share, so it picks the first wedge within 60 px, Bass, even at the
+            center of the hole.
           </p>
         </div>
       </div>
@@ -2013,67 +2229,98 @@ Focus.from(largestNear).within(8);</code></pre>
         Every live chart on this page has a <b>Show regions</b> box under it. It
         tints, for every place the pointer could be, the mark the current
         behavior would pick there, with the current focus stronger and the
-        borders it would have with no focus dashed. It also draws what the
-        behavior measures to, the hull of the marks, the
-        <code>.within</code> limits, and a line from the pointer to the point
-        the gap was measured to. The regions are found by running the behavior
-        at every point of a 3 px grid, so they are right for any behavior, a
-        plain function included. The idea and the look are from Dragology's
-        overlay visualizer, which draws each drag operator's targets, hull and
-        gap over the running demo.
+        borders it would have with no focus dashed. The marks stay untinted. It
+        also draws each mark's reach, the 16 px band around its outline, and the
+        current focus's 20 px reach dashed. It draws what the behavior measures
+        to, and a line from the pointer to the measured point. The regions are
+        found by running the behavior at every point of a 3 px grid, so they are
+        right for any behavior, a plain function included. The idea and the look
+        are from Dragology's overlay visualizer, which draws each drag
+        operator's targets over the running demo.
       </p>
-      <figure>
-        <div class="frame">
-          <img
-            src="img/focus-regions.png"
-            alt="The issue bar chart with Show regions on: each bar has a tinted band around it, the focused bar's band is stronger, and magenta lines show the hull of the bars and the 8 and 12 px limits"
-          />
-        </div>
-        <figcaption>
-          The default behavior with INF→VO focused and the pointer in the gap
-          under it. Each bar's band ends 8 px past the hull of the bars (solid
-          magenta). The focused bar's band is stronger, reaches 2 px further
-          into each neighbor, and ends 12 px past the hull (dashed).
-        </figcaption>
-      </figure>
+      <div class="figs">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/focus-regions.png"
+              alt="The issue bar chart with Show regions on: each bar has a tinted band around it, the focused bar's band is stronger, and magenta outlines show each bar's 16 px reach and the focused bar's 20 px reach dashed"
+            />
+          </div>
+          <figcaption>
+            The default behavior on the bars with INF→VO focused and the pointer
+            in the gap under it. Each bar's band ends 16 px from the bar (solid
+            magenta). The focused bar's band is stronger and ends 20 px from it
+            (dashed). Past the ends of the short bars there is no band.
+          </figcaption>
+        </figure>
+        <figure>
+          <div class="frame">
+            <img
+              src="img/donut-regions.png"
+              alt="The donut with Show regions on: a tinted band around each wedge, and the middle of the hole left white"
+            />
+          </div>
+          <figcaption>
+            The default behavior on the donut. Each wedge's region reaches 16 px
+            into the hole and 16 px past the ring. The middle of the hole is
+            untinted: a pointer there shows no box.
+          </figcaption>
+        </figure>
+      </div>
     </div>
 
     <div class="section">
       <h2>The default, written out</h2>
       <p>
-        A pointer inside a mark picks that mark. Otherwise the focus is the mark
-        nearest by position. A mark's position is where the layout put it, and
-        its size does not count. So bars in a column are told apart by row, and
-        a gap between two bars picks the nearer one. The current focus has a 4
-        px head start, so it does not flip back and forth at a boundary. All
-        this applies while the pointer is within 8 px of the convex hull of the
-        drawn marks, and 12 px once there is a focus. Farther out there is no
-        focus.
+        Reach first, then position. Only the marks drawn within 16 px of the
+        pointer count, measured to each mark's outline. The current focus counts
+        out to 20 px. Of those, a mark the pointer is inside wins, the one on
+        top where marks overlap. Otherwise the focus is the nearest by position.
+        A mark's position is where the layout put it, and its size does not
+        count. So bars in a column are told apart by row, and a gap between two
+        bars picks the nearer one. The current focus has a 4 px head start, so
+        it does not flip back and forth at a boundary. With no mark in reach
+        there is no focus.
+      </p>
+      <p>
+        A line drawn through rows has a point per row. After a line is chosen,
+        <code>.snap(4)</code> picks its point nearest the pointer, with the same
+        4 px head start. Reach is measured to the line's path, so moving along
+        the line between rows keeps the box.
       </p>
       <pre><code class="language-javascript">rect({ w: "share" }).tooltip({
-  focus: Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8),
+  focus: Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(16),
+});
+
+line({ x: "year", y: "count" }).tooltip({
+  focus: Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })])
+    .within(16)
+    .snap(4),
 });</code></pre>
       <p>
-        With no <code>focus</code> option, a tooltip uses this one. The
+        With no <code>focus</code> option, a tooltip uses the second one. On a
+        mark with no rows to snap to, <code>.snap(4)</code> changes nothing. The
         <code>radius</code> option is short for the same behavior with another
-        number, so the scatter's <code>radius: 30</code> on the Examples tab is
+        reach, so the scatter's <code>radius: 30</code> on the Examples tab is
         <code>.within(30)</code>.
       </p>
       <p class="muted">
-        Another name for the last step is <code>.near(8)</code>, if
-        <code>.within</code> stays the region clamp of #830.
+        Another name for <code>.within</code> is <code>.near(16)</code>, if
+        <code>.within</code> stays the region clamp of #830 (an interaction
+        grammar). The two do different things: the clamp keeps a value inside a
+        region, and this step keeps only the marks near the pointer.
       </p>
       <div class="fork">
         <h3>Fork: how to say "try these in order"</h3>
         <div class="opts">
           <div class="opt">
             <span class="tag pick">Pick</span>
-            <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+            <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(16);</code></pre>
             <p>It depends on no proposal that is not signed off.</p>
           </div>
           <div class="opt">
             <span class="tag">Option</span>
-            <pre><code class="language-javascript">choose([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+            <pre><code class="language-javascript">choose([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(16);</code></pre>
             <p>
               The choice and cost proposal (#486) makes
               <code>choose</code> take the first fit in list order by default,
@@ -2097,8 +2344,18 @@ Focus.from(largestNear).within(8);</code></pre>
   datum: unknown[]; // the mark's rows
   box: Box; // the drawn box
   position: { x?: number; y?: number }; // where the layout placed it
-  outline: Outline; // the drawn boxes and circles
+  outline: Outline; // what it is drawn as
+  points?: Candidate[]; // a line's rows, each at its drawn point
 };
+
+// A part is a box, a circle (a round box), a segment of a stroked path,
+// or a region, a filled path given by the segments of its edge.
+type Outline = {
+  box: Box;
+  round: boolean;
+  segment?: [Point, Point];
+  region?: [Point, Point][];
+}[];
 
 type Frame = {
   pointer: Point | undefined; // undefined off the chart
@@ -2107,21 +2364,19 @@ type Frame = {
   clicked: boolean; // true on the frame of a click
 };
 
-type FocusBehavior = (frame: Frame) =&gt; {
-  choice: Candidate | undefined;
-  gap: number; // the pointer's distance to the choice, in px
-};</code></pre>
+type FocusBehavior = (frame: Frame) =&gt; Candidate | undefined;</code></pre>
       <p>
         <code>position</code> leaves out an axis where the mark only has a size.
         A bar in a <code>spread</code> by row has a <code>y</code> and no
         <code>x</code>, so the distance to it is the distance in y. That is how
-        the rule dispatches on the kind of space, as #849 asks.
+        the rule dispatches on the kind of space, as #849 asks. A line has no
+        position, so it is as near as its path.
       </p>
       <p>
         A behavior keeps no memory of its own. The runtime remembers the last
         choice and passes it as <code>current</code>. The head start and the
-        hysteresis both read it, so a behavior value can be shared by any number
-        of charts.
+        wider reach of the current focus both read it, so a behavior value can
+        be shared by any number of charts.
       </p>
     </div>
 
@@ -2146,7 +2401,10 @@ type FocusBehavior = (frame: Frame) =&gt; {
           <tbody>
             <tr>
               <td><code>Focus.hit()</code></td>
-              <td>The mark the pointer is inside. Gap 0.</td>
+              <td>
+                The mark the pointer is inside, the one on top where marks
+                overlap.
+              </td>
               <td>None. A drag has no direct hit.</td>
             </tr>
             <tr>
@@ -2156,7 +2414,8 @@ type FocusBehavior = (frame: Frame) =&gt; {
               <td>
                 The nearest candidate, measured to its
                 <code>position</code> (the default), its <code>center</code> or
-                its <code>outline</code>. The current focus gets
+                its <code>outline</code>. A candidate with no position is
+                measured to its outline. The current focus gets
                 <code>stickiness</code> px of head start. Nothing past
                 <code>radius</code> px.
               </td>
@@ -2167,23 +2426,32 @@ type FocusBehavior = (frame: Frame) =&gt; {
             </tr>
             <tr>
               <td><code>Focus.first([a, b, ...])</code></td>
-              <td>What the first behavior that makes a choice picks.</td>
+              <td>What the first behavior that picks a mark picks.</td>
               <td>
-                None. <code>d.closest</code> over behaviors picks the lowest gap
-                instead.
+                None. <code>d.closest</code> over behaviors picks the one with
+                the lowest gap instead.
               </td>
             </tr>
             <tr>
-              <td><code>.within(gap)</code></td>
+              <td><code>.within(reach)</code></td>
               <td>
-                The same, but nothing when the pointer is more than
-                <code>gap</code> px from the hull of the drawn marks, or
-                <code>gap + 4</code> once there is a focus.
+                The same, run only on the marks whose outline is within
+                <code>reach</code> px of the pointer, and the current focus out
+                to <code>reach + 4</code>. With none, nothing.
               </td>
               <td>
-                <code>.whenFar(other, { gapIn, gapOut })</code> on the gap of
-                <code>d.between</code>, which is the distance to the hull
+                <code>.whenFar(other, { gapIn, gapOut })</code>, turned around.
+                It limits the gap to the target the behavior chose. Here the
+                reach narrows the targets first.
               </td>
+            </tr>
+            <tr>
+              <td><code>.snap(stickiness)</code></td>
+              <td>
+                Then, on a line drawn through rows, its point nearest the
+                pointer, with a head start for the current point.
+              </td>
+              <td><code>d.closest</code> over the line's rows</td>
             </tr>
             <tr>
               <td><code>.onClick()</code></td>
@@ -2215,7 +2483,7 @@ type FocusBehavior = (frame: Frame) =&gt; {
       <pre><code class="language-javascript">const focus = Focus.first([
   Focus.hit(),
   Focus.closest({ stickiness: 4 }),
-]).within(8);
+]).within(16);
 
 // The sugar.
 line({ x: "year", y: "count", stroke: "series" }).tooltip({
@@ -2242,8 +2510,9 @@ chart(yearly)
         The behaviors are user code today. What is not is the runtime around
         them. The prototype does each piece by hand in
         <code>focusRuntime.ts</code>, and each piece names the public API that
-        would replace it. With these public, <code>focusRuntime.ts</code> is one
-        call to <code>pointer().snap</code>.
+        would replace it. Version 1 builds each piece inside the library for
+        <code>.tooltip()</code>, but none is public yet. With these public,
+        <code>focusRuntime.ts</code> is one call to <code>pointer().snap</code>.
       </p>
       <div class="table-wrap">
         <table>
@@ -2268,6 +2537,32 @@ chart(yearly)
                 layout frame, which already records each node's box.
               </td>
               <td>#830</td>
+            </tr>
+            <tr>
+              <td>Outlines</td>
+              <td>
+                Reads each element's shape: a rect is a box, an ellipse is
+                round, a stroked path is its segments, and a filled path is a
+                region. A curved path is sampled every 4 px.
+              </td>
+              <td>
+                The display item's outline, which the runtime already has (its
+                box and a path's <code>d</code>).
+              </td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>A line's rows</td>
+              <td>
+                Draws a circle per row with the same <code>scatter</code> as the
+                line, hidden except the focused one, and reads the points off
+                them.
+              </td>
+              <td>
+                The line records where it drew each row. Version 1 does this
+                inside the library.
+              </td>
+              <td></td>
             </tr>
             <tr>
               <td>Placed position</td>
@@ -2295,7 +2590,7 @@ chart(yearly)
               <td>
                 Keeps the chosen key in a <code>signal</code>, set only when it
                 changes, and finds <code>current</code> by key in each new
-                frame.
+                frame, among the candidates and their points.
               </td>
               <td>
                 The result of <code>snap</code> changes only when its key
@@ -2390,20 +2685,26 @@ chart(yearly)
               <td>Behavior</td>
               <td>
                 <code>(frame: DragFrame) =&gt; DragResult</code>, where the
-                frame is only <code>{ pointer }</code>
+                frame is only <code>{ pointer }</code> and the result carries a
+                gap
               </td>
               <td>
-                <code>(frame: Frame) =&gt; { choice, gap }</code>, where the
-                frame also has the candidates, <code>current</code> and
+                <code>(frame: Frame) =&gt; Candidate | undefined</code>, where
+                the frame also has the candidates, <code>current</code> and
                 <code>clicked</code>
               </td>
             </tr>
             <tr>
-              <td>Gap</td>
+              <td>How near counts</td>
               <td>
-                The pointer's distance to where the behavior puts the grab point
+                <code>whenFar</code> compares the gap of the chosen target, the
+                pointer's distance to where the behavior puts the grab point
               </td>
-              <td>The pointer's distance to the choice</td>
+              <td>
+                <code>within</code> drops the marks out of reach before the
+                behavior chooses, since the nearest by position can be far from
+                the pointer while another mark is near it
+              </td>
             </tr>
             <tr>
               <td>Memory</td>
@@ -2427,6 +2728,18 @@ chart(yearly)
                 its outline, since a direct hit exists
               </td>
             </tr>
+            <tr>
+              <td>Discrete or continuous</td>
+              <td>
+                <code>d.closest</code> snaps to one of several states, and
+                <code>d.between</code> moves continuously between them
+              </td>
+              <td>
+                <code>.snap</code> picks one row of a line, like
+                <code>d.closest</code>. A value read between rows, like
+                <code>d.between</code>, is a follow-up.
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -2440,7 +2753,9 @@ chart(yearly)
         </div>
         <div>
           <span class="label">Proposed, a focus</span>
-          <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+          <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })])
+  .within(16)
+  .snap(4);</code></pre>
         </div>
       </div>
       <p>
@@ -2451,11 +2766,26 @@ chart(yearly)
         reads in the order it is said. The focus family keeps that rule.
       </p>
       <p>
+        A line drawn from a function has no rows, so version 1 shows one box for
+        the whole line. The right box there shows the function's value at the
+        pointer. That is Dragology's <code>between</code>: a point that moves
+        with the pointer along the line, not one of a few fixed points. It needs
+        content that changes on every pointer move without a re-run of the
+        layout, so it is a follow-up.
+      </p>
+      <div>
+        <span class="label">Proposed (sketch), a follow-up</span>
+        <pre><code class="language-javascript">// The point of the line nearest the pointer, anywhere along it, and the
+// function's value there.
+line({ x: "t", y: (t) =&gt; Math.sin(t) }).tooltip({
+  focus: Focus.first([Focus.hit(), Focus.closest()]).within(16).between(),
+});</code></pre>
+      </div>
+      <p>
         The same frame could later serve dragging. There the candidates are the
         reachable states, each with the position the layout gives the dragged
-        mark in that state, and <code>gap</code> means what it means in
-        Dragology. A drag also needs a preview and a drop state, which a hover
-        does not.
+        mark in that state, and the gap means what it means in Dragology. A drag
+        also needs a preview and a drop state, which a hover does not.
       </p>
     </div>
   </section>
@@ -3061,13 +3391,66 @@ girafe(ggobj = gg)</code></pre>
     </div>
 
     <h2 id="findings" class="part">Findings</h2>
+
+    <div class="section">
+      <h2>Where this stands</h2>
+      <p>
+        Version 1 is draft PR #1401. It builds <code>.tooltip()</code> and
+        <code>.tooltip([fields])</code> on marks, in JS and Python, and a public
+        <code>.name()</code> on operators. It runs the default focus behavior
+        inside the library. <code>Focus</code> is internal and not exported.
+        Everything else on this page is still proposed.
+      </p>
+      <p>
+        #803 (build <code>.label()</code> from the public selection machinery)
+        is advanced, not finished. Labels and tooltips now share one lowering,
+        <code>lowerSelectionLayers</code>. Four gaps remain:
+      </p>
+      <ul>
+        <li>a layer that resolves after the axes;</li>
+        <li>a layer that is not framed as its own chart;</li>
+        <li>constraints across layers;</li>
+        <li>a placement hook that runs after the layout is solved.</li>
+      </ul>
+      <p>Fixed in version 1, from the findings below:</p>
+      <ul>
+        <li>
+          Nothing set <code>pointer-events</code>, so a box under the cursor
+          stole the hit.
+        </li>
+        <li>A pointer input had to be registered by a read in the spec.</li>
+        <li>A drag lost the pointer when it left the chart.</li>
+        <li>
+          A static drawing had no <code>&lt;title&gt;</code> on its marks.
+        </li>
+      </ul>
+      <p>Still open:</p>
+      <ul>
+        <li>A layer with no marks moves the plot.</li>
+        <li>
+          <code>filter</code> with no match still calls the mark with an empty
+          list.
+        </li>
+        <li>
+          <code>pointer().dataPos()</code> is undefined when the chart sets its
+          own size (#1403).
+        </li>
+        <li>A relational mark paints under the marks it references.</li>
+        <li>
+          A chart nested in another shares its scale for a field of the same
+          name.
+        </li>
+        <li>There is no number formatting outside tooltips.</li>
+      </ul>
+    </div>
+
     <ul class="rules">
       <li>
         The bugs below get fixed as part of implementing this, not filed
         separately.
       </li>
       <li>
-        The prototype is seven stories, one helper file, the focus family in
+        The prototype is eight stories, one helper file, the focus family in
         <code>focus.ts</code> and the runtime stand-ins in
         <code>focusRuntime.ts</code>. It edits no library code.
       </li>
@@ -3140,13 +3523,15 @@ girafe(ggobj = gg)</code></pre>
                 where each year or point was drawn off the drawn marks. The
                 scatter's live distance is then in true pixels.
               </td>
-              <td>unfiled</td>
+              <td>#1403</td>
             </tr>
             <tr>
               <td>A layer with no marks moves the plot.</td>
               <td>
-                0.75 px in the closed line story, whose rule layer was empty.
-                The rule is now always drawn and hidden with no focus. In a
+                0.75 px in the line stories. In the one-box-for-the-year story
+                the rule is now always drawn and hidden with no focus. In the
+                live one-row demo the box's layer is empty while it is closed,
+                so opening the box still moves the lines by 0.75 px. In a
                 render-sized chart an empty layer moved the x axis by 46 px and
                 clipped the axes, so the live charts are not render-sized.
               </td>
@@ -3158,7 +3543,7 @@ girafe(ggobj = gg)</code></pre>
                 A box under the cursor steals the hit and flickers. The
                 prototype fixes it with story CSS.
               </td>
-              <td>unfiled</td>
+              <td>fixed in version 1</td>
             </tr>
             <tr>
               <td>
@@ -3185,7 +3570,10 @@ girafe(ggobj = gg)</code></pre>
             </tr>
             <tr>
               <td>There is no number formatting.</td>
-              <td>The helpers carry their own formatters.</td>
+              <td>
+                The helpers carry their own formatters. Version 1 formats
+                tooltip values only.
+              </td>
               <td>unfiled</td>
             </tr>
             <tr>
@@ -3206,7 +3594,7 @@ girafe(ggobj = gg)</code></pre>
       <h2>Not prototyped</h2>
       <ul>
         <li><code>.layer(fn)</code> on a mark</li>
-        <li><code>.name()</code> on an operator</li>
+        <li><code>.name()</code> on an operator (built in version 1)</li>
         <li><code>.floating()</code></li>
         <li><code>pointer().snap()</code></li>
       </ul>
@@ -3391,9 +3779,9 @@ girafe(ggobj = gg)</code></pre>
         '<rect x="1" y="1" width="18" height="12" fill="#f59f00" fill-opacity=".5"/><path d="M1 9H19" stroke="#1f2937" stroke-dasharray="3 2"/>',
       position:
         '<circle cx="10" cy="7" r="2.5" fill="#d100d1"/><path d="M3 7H7M13 7H17" stroke="#d100d1" stroke-width="2"/>',
-      hull: '<path d="M2 12L6 2H17L18 12Z" fill="none" stroke="#d100d1" stroke-width="1.25"/>',
-      limit:
-        '<path d="M2 11C2 4 6 2 10 2" fill="none" stroke="#d100d1"/><path d="M10 2C15 2 18 5 18 11" fill="none" stroke="#d100d1" stroke-dasharray="3 2"/>',
+      reach:
+        '<rect x="7" y="5" width="6" height="4" fill="#1f2937"/><rect x="2" y="2" width="16" height="10" rx="4" fill="none" stroke="#d100d1" stroke-width="1.25"/>',
+      out: '<rect x="7" y="5" width="6" height="4" fill="#1f2937"/><rect x="2" y="2" width="16" height="10" rx="4" fill="none" stroke="#d100d1" stroke-width="1.5" stroke-dasharray="3 2"/>',
       line: '<path d="M3 11L17 3" stroke="#fff" stroke-width="4"/><path d="M3 11L17 3" stroke="#d100d1" stroke-width="1.5" stroke-dasharray="3 2"/><circle cx="17" cy="3" r="2" fill="none" stroke="#d100d1"/>',
     };
     var legend = [
@@ -3403,9 +3791,9 @@ girafe(ggobj = gg)</code></pre>
         "the current focus, stronger; dashed: the borders with no focus",
       ],
       ["position", "what is measured to (a tick: one axis)"],
-      ["hull", "the hull of the marks"],
-      ["limit", "the within limit; dashed: once focused"],
-      ["line", "pointer to the measured point, with the gap"],
+      ["reach", "a mark's reach: 16 px around its outline"],
+      ["out", "the current focus's reach: 20 px"],
+      ["line", "pointer to the measured point, with the distance"],
     ];
     function regionsControl(demo) {
       var box = document.createElement("div");

@@ -16,8 +16,11 @@ import { mountInteractive as linesShared } from "../../../../packages/gofish-gra
 import { mountInteractive as scatterNearest } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/ScatterNearest.stories";
 import { mountInteractive as chartInTooltip } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/ChartInTooltip.stories";
 import { mountInteractiveFlipped as edgeFlip } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/EdgeCases.stories";
+import { mountInteractive as donut } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/Donut.stories";
 import {
   mountBars as focusBars,
+  mountFarBars as focusFar,
+  mountDonut as focusDonut,
   select as selectFocus,
   behaviors as focusBehaviors,
 } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/FocusSwitcher.stories";
@@ -43,7 +46,10 @@ const demos: Record<string, (el: HTMLElement) => unknown> = {
   "scatter-nearest": scatterNearest,
   "chart-in-tooltip": chartInTooltip,
   "edge-flip": edgeFlip,
+  donut,
   "focus-bars": focusBars,
+  "focus-far": focusFar,
+  "focus-donut": focusDonut,
 };
 
 (window as any).TooltipDemos = {
