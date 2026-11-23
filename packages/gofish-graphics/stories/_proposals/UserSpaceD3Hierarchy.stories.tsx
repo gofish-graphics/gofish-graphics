@@ -257,11 +257,15 @@ export const RING = 150 / 4; // the sunburst's ring: radius 150 over 4 rings
 const partitionNode = (t: Tree, ring: number, outline = {}): any => {
   const self = rect({ w: v(total(t)), h: ring, fill: v(t.name), ...outline });
   if (!t.children) return self;
-  // WALL: "start" (and the default "baseline") here throws "Constraint
-  // placement conflict on x" for this tree (smallest repro: root with
-  // children [p(a 1, b 2), c 3, q(d 1, e 1)]); the rect and the children's
-  // stack have the same width, so "middle" puts them in the same place.
-  return stack({ dir: "y", alignment: "middle" }, [
+  // The rows are pixels, so they are laid end to end by a spread with no
+  // gap: a stack only adds data amounts. WALL: "start" (and the default
+  // "baseline") here used to throw "Constraint placement conflict on x" for
+  // this tree (smallest repro: root with children [p(a 1, b 2), c 3,
+  // q(d 1, e 1)]). With the spread it no longer throws, but it draws the
+  // depth-1 and deeper rows squeezed to the left and out of place. The rect
+  // and the children's stack have the same width, so "middle" puts them in
+  // the same place.
+  return spread({ dir: "y", spacing: 0, alignment: "middle" }, [
     self,
     stack(
       { dir: "x", alignment: "start" },

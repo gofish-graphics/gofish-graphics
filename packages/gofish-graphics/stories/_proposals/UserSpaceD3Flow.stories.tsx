@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
+  Baseline,
   Constraint,
   Curve,
   blank,
@@ -592,7 +593,9 @@ export const insideOut = (series: string[]) => {
 
 // <plan: wiggle>
 /** d3's stackOffsetWiggle: the baseline g, g(0) = 0, and from x - 1 to x it
- *  moves by minus the value-weighted mean slope of the bands' middles. */
+ *  moves by minus the value-weighted mean slope of the bands' middles. No
+ *  story draws it any more (StackWiggle uses `Baseline.wiggle()`); it stays
+ *  as the reference to check that against. */
 export const wiggle = (order: string[]) => {
   const g = [0];
   for (const x of XS.slice(1)) {
@@ -613,43 +616,63 @@ export const wiggle = (order: string[]) => {
 
 type Offset = "none" | "expand" | "silhouette" | "wiggle";
 
-const BASE = "_baseline";
-
-/** Rows in stacking order, bottom first. Wiggle adds a first, invisible part
- *  per x: the baseline above its lowest point. */
-export const stackRows = (offset: Offset, order: string[]) => {
-  const g = wiggle(order);
-  const low = Math.min(...g);
-  return XS.flatMap((x) => [
-    ...(offset === "wiggle" ? [{ x, series: BASE, amount: g[x] - low }] : []),
-    ...order.map((series) => ({ x, series, amount: at(series, x) })),
-  ]);
-};
+/** Rows in stacking order, bottom first. */
+export const stackRows = (order: string[]) =>
+  XS.flatMap((x) =>
+    order.map((series) => ({ x, series, amount: at(series, x) }))
+  );
 
 // <draw: stack>
-const stackChart = (offset: Offset, order: string[]) =>
-  chart(stackRows(offset, order), { w: W, h: H })
+/** One bar per x, the series stacked in it, and a ribbon per series through
+ *  its bars. */
+const stackChart = (offset: Exclude<Offset, "wiggle">, order: string[]) =>
+  layer([
+    chart(stackRows(order), { w: W, h: H })
+      .flow(
+        spread({
+          by: "x",
+          dir: "x",
+          spacing: 14,
+          alignment: offset === "silhouette" ? "middle" : "start",
+        }),
+        stack({
+          by: "series",
+          dir: "y",
+          ...(offset === "expand" ? { size: field("amount").normalize() } : {}),
+        })
+      )
+      .mark(
+        rect({
+          w: 4,
+          ...(offset === "expand" ? {} : { h: "amount" }),
+          fill: "series",
+        }).name("bands")
+      ),
+    chart(selectAll("bands"))
+      .flow(group({ by: "series" }))
+      .mark(ribbon({ opacity: 0.75 })),
+  ]);
+
+/** Wiggle: one band per series over x, stacked on a baseline that moves
+ *  (d3's stackOffsetWiggle). Each x's stack depends on its neighbors, so
+ *  this is one stack of bands, not a stack per x: there are no bars. */
+const wiggleChart = (order: string[]) =>
+  chart(stackRows(order), { w: W, h: H })
     .flow(
-      spread({
-        by: "x",
-        dir: "x",
-        spacing: 14,
-        alignment: offset === "silhouette" ? "middle" : "start",
-      }),
       stack({
         by: "series",
         dir: "y",
-        ...(offset === "expand" ? { size: field("amount").normalize() } : {}),
+        baseline: Baseline.wiggle(),
       })
     )
-    .mark((d: any[]) =>
-      d[0].series === BASE
-        ? blank({ w: 4, h: "amount" })(d)
-        : rect({
-            w: 4,
-            ...(offset === "expand" ? {} : { h: "amount" }),
-            fill: "series",
-          }).name("bands")(d)
+    .mark(
+      ribbon({
+        x: "x",
+        h: "amount",
+        fill: "series",
+        opacity: 0.75,
+        curve: Curve.linear(),
+      })
     );
 // </draw: stack>
 
@@ -657,12 +680,10 @@ const stackStory = (offset: Offset, ordered: boolean): StoryObj => ({
   render: () => {
     const container = initializeContainer();
     const order = ordered ? insideOut(SERIES) : SERIES;
-    layer([
-      stackChart(offset, order),
-      chart(selectAll("bands"))
-        .flow(group({ by: "series" }))
-        .mark(ribbon({ opacity: 0.75 })),
-    ]).render(container, { w: W, h: H, axes: false, legend: false });
+    (offset === "wiggle"
+      ? wiggleChart(order)
+      : stackChart(offset, order)
+    ).render(container, { w: W, h: H, axes: false, legend: false });
     return container;
   },
 });

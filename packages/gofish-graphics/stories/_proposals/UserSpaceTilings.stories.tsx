@@ -3,7 +3,7 @@ import { Delaunay } from "d3-delaunay";
 import { initializeContainer } from "../helper";
 import { countryPopulations } from "../../src/data/countryPopulations";
 import {
-  Bin,
+  Binning,
   chart,
   circle,
   layer,
@@ -17,8 +17,8 @@ import {
   spread,
   stack,
   struct,
-  Tile,
-  treemap,
+  tile,
+  Tiling,
   v,
 } from "../../src/lib";
 
@@ -50,13 +50,13 @@ const total = (items: Country[]) => sum(items.map((d) => d.pop));
 // ─────────────────────────────────────────────────────────────────────────
 
 const builtin =
-  (tile: any, spacing: number, round = true) =>
+  (tiling: any, spacing: number, round = true) =>
   () => {
     const container = initializeContainer();
     chart(countries, { axes: false, w: W, h: H })
-      .flow(treemap({ size: "pop", spacing, tile, round }))
+      .flow(tile({ size: "pop", spacing, tiling, round }))
       .mark(
-        tile.kind === "voronoi"
+        tiling.kind === "voronoi"
           ? region({ fill: "continent", stroke: "white", strokeWidth: 1 })
           : rect({ fill: "continent", stroke: "white", strokeWidth: 1 })
       )
@@ -64,16 +64,16 @@ const builtin =
     return container;
   };
 
-export const BuiltinSquarify: StoryObj = { render: builtin(Tile.squarify, 2) };
-export const BuiltinBinary: StoryObj = { render: builtin(Tile.binary, 2) };
-export const BuiltinSlice: StoryObj = { render: builtin(Tile.slice, 2) };
-export const BuiltinVoronoi: StoryObj = { render: builtin(Tile.voronoi, 2) };
+export const BuiltinSquarify: StoryObj = { render: builtin(Tiling.squarify, 2) };
+export const BuiltinBinary: StoryObj = { render: builtin(Tiling.binary, 2) };
+export const BuiltinSlice: StoryObj = { render: builtin(Tiling.slice, 2) };
+export const BuiltinVoronoi: StoryObj = { render: builtin(Tiling.voronoi, 2) };
 // The same with no spacing and no rounding, to compare against the stacks.
 export const BuiltinSquarify0: StoryObj = {
-  render: builtin(Tile.squarify, 0, false),
+  render: builtin(Tiling.squarify, 0, false),
 };
 export const BuiltinBinary0: StoryObj = {
-  render: builtin(Tile.binary, 0, false),
+  render: builtin(Tiling.binary, 0, false),
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -563,7 +563,7 @@ const start: Site[] = countries.map((d) => ({
   y: rand() * H,
 }));
 
-// WALL: `Bin.voronoi` clips its cells to the box that holds the data and
+// WALL: `Binning.voronoi` clips its cells to the box that holds the data and
 // the seeds, and a number column's domain cannot be declared, so the box
 // would shrink to the sites' own bounding box. Two extra rows at the box's
 // corners, each a copy of its nearest site, stretch the data to the whole
@@ -584,7 +584,7 @@ const cells = (sites: Site[]) =>
   chart(framed(sites))
     .flow(
       partition({
-        by: struct({ x: "x", y: "y" }).bin(Bin.voronoi({ seeds: sites })),
+        by: struct({ x: "x", y: "y" }).bin(Binning.voronoi({ seeds: sites })),
       })
     )
     .mark(region({ fill: "continent", stroke: "white", strokeWidth: 1.5 }));
