@@ -1360,7 +1360,6 @@ class Constraint:
         *,
         dir: str,
         spacing: Optional[Union[float, "LengthValue", Dict[str, Any]]] = None,
-        slack: Optional[Dict[str, Any]] = None,
         order: Optional[str] = None,
         glue: Optional[bool] = None,
     ) -> DistributeConstraint:
@@ -1373,15 +1372,11 @@ class Constraint:
                 `Spacing.box(gap)`, a gap between facing edges,
                 `Spacing.pitch(distance, at=...)`, a fixed distance between
                 the same point on each ref (`at[i+1] = at[i] + distance`),
-                or `Spacing.at_least(gap)`, a minimum gap.
-                A bare amount (pixels, `percent(n)`, `fr(k)`) is
+                or `Spacing.at_least(gap, slack=...)`, a minimum gap, whose
+                `slack` places the refs in the room the gaps leave. Each
+                takes `ends`, the room before the first ref and after the
+                last. A bare amount (pixels, `percent(n)`, `fr(k)`) is
                 `Spacing.box(amount)`. Default 8.
-            slack: Where the refs go when minimum gaps leave them room, a
-                `Slack` rule (`Slack.end()`, `Slack.at(t)`). It needs
-                `Spacing.at_least`. The distributes whose gaps are linked
-                share one slack: one that states none takes the others',
-                and two that state different values are an error.
-                Default `Slack.start()`.
             order: "forward" (default) or "reverse" — distribute in reverse order.
             glue: Stack semantics — glue the refs together (their sizes sum
                 into a position at the layer) instead of slicing a budget.
@@ -1390,7 +1385,7 @@ class Constraint:
         return DistributeConstraint(
             _node_operands("distribute", refs),
             _distribute_constraint_opts(
-                dir=dir, spacing=spacing, slack=slack, order=order, glue=glue
+                dir=dir, spacing=spacing, order=order, glue=glue
             ),
         )
 

@@ -1667,6 +1667,16 @@ export const layer = createNodeOperatorSequential(
               mins[axis].push(lo);
               maxs[axis].push(hi);
             }
+          // A chain's ends (`LayerPlan.ends`): the room it keeps before its
+          // first part and after its last is part of its box.
+          for (const axis of [0, 1] as const) {
+            const ends = node._claimMemo.plans[axis]?.ends;
+            if (ends === undefined) continue;
+            const sigma =
+              effectivePosScales[axis]?.sigma ?? childScaleFactors[axis] ?? 0;
+            mins[axis].push(Pwl.at(ends[0], sigma));
+            maxs[axis].push(Pwl.at(ends[1], sigma));
+          }
           // A chart's frame covers its niced domain (`domainSpan`).
           for (const axis of [0, 1] as const) {
             const domain = node.domainSpan(axis);

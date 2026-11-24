@@ -859,9 +859,10 @@ fixed-size nodes report their size).
   runs once in formulas (`Tape`), so each box's edges are piecewise-linear
   in σ, and the hull is their envelope (`buildPlan` in `solver/plan.ts`). A ring is such a layer, so its claim holds its axis, titles or
   legend around what it wraps, and so does a scatter's around its marks.
-  A chain that closes around a closed axis (a spread around a full turn)
-  reaches one lap past its first part, its last gap included
-  (`closingTurn`), so the slack its members share is what n gaps leave.
+  A chain's claim includes the room its spacing keeps at its two ends
+  (`chainEnds`). A chain that closes around a closed axis (a spread around
+  a full turn) keeps half a gap at each end by default, so the room its
+  members share is what n gaps leave.
 - **Frames read across layers.** A `position` with `in: ref` places a
   datum in the frame of the node `ref` names (#1257). The claim walk reads
   that frame's data 0 and one data unit up the plans from the node to the

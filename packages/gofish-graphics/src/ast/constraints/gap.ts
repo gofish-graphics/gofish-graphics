@@ -40,3 +40,12 @@ export const spacingOn = (c: ConstraintSpec, axis: 0 | 1): Gap | undefined =>
  *  (`GoFishNode.gapOf`). The claim walk and layout pass it to the
  *  placement lowering, as they pass a grid's tracks. */
 export type GapOf = (c: GapConstraint, axis: 0 | 1) => Pwl.Value;
+
+/** Reads the room a chain keeps before its first part and after its last
+ *  along its axis, as values in σ: its spacing's `ends` times its gap, or
+ *  the default where its room is the whole of a glued axis
+ *  (`GoFishNode.endsOf`). Passed beside {@link GapOf}. */
+export type EndsOf = (
+  c: DistributeConstraint,
+  axis: 0 | 1
+) => readonly [Pwl.Value, Pwl.Value];

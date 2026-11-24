@@ -235,14 +235,15 @@ const layout = (
   return new Map([...solved.cells].map(([k, c]) => [k, c.min]));
 };
 
-/** `constraints` with each distribute of minimum gaps stating `slack`. */
+/** `constraints` with each distribute of minimum gaps stating `slack` on
+ *  its spacing. */
 const slacked = (
   constraints: ConstraintSpec[],
   slack: Slack.Slack
 ): ConstraintSpec[] =>
   constraints.map((c) =>
     c.type === "distribute" && c.spacing.kind === "atLeast"
-      ? { ...c, slack }
+      ? { ...c, spacing: { ...c.spacing, slack } }
       : c
   );
 
@@ -763,8 +764,7 @@ async function main() {
           C.distribute(
             {
               dir: "x",
-              spacing: S.atLeast(gap),
-              ...(slack === undefined ? {} : { slack }),
+              spacing: S.atLeast(gap, slack === undefined ? {} : { slack }),
             },
             refs
           );
@@ -810,7 +810,7 @@ async function main() {
     check(
       "two linked distributes that state different slacks: an error naming both",
       clash !== undefined &&
-        /distribute\[0\] states slack Slack\.at\(1\) but distribute\[1\] states Slack\.at\(0\.5\)/.test(
+        /distribute\[0\] states Spacing\.atLeast\(…, \{ slack: Slack\.at\(1\) \}\) but distribute\[1\] states Spacing\.atLeast\(…, \{ slack: Slack\.at\(0\.5\) \}\)/.test(
           clash
         ) &&
         clash.includes("linked"),
@@ -834,35 +834,29 @@ async function main() {
       [...plain]
     );
 
-    // Slack only places what minimum gaps leave room for, so on any other
-    // spacing it is an error, made where the distribute is made.
-    for (const spacing of [5, S.box(5), S.pitch(30)]) {
+    // Slack only places what minimum gaps leave room for, so it is an
+    // option of Spacing.atLeast and of no other spacing: on the wire, a
+    // slack on an exact spacing is an unknown key.
+    for (const kind of ["box", "pitch"]) {
       const exactSlack = await errorOf(() =>
-        C.distribute({ dir: "x", spacing, slack: Slack.end() }, [
-          ref("a"),
-          ref("b"),
-        ])
+        C.distribute(
+          {
+            dir: "x",
+            spacing: {
+              kind,
+              [kind === "box" ? "gap" : "distance"]: 5,
+              slack: Slack.end(),
+            },
+          },
+          [ref("a"), ref("b")]
+        )
       );
       check(
-        `slack on Spacing.${typeof spacing === "number" ? "box (a bare amount)" : spacing.kind} is an error`,
-        exactSlack !== undefined &&
-          exactSlack.includes(
-            "slack applies to minimum gaps: use Spacing.atLeast"
-          ),
+        `slack on a Spacing.${kind} object is an error naming the key`,
+        exactSlack !== undefined && exactSlack.includes("slack"),
         exactSlack
       );
     }
-    const spreadExact = await errorOf(() =>
-      rectsOf(
-        spread({ dir: "x", slack: Slack.end() }, rects(["a", "b"], ["red", "green"]))
-      )
-    );
-    check(
-      "a spread's slack with its default spacing is the same error",
-      spreadExact !== undefined &&
-        spreadExact.includes("slack applies to minimum gaps"),
-      spreadExact
-    );
 
     // A spread's slack is the slack of the distribute it lays its children
     // out with: the same row as that distribute in a layer. A chain alone
@@ -872,8 +866,7 @@ async function main() {
       spread(
         {
           dir,
-          spacing: S.atLeast(10),
-          ...(slack === undefined ? {} : { slack }),
+          spacing: S.atLeast(10, slack === undefined ? {} : { slack }),
         },
         rects(["a", "b", "c"], ["red", "green", "blue"])
       );
@@ -882,7 +875,7 @@ async function main() {
         (c: any) => [
           C.align({ y: "baseline" }, [c.a, c.b, c.c]),
           C.distribute(
-            { dir: "x", spacing: S.atLeast(10), slack },
+            { dir: "x", spacing: S.atLeast(10, { slack }) },
             [c.a, c.b, c.c]
           ),
         ]
@@ -918,7 +911,8 @@ async function main() {
     );
 
     // `t` is a fraction in [0, 1]: `Slack.at` checks it where it is made,
-    // and a distribute checks a slack it is handed (from the wire, say).
+    // and a distribute checks the slack of a spacing it is handed (from
+    // the wire, say), nested in that spacing.
     for (const t of [-0.1, 1.5, NaN]) {
       const made = await errorOf(() => Slack.at(t));
       check(
@@ -928,12 +922,15 @@ async function main() {
       );
       const handed = await errorOf(() =>
         C.distribute(
-          { dir: "x", spacing: S.atLeast(5), slack: { kind: "at", t } },
+          {
+            dir: "x",
+            spacing: { kind: "atLeast", gap: 5, slack: { kind: "at", t } },
+          },
           [ref("a"), ref("b")]
         )
       );
       check(
-        `a distribute handed t = ${t} is an error naming slack`,
+        `a distribute handed t = ${t} is an error naming spacing.slack`,
         handed !== undefined && handed.includes("slack"),
         handed
       );

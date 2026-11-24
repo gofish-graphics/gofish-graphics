@@ -479,21 +479,40 @@ def test_distribute_spacing_is_spreads():
         spacing_of({"kind": "gap", "gap": 8})
 
 
-def test_slack_is_a_distribute_option_not_a_layers():
-    """Slack is stated on the distribute (or spread) of minimum gaps, on the
-    wire as its options' ``slack``; ``layer`` takes none."""
-    from gofish import layer, rect
+def test_slack_is_an_option_of_at_least():
+    """Slack is stated on the minimum gaps it places, as the ``slack`` of
+    ``Spacing.at_least``, and on the wire inside the spacing. Neither the
+    distribute nor ``layer`` takes one."""
+    from gofish import layer, rect, spread
 
     c = Constraint.distribute(
-        [], dir="x", spacing=Spacing.at_least(8), slack=Slack.end()
+        [], dir="x", spacing=Spacing.at_least(8, slack=Slack.end())
     )
     assert c.options == {
         "dir": "x",
-        "spacing": {"kind": "atLeast", "gap": 8},
-        "slack": {"kind": "at", "t": 1},
+        "spacing": {"kind": "atLeast", "gap": 8, "slack": {"kind": "at", "t": 1}},
     }
+    with pytest.raises(TypeError, match="Slack rule"):
+        Spacing.at_least(8, slack="end")
+    with pytest.raises(TypeError, match="unexpected keyword argument 'slack'"):
+        Constraint.distribute([], dir="x", slack=Slack.end())
+    with pytest.raises(TypeError, match="unexpected keyword argument 'slack'"):
+        spread(dir="x", slack=Slack.end())
     with pytest.raises(TypeError, match="unexpected keyword argument 'slack'"):
         layer([rect(w=10, h=10)], slack={"x": Slack.end()})
+
+
+def test_spacing_ends():
+    """``ends`` is a multiple of the gap, one number or a pair."""
+    assert Spacing.box(4, ends=[0, 1]) == {"kind": "box", "gap": 4, "ends": [0, 1]}
+    assert Spacing.pitch(20, at="middle", ends=0.5) == {
+        "kind": "pitch",
+        "distance": 20,
+        "at": "middle",
+        "ends": 0.5,
+    }
+    with pytest.raises(ValueError, match="2 items"):
+        Spacing.box(4, ends=[1])
 
 
 @pytest.mark.parametrize("name", ["align", "position", "nest"])

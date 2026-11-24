@@ -96,7 +96,6 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "reverse",
     "glue",
     "baseline",
-    "slack",
     "axes",
     "x",
     "y",
@@ -362,9 +361,9 @@ const SCHEMA_STRATEGY_KEYS: Record<
     at: { part: true, point: true },
   } satisfies StrategyKeys<BaselineIR>,
   Spacing: {
-    box: { gap: true },
-    pitch: { distance: true, at: true },
-    atLeast: { gap: true },
+    box: { gap: true, ends: true },
+    pitch: { distance: true, at: true, ends: true },
+    atLeast: { gap: true, slack: true, ends: true },
   } satisfies StrategyKeys<SpacingIR>,
   Slack: {
     at: { t: true },
@@ -609,7 +608,6 @@ const SCHEMA_CONSTRAINT_KEYS = {
   distribute: {
     dir: true,
     spacing: true,
-    slack: true,
     order: true,
     glue: true,
   } satisfies Record<keyof ConstraintOptions<"distribute">, true>,

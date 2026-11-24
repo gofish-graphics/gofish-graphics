@@ -1,11 +1,15 @@
 /**
- * A closed axis: the angle of a full-turn polar space is periodic and laid
- * out over one whole period, so its end is its start. A spread that fills
- * it leaves n gaps between n parts, the last between the last part and the
- * first (d3.pie's and d3.chord's `padAngle`), and its data sizes fit what
- * the n gaps leave. A partial sweep is an open interval and keeps n - 1
- * gaps, as a cartesian axis does. A chain nested in a part of a closed
- * chain does not fill the axis, so it stays open.
+ * A chain's ends, and the glued axis that sets their default. A spread
+ * keeps `ends` room before its first part and after its last, a multiple
+ * of its gap (CSS space-around at 0.5, space-evenly at 1, d3's band and
+ * point scale outer padding), on any axis. The angle of a full-turn polar
+ * space is periodic and laid out over one whole period, so its end is its
+ * start: a spread that fills it has default ends that sum to one gap, so it
+ * leaves n gaps between n parts (d3.pie's and d3.chord's `padAngle`), and
+ * its data sizes fit what the n gaps leave. `ends: 0` there is a seam. A
+ * partial sweep is an open interval, as a cartesian axis is, and its
+ * default ends are 0. A chain nested in a part of a glued chain does not
+ * fill the axis, so its default ends are 0 too.
  *
  * Run: `tsx src/tests/closedAxis.test.ts` (wired as `pnpm test:closed-axis`).
  */
@@ -80,8 +84,24 @@ const pie = (coord: any, spacing: any) =>
     .flow(spread({ by: "k", dir: "x", spacing }))
     .mark(rect({ w: "v" }));
 
+/** The bars of a cartesian spread, sorted by x: [x, w]. */
+async function barsOf(builder: any, w = 300): Promise<[number, number][]> {
+  const dl = await builder.toDisplayList({ w, h: 100 });
+  return items(dl)
+    .filter((it) => it.kind === "rect")
+    .sort((a, b) => a.x! - b.x!)
+    .map((r) => [r.x!, r.w!]);
+}
+const bars = (spacing: any, w = 300) =>
+  barsOf(
+    chart(rows, { w, h: 100, axes: false })
+      .flow(spread({ by: "k", dir: "x", spacing }))
+      .mark(rect({ w: "v", h: 20 })),
+    w
+  );
+
 async function main() {
-  console.log("\n# a full turn is closed: n gaps");
+  console.log("\n# a full turn is glued: n gaps, half a gap at each end");
   {
     const spans = await wedgeSpans(pie(Coord.polar(), 0.1));
     const gaps = gapsOf(spans);
@@ -95,13 +115,63 @@ async function main() {
       near(wrapGap(spans), 0.1),
       { spans, wrap: wrapGap(spans) }
     );
-    check("the first slice starts at angle 0", near(spans[0][0], 0), spans);
+    check(
+      "the first slice starts half a gap past angle 0",
+      near(spans[0][0], 0.05),
+      spans
+    );
     // The data sizes fit what three gaps leave: (2π - 0.3) / 6 per unit.
     const unit = (TAU - 0.3) / 6;
     check(
       "the data sizes fit 2π less three gaps",
       spans.every(([a, b], i) => near(b - a, rows[i].v * unit)),
       spans.map(([a, b]) => b - a)
+    );
+  }
+
+  console.log("\n# ends: 0 on a full turn is a seam: n - 1 gaps");
+  {
+    const spans = await wedgeSpans(
+      pie(Coord.polar(), Spacing.box(0.1, { ends: 0 }))
+    );
+    const unit = (TAU - 0.2) / 6;
+    check(
+      "the last slice ends where the first starts, at angle 0",
+      gapsOf(spans).every((g) => near(g, 0.1)) &&
+        near(wrapGap(spans), 0) &&
+        near(spans[0][0], 0),
+      { spans, wrap: wrapGap(spans) }
+    );
+    check(
+      "the data sizes fit 2π less two gaps",
+      spans.every(([a, b], i) => near(b - a, rows[i].v * unit)),
+      spans.map(([a, b]) => b - a)
+    );
+  }
+
+  console.log("\n# explicit ends override the default on a full turn");
+  {
+    // None at the start and a whole gap at the end: d3.pie's and
+    // d3.chord's angles.
+    const spans = await wedgeSpans(
+      pie(Coord.polar(), Spacing.box(0.1, { ends: [0, 1] }))
+    );
+    check(
+      "ends [0, 1]: the first slice at 0, one gap after the last",
+      near(spans[0][0], 0) && near(wrapGap(spans), 0.1),
+      spans
+    );
+    // Ends of 1 at both: two gaps where the turn meets itself.
+    const two = await wedgeSpans(
+      pie(Coord.polar(), Spacing.box(0.1, { ends: 1 }))
+    );
+    const unit = (TAU - 0.4) / 6;
+    check(
+      "ends 1: a double gap at the seam, sizes fit 2π less four gaps",
+      near(wrapGap(two), 0.2) &&
+        near(two[0][0], 0.1) &&
+        two.every(([a, b], i) => near(b - a, rows[i].v * unit)),
+      two
     );
   }
 
@@ -150,28 +220,57 @@ async function main() {
       spans.every(([a, b], i) => near(b - a, rows[i].v * unit)),
       spans.map(([a, b]) => b - a)
     );
+    // Ends on an open sweep are room at its two ends, as on a line.
+    const around = await wedgeSpans(
+      pie(
+        Coord.polar({ centralAngle: Math.PI }),
+        Spacing.box(0.1, { ends: 0.5 })
+      )
+    );
+    check(
+      "ends 0.5 on a half turn: half a gap at 0 and at π",
+      near(around[0][0], 0.05) && near(around[2][1], Math.PI - 0.05),
+      around
+    );
   }
 
   console.log("\n# an fr gap on a full turn is one of n shares");
-  {
+  for (const [ends, first] of [
+    [undefined, 0.5],
+    [[0, 1], 0],
+  ] as const) {
     const spans = await wedgeSpans(
       chart(rows, { coord: Coord.polar(), axes: false })
-        .flow(spread({ by: "k", dir: "x", spacing: fr(1) }))
+        .flow(
+          spread({
+            by: "k",
+            dir: "x",
+            spacing: ends === undefined ? fr(1) : Spacing.box(fr(1), { ends }),
+          })
+        )
         .mark(rect({ w: fr(2) }))
     );
     // Three slices of two shares and three gaps of one: 2π / 9 a share.
     const share = TAU / 9;
     check(
-      "slices are two shares and the three gaps one share each",
+      `(ends ${JSON.stringify(ends ?? "default")}) slices are two shares and the three gaps one share each`,
       spans.every(([a, b]) => near(b - a, 2 * share)) &&
         gapsOf(spans).every((g) => near(g, share)) &&
-        near(wrapGap(spans), share),
+        near(wrapGap(spans), share) &&
+        near(spans[0][0], first * share),
       spans
     );
   }
 
   console.log("\n# a pitch of fr(1) on a full turn has n steps");
-  {
+  // Measured from each slice's start with `ends: [0, 1]` (the first slice
+  // at angle 0), and from each slice's middle with the default ends, half a
+  // step at each end (the first middle an eighth of a turn past 0). The
+  // ends are measured from the pitched point, so the default on a full
+  // turn suits `at: "middle"`: from `"start"` a slice as wide as its step
+  // reaches half a step past the room the end keeps, and the turn holds
+  // 4.5 steps, not 4.
+  for (const mode of ["[0, 1]", "default"] as const) {
     const same = [
       { k: "a", v: 1 },
       { k: "b", v: 1 },
@@ -184,7 +283,10 @@ async function main() {
           spread({
             by: "k",
             dir: "x",
-            spacing: Spacing.pitch(fr(1), { at: "start" }),
+            spacing:
+              mode === "default"
+                ? Spacing.pitch(fr(1), { at: "middle" })
+                : Spacing.pitch(fr(1), { at: "start", ends: [0, 1] }),
           })
         )
         // A pitch pins one point of each slice, so a slice with a literal
@@ -193,18 +295,21 @@ async function main() {
     );
     // Four steps of one share make the whole turn, the fourth from the
     // last slice back to the first.
-    const starts = spans.map(([a]) => a);
-    const steps = [...starts.slice(1), starts[0] + TAU].map(
-      (s, i) => s - starts[i]
+    const points = spans.map(([a, b]) =>
+      mode === "default" ? (a + b) / 2 : a
+    );
+    const steps = [...points.slice(1), points[0] + TAU].map(
+      (s, i) => s - points[i]
     );
     check(
-      "the slices start a quarter turn apart, all the way around",
-      steps.every((s) => near(s, TAU / 4)),
-      steps
+      `(ends ${mode}) the slices are a quarter turn apart, all the way around`,
+      steps.every((s) => near(s, TAU / 4)) &&
+        near(points[0], mode === "default" ? TAU / 8 : 0),
+      { steps, spans }
     );
   }
 
-  console.log("\n# a chain nested in a part of a closed chain stays open");
+  console.log("\n# a chain nested in a part of a glued chain stays open");
   {
     const nested = [
       { g: "p", k: "a", v: 1 },
@@ -239,25 +344,105 @@ async function main() {
     );
   }
 
-  console.log("\n# cartesian is unchanged: n - 1 gaps");
+  console.log("\n# cartesian: no ends by default, n - 1 gaps");
   {
-    const dl = await chart(rows, { w: 300, h: 100, axes: false })
-      .flow(spread({ by: "k", dir: "x", spacing: 10 }))
-      .mark(rect({ w: "v", h: 20 }))
-      .toDisplayList({ w: 300, h: 100 });
-    const rs = items(dl)
-      .filter((it) => it.kind === "rect")
-      .sort((a, b) => a.x! - b.x!);
-    const total = rs.reduce((s, r) => s + r.w!, 0);
+    const rs = await bars(10);
+    const total = rs.reduce((s, r) => s + r[1], 0);
     check(
       "the bars fill the width less two gaps",
       rs.length === 3 && near(total, 280, 1e-2),
-      rs.map((r) => [r.x, r.w])
+      rs
     );
     check(
-      "the last bar ends at the end of the width",
-      near(rs[2].x! + rs[2].w! - rs[0].x!, 300, 1e-2),
-      rs.map((r) => [r.x, r.w])
+      "the first bar starts at 0, the last ends at the width",
+      near(rs[0][0], 0, 1e-2) && near(rs[2][0] + rs[2][1], 300, 1e-2),
+      rs
+    );
+  }
+
+  console.log("\n# cartesian ends: around (0.5), evenly (1), [0, 1]");
+  {
+    const around = await bars(Spacing.box(10, { ends: 0.5 }));
+    check(
+      "ends 0.5: 5 px at each end, the bars fit 300 less 30",
+      near(around[0][0], 5, 1e-2) &&
+        near(around[2][0] + around[2][1], 295, 1e-2) &&
+        near(
+          around.reduce((s, r) => s + r[1], 0),
+          270,
+          1e-2
+        ),
+      around
+    );
+    const evenly = await bars(Spacing.box(10, { ends: 1 }));
+    check(
+      "ends 1: 10 px at each end, the bars fit 300 less 40",
+      near(evenly[0][0], 10, 1e-2) &&
+        near(evenly[2][0] + evenly[2][1], 290, 1e-2) &&
+        near(
+          evenly.reduce((s, r) => s + r[1], 0),
+          260,
+          1e-2
+        ),
+      evenly
+    );
+    const lopsided = await bars(Spacing.box(10, { ends: [0, 1] }));
+    check(
+      "ends [0, 1]: none at the start, 10 px at the end",
+      near(lopsided[0][0], 0, 1e-2) &&
+        near(lopsided[2][0] + lopsided[2][1], 290, 1e-2),
+      lopsided
+    );
+  }
+
+  console.log("\n# cartesian ends with fr: a band scale");
+  {
+    // Three bars of fr(4), gaps of fr(1), ends of half a gap: 15 shares of
+    // 20 px, d3.scaleBand().paddingInner(0.2).paddingOuter(0.1) * ... each
+    // bar 80 px.
+    const rs = await barsOf(
+      chart(rows, { w: 300, h: 100, axes: false })
+        .flow(
+          spread({
+            by: "k",
+            dir: "x",
+            spacing: Spacing.box(fr(1), { ends: 0.5 }),
+          })
+        )
+        .mark(rect({ w: fr(4), h: 20 }))
+    );
+    check(
+      "bars at 10, 110, 210, each 80 wide",
+      rs.length === 3 &&
+        rs.every(
+          ([x, w], i) => near(x, 10 + 100 * i, 1e-2) && near(w, 80, 1e-2)
+        ),
+      rs
+    );
+  }
+
+  console.log("\n# a pitch with ends is d3's point scale");
+  {
+    // Four points a pitch of fr(1) apart, at their middles, with half a
+    // step at each end: d3.scalePoint().padding(0.5) on [0, 300] puts them
+    // at 37.5, 112.5, 187.5, 262.5.
+    const same = ["a", "b", "c", "d"].map((k) => ({ k, v: 1 }));
+    const rs = await barsOf(
+      chart(same, { w: 300, h: 100, axes: false })
+        .flow(
+          spread({
+            by: "k",
+            dir: "x",
+            spacing: Spacing.pitch(fr(1), { at: "middle", ends: 0.5 }),
+          })
+        )
+        .mark(rect({ w: 10, h: 20 }))
+    );
+    check(
+      "middles at 37.5, 112.5, 187.5, 262.5",
+      rs.length === 4 &&
+        rs.every(([x, w], i) => near(x + w / 2, 37.5 + 75 * i, 1e-2)),
+      rs
     );
   }
 

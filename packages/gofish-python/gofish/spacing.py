@@ -20,11 +20,12 @@ from .ast import LengthValue
 __all__ = ["box", "pitch", "at_least"]
 
 
-def box(gap: float | LengthValue, /) -> Dict[str, Any]:
+def box(gap: float | LengthValue, /, *, ends: Optional[float | tuple] = None) -> Dict[str, Any]:
     """A gap between the facing edges of each child's box: the end of one child to the start of the next. The distance between the children depends on their sizes.
 
     Args:
         gap: The gap between facing edges, in pixels. A negative gap overlaps the children. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        ends: The room before the first child and after the last, as a multiple of the gap, measured out from the start of the first child's box and the end of the last child's box. 0 leaves no room (CSS space-between), 0.5 leaves half a gap at each end (space-around), and 1 leaves a whole gap at each end (space-evenly). A pair [start, end] sets the two ends apart. The ends are part of the chain's length, so children sized to fit their room fit what the ends leave. A chain whose room is the whole of a periodic axis, such as the angle of a full-turn polar space, has its last child next to its first, so there the default is 0.5 instead, half a gap at each end, and its n children have n gaps around the turn. Default 0.
     """
     if isinstance(gap, (int, float)) and not isinstance(gap, bool):
         if not math.isfinite(gap):
@@ -33,21 +34,42 @@ def box(gap: float | LengthValue, /) -> Dict[str, Any]:
         pass
     else:
         raise TypeError(f"Spacing.box(gap) must be a finite number or a LengthValue, got {type(gap).__name__}")
+    if ends is not None:
+        if isinstance(ends, (int, float)) and not isinstance(ends, bool):
+            if not math.isfinite(ends):
+                raise ValueError(f"Spacing.box(ends=...) must be finite, got {ends!r}")
+        elif isinstance(ends, (list, tuple)):
+            if len(ends) != 2:
+                raise ValueError(f"Spacing.box(ends=...) must have 2 items, got {ends!r}")
+            ends_0 = ends[0]
+            if not (isinstance(ends_0, (int, float)) and not isinstance(ends_0, bool)):
+                raise TypeError(f"Spacing.box(ends=...)[0] must be a finite number, got {type(ends_0).__name__}")
+            if not math.isfinite(ends_0):
+                raise ValueError(f"Spacing.box(ends=...)[0] must be finite, got {ends_0!r}")
+            ends_1 = ends[1]
+            if not (isinstance(ends_1, (int, float)) and not isinstance(ends_1, bool)):
+                raise TypeError(f"Spacing.box(ends=...)[1] must be a finite number, got {type(ends_1).__name__}")
+            if not math.isfinite(ends_1):
+                raise ValueError(f"Spacing.box(ends=...)[1] must be finite, got {ends_1!r}")
+        else:
+            raise TypeError(f"Spacing.box(ends=...) must be a finite number or a list or tuple of 2 items: a finite number, a finite number, got {type(ends).__name__}")
     out: Dict[str, Any] = {"kind": "box"}
     for _k, _v in [
         ("gap", gap),
+        ("ends", ends),
     ]:
         if _v is not None:
             out[_k] = _v
     return out
 
 
-def pitch(distance: float | LengthValue, /, *, at: Optional[str] = None) -> Dict[str, Any]:
+def pitch(distance: float | LengthValue, /, *, at: Optional[str] = None, ends: Optional[float | tuple] = None) -> Dict[str, Any]:
     """A fixed distance between the same point on each child: from that point on one child to that point on the next. The distance does not depend on the children's sizes.
 
     Args:
         distance: The distance between the points, in pixels. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         at: The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). "middle" is center to center. Default "baseline".
+        ends: The room before the first child and after the last, as a multiple of the distance, measured out from the point `at` on the first child and on the last (d3's point scale `padding`). 0 leaves no room (CSS space-between), 0.5 leaves half a distance at each end (space-around), and 1 leaves a whole distance at each end (space-evenly). A pair [start, end] sets the two ends apart. The ends are part of the chain's length, so children sized to fit their room fit what the ends leave. A chain whose room is the whole of a periodic axis, such as the angle of a full-turn polar space, has its last child next to its first, so there the default is 0.5 instead, half a distance at each end, and its n children have n gaps around the turn. Default 0.
     """
     if isinstance(distance, (int, float)) and not isinstance(distance, bool):
         if not math.isfinite(distance):
@@ -61,29 +83,75 @@ def pitch(distance: float | LengthValue, /, *, at: Optional[str] = None) -> Dict
             raise TypeError(f"Spacing.pitch(at=...) must be one of \"start\", \"middle\", \"end\", \"baseline\", got {type(at).__name__}")
         if at not in ("start", "middle", "end", "baseline"):
             raise ValueError(f"Spacing.pitch(at=...) must be one of \"start\", \"middle\", \"end\", \"baseline\", got {at!r}")
+    if ends is not None:
+        if isinstance(ends, (int, float)) and not isinstance(ends, bool):
+            if not math.isfinite(ends):
+                raise ValueError(f"Spacing.pitch(ends=...) must be finite, got {ends!r}")
+        elif isinstance(ends, (list, tuple)):
+            if len(ends) != 2:
+                raise ValueError(f"Spacing.pitch(ends=...) must have 2 items, got {ends!r}")
+            ends_0 = ends[0]
+            if not (isinstance(ends_0, (int, float)) and not isinstance(ends_0, bool)):
+                raise TypeError(f"Spacing.pitch(ends=...)[0] must be a finite number, got {type(ends_0).__name__}")
+            if not math.isfinite(ends_0):
+                raise ValueError(f"Spacing.pitch(ends=...)[0] must be finite, got {ends_0!r}")
+            ends_1 = ends[1]
+            if not (isinstance(ends_1, (int, float)) and not isinstance(ends_1, bool)):
+                raise TypeError(f"Spacing.pitch(ends=...)[1] must be a finite number, got {type(ends_1).__name__}")
+            if not math.isfinite(ends_1):
+                raise ValueError(f"Spacing.pitch(ends=...)[1] must be finite, got {ends_1!r}")
+        else:
+            raise TypeError(f"Spacing.pitch(ends=...) must be a finite number or a list or tuple of 2 items: a finite number, a finite number, got {type(ends).__name__}")
     out: Dict[str, Any] = {"kind": "pitch"}
     for _k, _v in [
         ("distance", distance),
         ("at", at),
+        ("ends", ends),
     ]:
         if _v is not None:
             out[_k] = _v
     return out
 
 
-def at_least(gap: float, /) -> Dict[str, Any]:
-    """A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer. A minimum gap gives each child a range of positions, not one position; the `slack` of the spread or distribute that states the gaps picks one.
+def at_least(gap: float, /, *, slack: Optional[dict] = None, ends: Optional[float | tuple] = None) -> Dict[str, Any]:
+    """A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer. A minimum gap gives each child a range of positions, not one position, and its `slack` picks one.
 
     Args:
         gap: The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much.
+        slack: Where the children go in the room the minimum gaps leave them, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). Minimum gaps that share children share their room, so they share one rule: a chain that states none takes the one a linked chain states, and two linked chains that state different rules are an error. Omitted by every linked chain, Slack.start().
+        ends: The room before the first child and after the last, as a multiple of the least gap, measured out from the start of the first child's box and the end of the last child's box. 0 leaves no room (CSS space-between), 0.5 leaves half a least gap at each end (space-around), and 1 leaves a whole least gap at each end (space-evenly). A pair [start, end] sets the two ends apart. The ends are part of the chain's length, so children sized to fit their room fit what the ends leave. A chain whose room is the whole of a periodic axis, such as the angle of a full-turn polar space, has its last child next to its first, so there the default is 0.5 instead, half a least gap at each end, and its n children have n gaps around the turn. Default 0.
     """
     if not (isinstance(gap, (int, float)) and not isinstance(gap, bool)):
         raise TypeError(f"Spacing.at_least(gap) must be a finite number, got {type(gap).__name__}")
     if not math.isfinite(gap):
         raise ValueError(f"Spacing.at_least(gap) must be finite, got {gap!r}")
+    if slack is not None:
+        if not isinstance(slack, dict):
+            raise TypeError(f"Spacing.at_least(slack=...) must be a Slack rule (a dict made by the Slack family), got {type(slack).__name__}")
+    if ends is not None:
+        if isinstance(ends, (int, float)) and not isinstance(ends, bool):
+            if not math.isfinite(ends):
+                raise ValueError(f"Spacing.at_least(ends=...) must be finite, got {ends!r}")
+        elif isinstance(ends, (list, tuple)):
+            if len(ends) != 2:
+                raise ValueError(f"Spacing.at_least(ends=...) must have 2 items, got {ends!r}")
+            ends_0 = ends[0]
+            if not (isinstance(ends_0, (int, float)) and not isinstance(ends_0, bool)):
+                raise TypeError(f"Spacing.at_least(ends=...)[0] must be a finite number, got {type(ends_0).__name__}")
+            if not math.isfinite(ends_0):
+                raise ValueError(f"Spacing.at_least(ends=...)[0] must be finite, got {ends_0!r}")
+            ends_1 = ends[1]
+            if not (isinstance(ends_1, (int, float)) and not isinstance(ends_1, bool)):
+                raise TypeError(f"Spacing.at_least(ends=...)[1] must be a finite number, got {type(ends_1).__name__}")
+            if not math.isfinite(ends_1):
+                raise ValueError(f"Spacing.at_least(ends=...)[1] must be finite, got {ends_1!r}")
+        else:
+            raise TypeError(f"Spacing.at_least(ends=...) must be a finite number or a list or tuple of 2 items: a finite number, a finite number, got {type(ends).__name__}")
     out: Dict[str, Any] = {"kind": "atLeast"}
     for _k, _v in [
         ("gap", gap),
+        ("slack", slack),
+        ("ends", ends),
     ]:
         if _v is not None:
             out[_k] = _v

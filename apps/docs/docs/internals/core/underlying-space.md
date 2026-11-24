@@ -1169,17 +1169,26 @@ fills the axis when its room is the whole axis (`closesAround` in
 `distribute.ts`): from the chain up to the space, no node has a size of
 its own there, is a part of a chain along the axis, or is a scope of its
 own. So in a spread of groups, the outer chain closes and each group's
-inner chain stays open. The last edge is an edge like the others, from the
-last part to the first part's next turn, by the same anchors and gap, so
-the plan's claim reaches one lap past the first part (`closingTurn` in
-`solver/plan.ts`): the parts and n gaps under `Spacing.box` and
-`Spacing.atLeast`, and n distances under `Spacing.pitch`. The space fits
-that claim to its budget, one period, so data sizes along the angle fit
-2π less the n gaps, and an `fr` gap is one of n shares. Placement does not
-change: the parts start at the space's 0, and the last gap is what the fit
-leaves after the last part. A stack places its parts by their data
-offsets, with no edge between them, so it has no gap to add. A partial
-sweep is an open interval and keeps n − 1 gaps.
+inner chain stays open.
+
+The gap that closes the turn is the chain's room at its two ends. Every
+spacing takes `ends`, the room before the first part and after the last, as
+a multiple of its gap (for a pitch, of its distance, measured from the
+pitched point), one number or a pair `[start, end]`. The default is 0, and
+for a chain that closes around it is half a gap at each end (`endsOf` in
+`distribute.ts`, the one place the default is decided), so the two halves
+meet where the turn meets itself and make the nth gap. That is where d3.arc
+draws `d3.pie().padAngle(pad)`. `ends: [0, 1]` gives d3.pie's and
+d3.chord's own angles, the first part at the start of the turn. The ends are part of
+the chain: lowering puts the chain's origin `ends[0]` before the first
+part's anchor (`ChainPath.ends`, read by `stackOriginOffset` in
+`placementSolver.ts`), and the plan's claim reaches from `ends[0]` before
+the first part to `ends[1]` past the last (`chainEnds` in
+`solver/plan.ts`). The space fits that claim to its budget, one period, so
+data sizes along the angle fit 2π less the n gaps, and an `fr` gap is one
+of n shares. A stack glues its parts, with no edge between them, so it has
+no ends. A partial sweep is an open interval: its default ends are 0, and
+it keeps n − 1 gaps.
 
 A spread chain on y needs no paint-side handshake. The chain places each
 target's anchor in the spread's own axis order, and the target is read through
@@ -1358,9 +1367,9 @@ greatest place minus its least. The slack rule (`Slack.at(t)`, with `start`,
 `center` and `end` its points 0, 0.5 and 1) puts every group the same fraction
 `t` of the way through its range. The rule is one per cluster, the groups
 the gaps link, not one per gap, since linked gaps share their room. A
-distribute states it in its `slack` option (a spread passes its own `slack`
-to the distribute it lowers to), and each of its minimum gaps carries that
-`t` (`PlacementMinGap.slack`) into `separateGroups`, which gathers what the
+minimum gap states it as the `slack` of its spacing,
+`Spacing.atLeast(gap, { slack })`, and each gap carries that `t`
+(`PlacementMinGap.slack`) into `separateGroups`, which gathers what the
 gaps of each cluster state by the constraint that owns them
 (`clusterSlack`): the one value they state, an error naming two owners that
 state different values, or 0 where none states one. Two clusters in one

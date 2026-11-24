@@ -312,9 +312,8 @@ export const IcicleSpaced: StoryObj = {
 };
 
 // The same tree in polar space: the stacking axis is the angle, depth the
-// radius. WALL: the root spans the whole 2π, and a rect that spans the whole
-// circle draws as a path whose start and end are the same point, so the
-// root disc is missing (the hole in the middle). The rings are pixels: with
+// radius. The root spans the whole 2π and draws as the disc in the middle.
+// WALL: the rings are pixels: with
 // `h: v(1)` the wedges draw as filled paths, but every subtree is pushed out
 // so its last ring ends at the rim (Safety at ring 2 instead of 1), whatever
 // the alignment.
@@ -356,9 +355,12 @@ export const Pie: StoryObj = {
   },
 };
 
-// The slices `PAD` radians apart. A spread puts a gap between neighbors
-// only, n - 1 gaps, so the slices fill 2π less five gaps; d3 leaves six, the
-// last between the last slice and the first.
+// The slices `PAD` radians apart. The spread fills the whole turn, so its
+// last slice neighbors its first and it leaves n gaps, six, as d3 does: its
+// default ends are half a gap at each end. That is where d3.arc draws
+// d3.pie().padAngle(PAD), each slice inset by half the pad on each side.
+// d3.pie's own angles are `Spacing.box(PAD, { ends: [0, 1] })`: the first
+// slice at 12 o'clock and a whole pad after the last.
 export const PieSpaced: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -370,8 +372,8 @@ export const PieSpaced: StoryObj = {
   },
 };
 
-// The angle of a full-turn clock space is closed, so a spread that fills it
-// leaves n gaps, the last between the last slice and the first, as d3 does.
+// The same chart as PieSpaced, under the name the review tab cites for the
+// closed turn: n gaps, half a gap at each end.
 export const PieSpacedClosed: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -405,12 +407,20 @@ const sub = (i: number, j: number) => `s${i}-${j}`;
 const rowTotal = (row: number[]) => row.reduce((a, b) => a + b, 0);
 
 /** The groups a gap apart around the circle, each its sub-arcs end to end.
+ *  The spread fills the whole turn, so it leaves five gaps; `ends: [0, 1]`
+ *  puts the first group at 12 o'clock and the fifth gap after the last
+ *  group, which are d3.chord's group angles. (The default, half a gap at
+ *  each end, would turn every group by half a pad.)
  *  WALL: a stack inside a spread along the same axis is "flexible" (it has
  *  no size of its own), so each group would get an equal share; `w` gives it
  *  its row total. */
 const chordArcs = () =>
   spread(
-    { dir: "x", spacing: CHORD_PAD, y: INNER },
+    {
+      dir: "x",
+      spacing: Spacing.box(CHORD_PAD, { ends: [0, 1] }),
+      y: INNER,
+    },
     trips.map((row, i) =>
       stack(
         { dir: "x", w: v(rowTotal(row)) },

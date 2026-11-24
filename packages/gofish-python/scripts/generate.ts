@@ -758,6 +758,15 @@ function pyFStr(text: string, tail: string): string {
     .slice(0, -1)}${tail}"`;
 }
 
+/** The strategy family a param of a named type is a value of (`Slack`, the
+ *  `slack` of `Spacing.atLeast`), or undefined. Such a value is a dict the
+ *  family's own members build and check, so the param is checked only for
+ *  being a dict, and JS checks it again where it reads the strategy that
+ *  holds it. */
+function familyOf(name: string): string | undefined {
+  return OPTION_TYPES[name]?.pyFamily;
+}
+
 /** The Python class a strategy param of a named type is checked as (a
  *  `LengthValue`, which `percent(n)` and `fr(k)` build); the family module
  *  imports it (`refClasses`). Its fields are checked where JS reads it. */
@@ -798,8 +807,12 @@ function describeType(type: FieldType): string {
         : `one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}`;
     case "union":
       return type.options.map(describeType).join(" or ");
-    case "ref":
-      return `a ${checkedClass(type.name)}`;
+    case "ref": {
+      const family = familyOf(type.name);
+      return family !== undefined
+        ? `a ${family} rule (a dict made by the ${family} family)`
+        : `a ${checkedClass(type.name)}`;
+    }
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -825,7 +838,9 @@ function pyTypeTest(type: FieldType, v: string): string {
     case "tuple":
       return `isinstance(${v}, (list, tuple))`;
     case "ref":
-      return `isinstance(${v}, ${checkedClass(type.name)})`;
+      return familyOf(type.name) !== undefined
+        ? `isinstance(${v}, dict)`
+        : `isinstance(${v}, ${checkedClass(type.name)})`;
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }

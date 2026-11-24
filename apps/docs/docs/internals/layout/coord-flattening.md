@@ -308,8 +308,8 @@ so every reader of it agrees (the children's frame and the scope dump): `fitAxis
 coord with a full-turn `centralAngle`) is closed: its end is its start
 (`closesOn`). The coord declares it on its space (`SpaceDeclaration.closed`),
 next to its axis names, so a node inside can read it. A chain that fills a
-closed axis lays one more gap, after its last part, and its claim includes
-it, so the fit leaves room for n gaps (see
+closed axis keeps half a gap at each end by default (its spacing's `ends`),
+and its claim includes them, so the fit leaves room for n gaps (see
 [Underlying space](/internals/core/underlying-space)). The fit itself does
 not change. A partial sweep is not closed.
 

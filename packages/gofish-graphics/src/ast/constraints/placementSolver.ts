@@ -10,7 +10,7 @@ import {
   type ScaleOf,
 } from "./placementLowering";
 import type { GridTracks } from "./grid";
-import type { GapOf } from "./gap";
+import type { EndsOf, GapOf } from "./gap";
 import {
   axisIndex,
   axisName,
@@ -196,7 +196,13 @@ function stackOriginOffset<T>(
     "along" in origin
       ? origin.chain
       : { parts: [node], start: "tail", end: "head", from: "head", to: "tail" };
-  const start = offsetOf(node, path.start);
+  // The chain's own start: its first part's `start`, less the room it
+  // keeps there.
+  const first = offsetOf(node, path.start);
+  const start =
+    first === undefined || path.ends === undefined
+      ? first
+      : A.sub(first, path.ends[0]);
   if (fraction === 0 || start === undefined) return start;
   const last = path.parts.length - 1;
   let length = A.zero;
@@ -208,6 +214,8 @@ function stackOriginOffset<T>(
     length = A.add(length, A.sub(exit, entry));
     if (i > 0 && path.gap !== undefined) length = A.add(length, path.gap);
   }
+  if (path.ends !== undefined)
+    length = A.add(length, A.add(path.ends[0], path.ends[1]));
   return A.add(start, A.scale(fraction, length));
 }
 
@@ -522,7 +530,9 @@ export function solvePlacementCells<T>(
   freeOrigin?: FreeOrigin<T>,
   // Per axis, the targets that are no part of the plot (dressing, chrome):
   // a chain edge between two others lays them by their plots.
-  apart?: [Set<string>, Set<string>]
+  apart?: [Set<string>, Set<string>],
+  // The room a chain keeps at its ends (`GoFishNode.endsOf`).
+  endsOf?: EndsOf
 ): readonly [SolvedAxis<T>, SolvedAxis<T>] {
   const lowered = lowerPlacementConstraints(
     A,
@@ -533,7 +543,8 @@ export function solvePlacementCells<T>(
     gapOf,
     scaleOf,
     gridTracks,
-    dataPositioned
+    dataPositioned,
+    endsOf
   );
   // Tie each nested operand to its container on every axis it takes part in,
   // so the solve moves the container with it (one rigid body).

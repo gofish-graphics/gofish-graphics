@@ -13,6 +13,7 @@ import {
   percent,
   fr,
   Spacing,
+  Slack,
   Constraint,
   Serialize,
 } from "../lib";
@@ -70,6 +71,16 @@ async function main() {
     JSON.stringify(Spacing.pitch(percent(10), { at: "middle" })) ===
       '{"kind":"pitch","distance":{"type":"length","percent":10},"at":"middle"}'
   );
+  check(
+    "Spacing.box(4, { ends: [0, 1] }) carries its ends",
+    JSON.stringify(Spacing.box(4, { ends: [0, 1] })) ===
+      '{"kind":"box","gap":4,"ends":[0,1]}'
+  );
+  check(
+    "Spacing.atLeast(8, { slack: Slack.end }) holds the rule Slack.end() makes",
+    JSON.stringify(Spacing.atLeast(8, { slack: Slack.end, ends: 0.5 })) ===
+      '{"kind":"atLeast","gap":8,"slack":{"kind":"at","t":1},"ends":0.5}'
+  );
 
   console.log("\n# a bare amount is Spacing.box");
   check(
@@ -102,6 +113,30 @@ async function main() {
     "a pitch of Infinity is a loud error naming its distance",
     /distance/.test(notFinite),
     notFinite
+  );
+  const badEnds = errorOf(() =>
+    spacingOf(Spacing.box(4, { ends: [1] as any }))
+  );
+  check(
+    "ends that are not one number or a pair are an error naming spacing.ends",
+    badEnds.includes("spacing.ends"),
+    badEnds
+  );
+  const nestedSlack = errorOf(() =>
+    spacingOf({ kind: "atLeast", gap: 4, slack: { kind: "at", t: 2 } } as any)
+  );
+  check(
+    "the slack inside Spacing.atLeast is checked against the Slack family",
+    nestedSlack.includes("spacing.slack.t"),
+    nestedSlack
+  );
+  const exactSlack = errorOf(() =>
+    spacingOf({ kind: "box", gap: 4, slack: Slack.end() } as any)
+  );
+  check(
+    "an exact spacing has no slack: the key is unknown",
+    /spacing\.slack: unknown field "slack"/.test(exactSlack),
+    exactSlack
   );
   const bareNaN = errorOf(() => spacingOf(NaN));
   check(

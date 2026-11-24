@@ -125,6 +125,11 @@ export type ChainPath<T = number> = {
   from: RelationAnchor;
   to: RelationAnchor;
   gap?: T;
+  /** The room the chain keeps before `start` on its first part and after
+   *  `end` on its last (its spacing's `ends`, `endsOf` in distribute.ts):
+   *  part of the way, so the chain's own start is that far before its
+   *  first part. */
+  ends?: readonly [T, T];
 };
 
 /** A size-cell equation independent of any anchor (#726, align `"size"`): the

@@ -16,8 +16,8 @@ import {
 } from "../../src/lib";
 
 // The two placement primitives of the user-space layouts proposal, through
-// the public API: a minimum gap (`Spacing.atLeast`, its slack placed by the
-// `slack` its distribute states) and a mean of positions (`mean([...])`, an operand of
+// the public API: a minimum gap (`Spacing.atLeast`, its slack placed by
+// the `slack` it states) and a mean of positions (`mean([...])`, an operand of
 // `Constraint.align`). The `Spacing.atLeast` spelling is a PLACEHOLDER, not
 // signed off. No story computes a
 // position: every place comes from the solve. Not gallery-tagged.
@@ -50,7 +50,7 @@ const Box = createMark(
  * Top row: two pairs, each glued by an exact gap of 2, and at least 16
  * apart. Bottom row: p starts where A starts and r ends where D ends
  * (exact), and q floats between them, at least 8 from each. The top row
- * sets the span, so q has room to spare, and the `slack` of q's distribute
+ * sets the span, so q has room to spare, and the `slack` of q's minimum gaps
  * says where it goes. The gap between B and C is linked to q's gaps (p and
  * r are tied to A and D), so it takes the same slack.
  */
@@ -73,7 +73,7 @@ const rowOfRects = (slack: Slack.Slack) =>
     Constraint.align({ x: "start" }, [c.A, c.p]),
     Constraint.align({ x: "end" }, [c.D, c.r]),
     Constraint.distribute(
-      { dir: "x", spacing: Spacing.atLeast(8), slack },
+      { dir: "x", spacing: Spacing.atLeast(8, { slack }) },
       [c.p, c.q, c.r]
     ),
     Constraint.align({ y: "start" }, [c.A, c.B, c.C, c.D]),
@@ -111,7 +111,7 @@ export const RowAll: StoryObj = {
  * p and r an exact 160 apart, and q between them, at least 8 from each.
  * The gaps lead out of p and back into r, which one rigid group holds, so
  * q's room is what the exact distance leaves: 160 − 40 − 16 = 104 to
- * spare, which the `slack` of q's distribute places. Under start, center
+ * spare, which the `slack` of q's gaps places. Under start, center
  * and end, one above another.
  */
 const pinnedRow = (slack: Slack.Slack) =>
@@ -122,7 +122,7 @@ const pinnedRow = (slack: Slack.Slack) =>
   ]).relate((c) => [
     Constraint.distribute({ dir: "x", spacing: 160 }, [c.p, c.r]),
     Constraint.distribute(
-      { dir: "x", spacing: Spacing.atLeast(8), slack },
+      { dir: "x", spacing: Spacing.atLeast(8, { slack }) },
       [c.p, c.q, c.r]
     ),
     Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
@@ -221,8 +221,9 @@ export const Dendrogram: StoryObj = {
             Constraint.distribute(
               {
                 dir: "y",
-                spacing: Spacing.atLeast(DY - 2 * R),
-                slack: Slack.end(),
+                spacing: Spacing.atLeast(DY - 2 * R, {
+                  slack: Slack.end(),
+                }),
               },
               [c[n.parent!], c[n.path]]
             )

@@ -144,6 +144,10 @@ import {
   type LayoutWarning,
 } from "./layoutWarnings";
 import { spacingOn, type GapConstraint } from "./constraints/gap";
+import {
+  endsOf as chainEndsOf,
+  type DistributeConstraint,
+} from "./constraints/distribute";
 import { relateEnv } from "./constraints";
 import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import type { ResolvedConstraints } from "./_ref";
@@ -1883,6 +1887,22 @@ export class GoFishNode {
     memo[axis] = v;
     this._claimMemo.gaps.set(c, memo);
     return v;
+  }
+
+  /**
+   * The room the chain `c` keeps before its first part and after its last
+   * along `axis`, as values in σ: its ends (`endsOf` in distribute.ts, its
+   * spacing's `ends`, else the default of the axis it fills) times its gap
+   * ({@link gapOf}). The claim walk and the placement both read it here.
+   */
+  public endsOf(
+    c: DistributeConstraint,
+    axis: 0 | 1
+  ): readonly [Pwl.Value, Pwl.Value] {
+    const [s, e] = chainEndsOf(this, axis, c);
+    if (s === 0 && e === 0) return [Pwl.ZERO, Pwl.ZERO];
+    const gap = this.gapOf(c, axis);
+    return [Pwl.scale(s, gap), Pwl.scale(e, gap)];
   }
 
   /** Whether this node's claim on `axis` is one share of the scope around

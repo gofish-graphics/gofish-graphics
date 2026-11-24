@@ -13,8 +13,8 @@ import { unplaceableValue } from "../../util";
 import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
-import { lowerDistributePlacement } from "./distribute";
-import type { GapOf } from "./gap";
+import { lowerDistributePlacement, statedEnds } from "./distribute";
+import type { EndsOf, GapOf } from "./gap";
 import type { GridConstraint, GridTracks } from "./grid";
 import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";
@@ -210,7 +210,10 @@ export function lowerPlacementConstraints<T>(
   scaleOf: ScaleOf<T> = () => undefined,
   // Per axis, the grid's resolved tracks, where the grid places its cells.
   gridTracks: GridTracks<T> = [undefined, undefined],
-  dataPositioned?: [Set<string>, Set<string>]
+  dataPositioned?: [Set<string>, Set<string>],
+  // The room a chain keeps at its ends (`GoFishNode.endsOf`). Omitted, the
+  // ends its spacing states.
+  endsOf: EndsOf = statedEnds(gapOf)
 ): LoweredPlacement<T> {
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
@@ -303,6 +306,7 @@ export function lowerPlacementConstraints<T>(
           keyOf,
           isInitiallyPlaced,
           gapOf,
+          endsOf,
         });
         return;
       case "nest":

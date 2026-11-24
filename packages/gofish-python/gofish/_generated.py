@@ -51,7 +51,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
     "Placement": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
     "Baseline": ("tagged", "kind", {"start": ("object", {"kind": ("kind", None)}), "end": ("object", {"kind": ("kind", None)}), "middle": ("object", {"kind": ("kind", None)}), "wiggle": ("object", {"kind": ("kind", None)}), "at": ("object", {"kind": ("kind", None), "part": ("part", None), "point": ("point", None)})}),
-    "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)}), "atLeast": ("object", {"kind": ("kind", None), "gap": ("gap", None)})}),
+    "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length")), "ends": ("ends", None)}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None), "ends": ("ends", None)}), "atLeast": ("object", {"kind": ("kind", None), "gap": ("gap", None), "slack": ("slack", ("ref", "Slack")), "ends": ("ends", None)})}),
     "Slack": ("object", {"kind": ("kind", None), "t": ("t", None)}),
 }
 
@@ -682,18 +682,17 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, slack: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so n children have n gaps; a partial sweep has n - 1. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap, { ends })`, a gap between facing edges, `Spacing.pitch(distance, { at, ends })`, a fixed distance between the same point on each child, or `Spacing.atLeast(gap, { slack, ends })`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. `ends` is the room before the first child and after the last, as a multiple of the gap, 0 by default. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so there the default `ends` is half a gap at each end, and n children have n gaps; a partial sweep has n - 1. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
-        slack: Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. It is the slack of the distribute the spread lays its children out with, so it follows that constraint's rule for linked gaps. Omitted, Slack.start().
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -710,7 +709,6 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         ("reverse", reverse),
         ("glue", glue),
         ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
-        ("slack", _to_wire(("ref", "Slack"), slack, "slack")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
         ("y", _channel(y)),
@@ -965,7 +963,7 @@ def _tile_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, slack: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
@@ -982,12 +980,11 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so n children have n gaps; a partial sweep has n - 1. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap, { ends })`, a gap between facing edges, `Spacing.pitch(distance, { at, ends })`, a fixed distance between the same point on each child, or `Spacing.atLeast(gap, { slack, ends })`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. `ends` is the room before the first child and after the last, as a multiple of the gap, 0 by default. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so there the default `ends` is half a gap at each end, and n children have n gaps; a partial sweep has n - 1. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
-        slack: Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. It is the slack of the distribute the spread lays its children out with, so it follows that constraint's rule for linked gaps. Omitted, Slack.start().
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1012,7 +1009,6 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("reverse", reverse),
         ("glue", glue),
         ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
-        ("slack", _to_wire(("ref", "Slack"), slack, "slack")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("size", _channel(size)),
         ("key", key),
@@ -1312,13 +1308,12 @@ def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | 
             opts[_k] = _v
     return opts
 
-def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthValue | dict] = None, slack: Optional[dict] = None, order: Optional[str] = None, glue: Optional[bool] = None) -> Dict[str, Any]:
+def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthValue | dict] = None, order: Optional[str] = None, glue: Optional[bool] = None) -> Dict[str, Any]:
     """Lay the refs out one after another along `dir`.
 
     Args:
         dir: The axis to lay the refs out along.
-        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref, or `Spacing.atLeast(gap)`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
-        slack: Where the refs go along `dir` when minimum gaps leave them room, made by a call in the Slack family: Slack.start(), Slack.end(), Slack.center() or Slack.at(t). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. The minimum gaps of the layer that share refs with these share their room, so they share one slack: a distribute that states none takes the one the others state, and two that state different values are an error. Omitted by all, Slack.start().
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap, { ends })`, a gap between facing edges, `Spacing.pitch(distance, { at, ends })`, a fixed distance between the same point on each ref, or `Spacing.atLeast(gap, { slack, ends })`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
         order: The order the refs are laid out in. Default "forward".
         glue: Stack semantics: the refs are data amounts, added along `dir` in one data space, each placed where the one before it ends. Every ref needs a data size along `dir`. Default false.
     """
@@ -1326,7 +1321,6 @@ def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthVal
     for _k, _v in [
         ("dir", dir),
         ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
-        ("slack", _to_wire(("ref", "Slack"), slack, "slack")),
         ("order", order),
         ("glue", glue),
     ]:

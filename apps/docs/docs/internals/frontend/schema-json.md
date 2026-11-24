@@ -1253,7 +1253,7 @@ for the API.
               "$ref": "#/$defs/Spacing"
             }
           ],
-          "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so n children have n gaps; a partial sweep has n - 1.",
+          "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap, { ends })`, a gap between facing edges, `Spacing.pitch(distance, { at, ends })`, a fixed distance between the same point on each child, or `Spacing.atLeast(gap, { slack, ends })`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. `ends` is the room before the first child and after the last, as a multiple of the gap, 0 by default. Around a full turn (a polar angle with a full-turn `centralAngle`) the last child neighbors the first, so there the default `ends` is half a gap at each end, and n children have n gaps; a partial sweep has n - 1.",
           "default": 8
         },
         "alignment": {
@@ -1274,10 +1274,6 @@ for the API.
         "baseline": {
           "$ref": "#/$defs/Baseline",
           "description": "Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`."
-        },
-        "slack": {
-          "$ref": "#/$defs/Slack",
-          "description": "Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. It is the slack of the distribute the spread lays its children out with, so it follows that constraint's rule for linked gaps. Omitted, Slack.start()."
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
@@ -2061,12 +2057,8 @@ for the API.
                   "$ref": "#/$defs/Spacing"
                 }
               ],
-              "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref, or `Spacing.atLeast(gap)`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
+              "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap, { ends })`, a gap between facing edges, `Spacing.pitch(distance, { at, ends })`, a fixed distance between the same point on each ref, or `Spacing.atLeast(gap, { slack, ends })`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
               "default": 8
-            },
-            "slack": {
-              "$ref": "#/$defs/Slack",
-              "description": "Where the refs go along `dir` when minimum gaps leave them room, made by a call in the Slack family: Slack.start(), Slack.end(), Slack.center() or Slack.at(t). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. The minimum gaps of the layer that share refs with these share their room, so they share one slack: a distribute that states none takes the one the others state, and two that state different values are an error. Omitted by all, Slack.start()."
             },
             "order": {
               "enum": ["forward", "reverse"],
@@ -5552,6 +5544,28 @@ for the API.
                 }
               ],
               "description": "The gap between facing edges, in pixels. A negative gap overlaps the children. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+            },
+            "ends": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                }
+              ],
+              "description": "The room before the first child and after the last, as a multiple of the gap, measured out from the start of the first child's box and the end of the last child's box. 0 leaves no room (CSS space-between), 0.5 leaves half a gap at each end (space-around), and 1 leaves a whole gap at each end (space-evenly). A pair [start, end] sets the two ends apart. The ends are part of the chain's length, so children sized to fit their room fit what the ends leave. A chain whose room is the whole of a periodic axis, such as the angle of a full-turn polar space, has its last child next to its first, so there the default is 0.5 instead, half a gap at each end, and its n children have n gaps around the turn.",
+              "default": 0
             }
           },
           "required": ["kind", "gap"]
@@ -5577,6 +5591,28 @@ for the API.
               "enum": ["start", "middle", "end", "baseline"],
               "description": "The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). \"middle\" is center to center.",
               "default": "baseline"
+            },
+            "ends": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                }
+              ],
+              "description": "The room before the first child and after the last, as a multiple of the distance, measured out from the point `at` on the first child and on the last (d3's point scale `padding`). 0 leaves no room (CSS space-between), 0.5 leaves half a distance at each end (space-around), and 1 leaves a whole distance at each end (space-evenly). A pair [start, end] sets the two ends apart. The ends are part of the chain's length, so children sized to fit their room fit what the ends leave. A chain whose room is the whole of a periodic axis, such as the angle of a full-turn polar space, has its last child next to its first, so there the default is 0.5 instead, half a distance at each end, and its n children have n gaps around the turn.",
+              "default": 0
             }
           },
           "required": ["kind", "distance"]
@@ -5590,6 +5626,32 @@ for the API.
             "gap": {
               "type": "number",
               "description": "The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much."
+            },
+            "slack": {
+              "$ref": "#/$defs/Slack",
+              "description": "Where the children go in the room the minimum gaps leave them, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). Minimum gaps that share children share their room, so they share one rule: a chain that states none takes the one a linked chain states, and two linked chains that state different rules are an error. Omitted by every linked chain, Slack.start()."
+            },
+            "ends": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                }
+              ],
+              "description": "The room before the first child and after the last, as a multiple of the least gap, measured out from the start of the first child's box and the end of the last child's box. 0 leaves no room (CSS space-between), 0.5 leaves half a least gap at each end (space-around), and 1 leaves a whole least gap at each end (space-evenly). A pair [start, end] sets the two ends apart. The ends are part of the chain's length, so children sized to fit their room fit what the ends leave. A chain whose room is the whole of a periodic axis, such as the angle of a full-turn polar space, has its last child next to its first, so there the default is 0.5 instead, half a least gap at each end, and its n children have n gaps around the turn.",
+              "default": 0
             }
           },
           "required": ["kind", "gap"]
@@ -5615,7 +5677,7 @@ for the API.
           "required": ["kind", "t"]
         }
       ],
-      "description": "Where the parts go when minimum gaps (`Spacing.atLeast`) leave them room: the value of the `slack` option of `spread` and of `Constraint.distribute`, along their `dir`. A minimum gap gives each part a range of positions, not one position. The least solution puts every part as early as its gaps allow, and the greatest puts it as late as they allow within the same span; a part's slack is the difference. The rule picks one point in each part's range, the same way for every part of one system of linked gaps: gaps that share parts share their room, so they share one rule. Where no gap leaves room, every rule gives the same positions."
+      "description": "Where the parts go when minimum gaps leave them room: the value of the `slack` option of `Spacing.atLeast`, along the `dir` of the spread or distribute it is the spacing of. A minimum gap gives each part a range of positions, not one position. The least solution puts every part as early as its gaps allow, and the greatest puts it as late as they allow within the same span; a part's slack is the difference. The rule picks one point in each part's range, the same way for every part of one system of linked gaps: gaps that share parts share their room, so they share one rule. Where no gap leaves room, every rule gives the same positions."
     }
   }
 }

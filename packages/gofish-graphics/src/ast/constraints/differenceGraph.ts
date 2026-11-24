@@ -571,8 +571,9 @@ function clusterSlack(
   const other = rest.find(([, u]) => u !== t);
   if (other !== undefined)
     throw new Error(
-      `[gofish] Minimum gaps on ${axis}: ${owner} states slack ` +
-        `Slack.at(${t}) but ${other[0]} states Slack.at(${other[1]}), and ` +
+      `[gofish] Minimum gaps on ${axis}: ${owner} states ` +
+        `Spacing.atLeast(…, { slack: Slack.at(${t}) }) but ${other[0]} ` +
+        `states Spacing.atLeast(…, { slack: Slack.at(${other[1]}) }), and ` +
         `their gaps are linked (through ${somewhere}), so they share one ` +
         `room. State the slack on one of them, or the same slack on both.`
     );

@@ -325,9 +325,6 @@ export interface SpreadOperator
   /** Where the result puts its own 0 (`Baseline`). Not taken yet without
    *  `glue`. */
   baseline?: BaselineIR;
-  /** Where the children go along `dir` when minimum gaps leave them room
-   *  (`Slack`). */
-  slack?: SlackIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -667,13 +664,18 @@ export type SpacingOptionIR = number | LengthIR | SpacingIR;
  *  `Spacing` family (`Spacing.box(4)`, `Spacing.pitch(70, { at: "baseline" })`).
  *  `spread`'s `spacing` also takes a bare amount, which is `Spacing.box`'s. */
 export type SpacingIR =
-  | { kind: "box"; gap: number | LengthIR }
+  | { kind: "box"; gap: number | LengthIR; ends?: SpacingEndsIR }
   | {
       kind: "pitch";
       distance: number | LengthIR;
       at?: AlignAnchorIR;
+      ends?: SpacingEndsIR;
     }
-  | { kind: "atLeast"; gap: number };
+  | { kind: "atLeast"; gap: number; slack?: SlackIR; ends?: SpacingEndsIR };
+
+/** The room at a chain's two ends, as a multiple of its gap (a pitch's
+ *  distance): one multiple for both ends, or [start, end]. */
+export type SpacingEndsIR = number | readonly [number, number];
 
 /** Where the parts go when minimum gaps leave them room, made by a call in
  *  the `Slack` family: `Slack.at(t)`, a fraction `t` of the way from the
@@ -1250,9 +1252,6 @@ export type ConstraintIR =
       options: {
         dir: "x" | "y";
         spacing?: SpacingOptionIR;
-        /** Where the refs go when minimum gaps leave them room (`Slack`);
-         *  needs `Spacing.atLeast`. */
-        slack?: SlackIR;
         order?: "forward" | "reverse";
         glue?: boolean;
       };

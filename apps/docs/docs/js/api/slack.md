@@ -5,10 +5,11 @@ title: Slack
 # Slack
 
 The `Slack` family holds the rules for where children go when minimum gaps
-([`Spacing.atLeast`](/js/api/spacing)) leave them room. A rule is the value of
-the `slack` option of
-[`Constraint.distribute`](/js/api/constraints/relate#constraint-distribute)
-and of [`spread`](/js/api/operators/spread), along their `dir`.
+leave them room. A rule is the value of the `slack` option of
+[`Spacing.atLeast`](/js/api/spacing), the spacing of a
+[`spread`](/js/api/operators/spread) or a
+[`Constraint.distribute`](/js/api/constraints/relate#constraint-distribute),
+along their `dir`.
 
 A minimum gap gives each child a range of positions, not one position. The
 least solution puts every child as early as its gaps allow. The greatest
@@ -27,7 +28,7 @@ gf.layer([
 ])
   .relate((c) => [
     gf.Constraint.distribute(
-      { dir: "x", spacing: gf.Spacing.atLeast(10), slack: gf.Slack.end() },
+      { dir: "x", spacing: gf.Spacing.atLeast(10, { slack: gf.Slack.end() }) },
       [c.a, c.q, c.b]
     ),
     gf.Constraint.distribute({ dir: "x", spacing: gf.Spacing.atLeast(200) }, [
@@ -49,11 +50,7 @@ Slack.center; // or Slack.center()
 Slack.end; // or Slack.end()
 Slack.at(t);
 
-Constraint.distribute(
-  { dir, spacing: Spacing.atLeast(gap), slack: Slack },
-  refs
-);
-spread({ dir, spacing: Spacing.atLeast(gap), slack: Slack });
+Spacing.atLeast(gap, { slack: Slack });
 ```
 
 `Slack.at` has one required argument, so it is a call only. The other members
@@ -64,17 +61,15 @@ rule is a plain object, `{ kind: "at", t }`, of type `Slack.Slack`.
 options, so another fraction is `Slack.at(t)`. The same object is the rule's
 wire form.
 
-A rule needs `spacing: Spacing.atLeast(gap)`. With any other spacing there is
-no room to place, and `slack` is an error.
+Only `Spacing.atLeast` takes a rule. The other spacings leave no room to
+place.
 
 Minimum gaps that share children are linked, and linked gaps share one room,
 so they share one rule. In the example above, the two distributes share `a`
 and `b`. The first states `Slack.end()`, and the second, which states no rule,
-takes it. Two linked distributes that state different rules are an error that
+takes it. Two linked minimum gaps that state different rules are an error that
 names both. Gaps that share no children, even in one layer, each take their
-own rule. Where no linked distribute states a rule, the rule is
-`Slack.start()`. A spread's `slack` is the rule of the distribute it lays its
-children out with.
+own rule. Where no linked gap states a rule, the rule is `Slack.start()`.
 
 The family is also a module of its own:
 

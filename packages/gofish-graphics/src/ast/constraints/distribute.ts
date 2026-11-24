@@ -61,12 +61,10 @@ import {
 import type { Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
-import type { Gap, GapOf } from "./gap";
+import type { EndsOf, Gap, GapOf } from "./gap";
 import { isLength } from "../length";
 import { Frontend } from "gofish-ir";
 import type { Spacing } from "../../families/spacing";
-import type { Slack } from "../../families/slack";
-import { kindValue } from "../strategyKind";
 
 export interface DistributeOptions {
   dir: Axis;
@@ -76,22 +74,16 @@ export interface DistributeOptions {
    *  - `Spacing.pitch(distance, { at })`: `at[i+1] = at[i] + distance`, a
    *    fixed distance between the same point on each child, which does not
    *    (`"middle"` is center to center).
-   *  - `Spacing.atLeast(gap)`: `start[i+1] ≥ end[i] + gap`, a minimum gap,
-   *    which the solve meets after the exact constraints (PLACEHOLDER
-   *    name). Where the gaps leave room, {@link slack} places the
-   *    children.
+   *  - `Spacing.atLeast(gap, { slack })`: `start[i+1] ≥ end[i] + gap`, a
+   *    minimum gap, which the solve meets after the exact constraints
+   *    (PLACEHOLDER name). Where the gaps leave room, its `slack` places
+   *    the children.
    *
-   *  A bare amount is `Spacing.box(amount)`: pixels, a percent of the room
-   *  of the layer that holds the chain, or an `fr` weight in its scope
-   *  (#1176 step 6). Default 8. */
+   *  Each takes `ends`, the room before the first child and after the last
+   *  ({@link endsOf}). A bare amount is `Spacing.box(amount)`: pixels, a
+   *  percent of the room of the layer that holds the chain, or an `fr`
+   *  weight in its scope (#1176 step 6). Default 8. */
   spacing?: Gap | Spacing;
-  /** Where the children go in the room minimum gaps leave them, a
-   *  {@link Slack} rule (`Slack.at(t)`). It needs `Spacing.atLeast`, the
-   *  only spacing that leaves room. The minimum gaps that share nodes with
-   *  this chain's share its room and its rule: one that states none takes
-   *  this one, and two that state different rules are an error. Default
-   *  `Slack.start()`, when no linked chain states one. */
-  slack?: Slack;
   order?: "forward" | "reverse";
   /** Stack semantics: glue children together (sizes sum into a POSITION at the
    *  layer) instead of slicing a budget. Forces `spacing` to 0. Mirrors
@@ -160,8 +152,6 @@ export interface DistributeConstraint {
    *  length the layer that holds the chain lays out in its room
    *  (`GoFishNode.gapOf`). */
   spacing: Spacing;
-  /** The slack the chain states, checked ({@link DistributeOptions.slack}). */
-  slack?: Slack;
   order: "forward" | "reverse";
   glue: boolean;
   children: ConstraintRef[];
@@ -187,7 +177,6 @@ export const createDistributeConstraint = (
     type: "distribute",
     dir: options.dir,
     spacing: options.glue ? GLUED : spacing,
-    slack: checkedSlack(options.slack, options.glue ? GLUED : spacing),
     order: options.order ?? "forward",
     glue: options.glue ?? false,
     children,
@@ -215,25 +204,6 @@ export function spacingOf(spacing: Gap | Spacing): Spacing {
     );
   Frontend.checkStrategy("Spacing", strategy, "spacing");
   return strategy as Spacing;
-}
-
-/** A chain's slack, checked against the `Slack` family. Only minimum gaps
- *  leave room, so slack with any other spacing is an error rather than a
- *  rule that does nothing. */
-function checkedSlack(
-  slack: Slack | undefined,
-  spacing: Spacing
-): Slack | undefined {
-  if (slack === undefined) return undefined;
-  const value = kindValue(slack);
-  Frontend.checkStrategy("Slack", value, "slack");
-  if (spacing.kind !== "atLeast")
-    throw new Error(
-      `[gofish] slack applies to minimum gaps: use Spacing.atLeast. This ` +
-        `chain's spacing is Spacing.${spacing.kind}, which places every ` +
-        `child exactly and leaves no room to place.`
-    );
-  return value;
 }
 
 /** The amount a spacing lays out between neighbors: a box's gap, or a
@@ -321,15 +291,14 @@ export function keysDownTheScreen(node: GoFishNode): string[] | undefined {
 
 /**
  * Whether the chain `node` lays along `axis` closes around: its room is the
- * whole of a closed axis, one that is periodic and laid out over one whole
+ * whole of a glued axis, one that is periodic and laid out over one whole
  * period (`SpaceDeclaration.closed`, as a full-turn polar angle is). The
  * end of that room is its start, so the chain's last part neighbors its
- * first, and the chain lays n gaps between n parts, the last one after its
- * last part. Its room is the whole axis from `node` up to the space it is
- * in, until a node has a size of its own there, is a part of a chain along
- * the axis (a group of a spread of groups, whose own chain stays open), or
- * is a scope of its own (a cell it is given). A stack glues its parts, so
- * it lays no gap either way.
+ * first, and its default ends sum to one gap ({@link endsOf}). Its room is
+ * the whole axis from `node` up to the space it is in, until a node has a
+ * size of its own there, is a part of a chain along the axis (a group of a
+ * spread of groups, whose own chain stays open), or is a scope of its own
+ * (a cell it is given).
  */
 export function closesAround(node: GoFishNode, axis: 0 | 1): boolean {
   for (let n = node; ; ) {
@@ -348,6 +317,43 @@ export function closesAround(node: GoFishNode, axis: 0 | 1): boolean {
     n = p;
   }
 }
+
+/** The default ends of a chain that closes around ({@link closesAround}):
+ *  half a gap at each end, so the n parts have n gaps around the turn, the
+ *  one across the turn's start split in two. `d3.arc` draws `d3.pie`'s
+ *  `padAngle` this way. */
+const GLUED_ENDS: readonly [number, number] = [0.5, 0.5];
+
+/**
+ * The room the chain `chain`, which `node` lays along `axis`, keeps at its
+ * two ends, as multiples [start, end] of its gap (a pitch's distance). It
+ * is its spacing's `ends` where it states them, else the default, which
+ * is decided here and nowhere else: {@link GLUED_ENDS} where the chain's
+ * room is the whole of a glued axis ({@link closesAround}), and 0 at both
+ * ends anywhere else. A stack glues its parts and has no ends.
+ */
+export function endsOf(
+  node: GoFishNode,
+  axis: 0 | 1,
+  chain: DistributeConstraint
+): readonly [number, number] {
+  if (chain.glue) return [0, 0];
+  const ends = chain.spacing.ends;
+  if (ends !== undefined) return typeof ends === "number" ? [ends, ends] : ends;
+  return closesAround(node, axis) ? GLUED_ENDS : [0, 0];
+}
+
+/** The ends a chain's spacing states, times its gap, with no default: what
+ *  the placement reads where no node resolves the chain (a unit test). */
+export const statedEnds =
+  (gapOf: GapOf): EndsOf =>
+  (c, axis) => {
+    const ends = c.glue ? undefined : c.spacing.ends;
+    if (ends === undefined) return [Pwl.ZERO, Pwl.ZERO];
+    const [s, e] = typeof ends === "number" ? [ends, ends] : ends;
+    const gap = gapOf(c, axis);
+    return [Pwl.scale(s, gap), Pwl.scale(e, gap)];
+  };
 
 export function distributePlacementAnchors({
   spacing,
@@ -379,6 +385,7 @@ export function lowerDistributePlacement<T>(
     keyOf,
     isInitiallyPlaced,
     gapOf,
+    endsOf = statedEnds(gapOf),
   }: {
     A: Arith<T>;
     emitter: PlacementFactEmitter<T>;
@@ -386,6 +393,7 @@ export function lowerDistributePlacement<T>(
     keyOf: KeyOf;
     isInitiallyPlaced: (axis: Axis, key: string) => boolean;
     gapOf: GapOf;
+    endsOf?: EndsOf;
   }
 ): void {
   const children = constraint.children.filter((child) =>
@@ -439,28 +447,36 @@ export function lowerDistributePlacement<T>(
       chain: true,
     };
     // A minimum gap is a fact of its own, which the solve separates the
-    // rigid groups by (`separateGroups` in differenceGraph.ts).
+    // rigid groups by (`separateGroups` in differenceGraph.ts), with the
+    // slack its spacing states.
     if (constraint.spacing.kind === "atLeast")
-      emitter.atLeast({ ...edge, slack: constraint.slack?.t });
+      emitter.atLeast({ ...edge, slack: constraint.spacing.slack?.t });
     else emitter.relate(edge);
   }
+  // The room the chain keeps at its ends (`endsOf`), measured out from the
+  // anchors its edges tie: a box's edges, a pitch's point.
+  const [before, after] = endsOf(constraint, axisIndex(constraint.dir));
+  const ended = !Pwl.isZero(before) || !Pwl.isZero(after);
   // A spread that states its 0 carries its {@link StackBaseline}, which the
   // solver's free-origin fallback seats at the measure's origin (#773): a
   // point on one part, or a place along the whole chain. A spread that
-  // states none starts at its first member's start.
-  if (constraint.baseline === undefined) {
+  // states none starts at its start: its first member's start, or, with
+  // room at its start, that far before the anchor its first edge ties.
+  if (constraint.baseline === undefined && !ended) {
     emitter.include({ axis: constraint.dir, key: keys[0], owner });
     return;
   }
   const baseline = resolveBaseline(constraint, ordered, keyOf);
   // The way along the chain: from its first part's start to its last part's
-  // end, through the anchors its edges tie, with its gaps.
+  // end, through the anchors its edges tie, with its gaps, and its ends
+  // where it keeps room there.
   const path: ChainPath<T> = {
     parts: keys,
-    start: "start",
-    end: "end",
+    start: ended ? anchors.to : "start",
+    end: ended ? anchors.from : "end",
     ...anchors,
     gap: A.fromValue(gapOf(constraint, axisIndex(constraint.dir))),
+    ...(ended ? { ends: [A.fromValue(before), A.fromValue(after)] } : {}),
   };
   const along = (at: number) => ({
     axis: constraint.dir,

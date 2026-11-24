@@ -27,7 +27,7 @@ import {
 } from "./shared";
 import { isPositionInterval, type PositionConstraint } from "./position";
 import { gridTracks } from "./grid";
-import type { GapOf } from "./gap";
+import type { EndsOf, GapOf } from "./gap";
 import type { ConstraintSpec } from ".";
 
 /**
@@ -403,7 +403,9 @@ export function placeByClaims(
   // frame without one maps no datum and seats no baseline.
   framed = true,
   // The frame a `position` with `in` reads its datums in ({@link InFrame}).
-  inFrame: (c: PositionConstraint) => InFrame | undefined = () => undefined
+  inFrame: (c: PositionConstraint) => InFrame | undefined = () => undefined,
+  // The room a chain keeps at its ends, in σ (`GoFishNode.endsOf`).
+  endsOf?: EndsOf
 ): ClaimPlacement {
   // A cell places a child, by its index, that neither its data places in
   // the layer's frame nor placed itself (`constraintsOn`).
@@ -779,7 +781,8 @@ export function placeByClaims(
     axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     rigid,
     axis === 0 ? [origin, undefined] : [undefined, origin],
-    axis === 0 ? [apart, new Set()] : [new Set(), apart]
+    axis === 0 ? [apart, new Set()] : [new Set(), apart],
+    endsOf
   )[axis];
   // Two constraints that place one child at two places on the axis are an
   // error, which layout finds where it evaluates the plan: the solve keeps

@@ -25,7 +25,6 @@ import {
 import { type ConstraintSpec } from "../constraints";
 import { axisIndex, type ResolvedOperands } from "../constraints/shared";
 import {
-  closesAround,
   distributeChildrenInPlacementOrder,
   distributePlacementAnchors,
   type DistributeConstraint,
@@ -78,6 +77,11 @@ export type LayerPlan = {
    *  room this layer gives them is its own room less how far what is not
    *  its plot reaches past this (#1257). Undefined with no plot child. */
   plotWhole: Extent | undefined;
+  /** Where the layer's chain on the axis starts and ends with the room it
+   *  keeps at its ends (`chainEnds`), in the frame its children's boxes are
+   *  placed in. Layout covers it with the layer's box, as the claim does.
+   *  Undefined where the chain keeps no room at its ends. */
+  ends?: readonly [Pwl.Value, Pwl.Value];
 };
 
 /** `c`'s plan on `axis`, when it is a layer that is no scope of its own
@@ -363,7 +367,8 @@ export function buildPlan(
       if (!frames.has(target.uid))
         frames.set(target.uid, frameIn(target, node, axis));
       return frames.get(target.uid);
-    }
+    },
+    (c, a) => node.endsOf(c, a)
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const whole: [Pwl.Value[], Pwl.Value[]] = [[], []];
@@ -448,11 +453,10 @@ export function buildPlan(
     plot[1].push(pLo);
     roomOn(plot);
   }
-  // A chain that closes around a closed axis (`closesAround`) lays one more
-  // gap, from its last part to its first part's next turn, so its room on
-  // the axis reaches that far: each of its forms reaches as far past the
-  // first part's start as the turn is long.
-  const turn = closingTurn(
+  // A chain's ends (`endsOf`): the room it keeps before its first part and
+  // after its last, a multiple of its gap from the parts' anchors, is part
+  // of its extent, so every form of the layer reaches at least that far.
+  const ends = chainEnds(
     node,
     axis,
     children,
@@ -461,17 +465,13 @@ export function buildPlan(
     forms,
     placement.boxes()
   );
-  if (turn !== undefined) {
-    const [first, length] = turn;
-    const reachTo = (to: [Pwl.Value[], Pwl.Value[]], e?: Extent) => {
-      if (e !== undefined && to[0].length > 0)
-        to[0].push(Pwl.add(sub(first.origin, e.descent), length));
-    };
-    reachTo(box, first.forms.box);
-    reachTo(whole, first.forms.whole);
-    reachTo(plot, first.forms.plot ?? first.forms.box);
-    reachTo(plotWhole, first.forms.whole);
-    if (bare !== undefined) reachTo(bare, first.forms.bare ?? first.forms.box);
+  if (ends !== undefined) {
+    const [lo, hi] = ends;
+    for (const to of [box, whole, plot, plotWhole, bare]) {
+      if (to === undefined || to[0].length === 0) continue;
+      to[0].push(hi);
+      to[1].push(Pwl.negate(lo));
+    }
   }
   const env = ([up, down]: [Pwl.Value[], Pwl.Value[]]) =>
     up.length === 0 ? undefined : Extent(Pwl.envelope(up), Pwl.envelope(down));
@@ -500,6 +500,7 @@ export function buildPlan(
       : plotWhole[0].length === 0
         ? undefined
         : scaleExtent(scale, env(plotWhole)!),
+    ends,
   };
 }
 
@@ -508,18 +509,19 @@ export function buildPlan(
 type PlacedPart = { origin: Pwl.Value; forms: ChildForms; child: ClaimChild };
 
 /**
- * The turn of the chain `node` lays along `axis`, when it closes around a
- * closed axis (`closesAround`): its first part, where the plan places it,
- * and the length from that part to its next turn, one lap on. The chain's
- * last edge is an edge like the others (`distributePlacementAnchors`, read
- * off the parts' plots as the chain lays them), from the last part to the
- * first part's next turn, so the length is the last part's `from` anchor
- * plus the gap, less the first part's `to` anchor: the parts and n gaps
- * for `Spacing.box`, n distances for `Spacing.pitch`, and the parts and n
- * minimum gaps for `Spacing.atLeast`. A stack places its parts by their
- * data offsets with no edge between them, so it has none.
+ * Where the chain `node` lays along `axis` starts and ends, with its ends
+ * (`GoFishNode.endsOf`): its first part's `to` anchor less the start
+ * multiple of the gap, and its last part's `from` anchor plus the end
+ * multiple. These are the anchors an edge of the chain reads
+ * (`distributePlacementAnchors`, off the parts' plots as the chain lays
+ * them). For `Spacing.box` and `Spacing.atLeast` they are the edges of the
+ * first and last part; for `Spacing.pitch` the pitched point, so ends of
+ * 0.5 put half a distance before the first point (d3's point scale
+ * `padding`). Undefined when the chain keeps no room at its ends. Around a
+ * whole glued axis the default ends sum to one gap, so the parts and n
+ * gaps (n distances for a pitch) make the turn.
  */
-function closingTurn(
+function chainEnds(
   node: GoFishNode,
   axis: 0 | 1,
   children: ClaimChild[],
@@ -527,14 +529,15 @@ function closingTurn(
   { operands, keyOf }: ResolvedOperands,
   forms: (ChildForms | undefined)[],
   boxes: ReadonlyMap<number, { lo: Pwl.Value; hi: Pwl.Value }>
-): [PlacedPart, Pwl.Value] | undefined {
+): [Pwl.Value, Pwl.Value] | undefined {
   if (node.axisDir !== axis) return undefined;
   const chain = constraints.find(
     (c): c is DistributeConstraint =>
       c.type === "distribute" && axisIndex(c.dir) === axis
   );
-  if (chain === undefined || chain.glue || !closesAround(node, axis))
-    return undefined;
+  if (chain === undefined) return undefined;
+  const [before, after] = node.endsOf(chain, axis);
+  if (Pwl.isZero(before) && Pwl.isZero(after)) return undefined;
   const parts = distributeChildrenInPlacementOrder(chain).flatMap(
     (ref): PlacedPart[] => {
       const op = operands.get(keyOf(ref));
@@ -572,14 +575,9 @@ function closingTurn(
     }
   };
   const { from, to } = distributePlacementAnchors(chain);
-  const first = parts[0];
-  const last = parts[parts.length - 1];
   return [
-    first,
-    sub(
-      Pwl.add(anchorAt(last, from), node.gapOf(chain, axis)),
-      anchorAt(first, to)
-    ),
+    sub(anchorAt(parts[0], to), before),
+    Pwl.add(anchorAt(parts[parts.length - 1], from), after),
   ];
 }
 

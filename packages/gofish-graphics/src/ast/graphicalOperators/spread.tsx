@@ -17,7 +17,6 @@ import { layer } from "./layer";
 import { Constraint } from "../constraints";
 import { axisName, childSlots } from "../constraints/shared";
 import type { Spacing } from "../../families/spacing";
-import type { Slack } from "../../families/slack";
 import type { Gap } from "../constraints/gap";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
@@ -57,7 +56,6 @@ export const Spread = createNodeOperator(
       key,
       dir,
       spacing,
-      slack,
       alignment = "baseline",
       reverse = false,
       glue = false,
@@ -76,9 +74,6 @@ export const Spread = createNodeOperator(
       /** How far apart neighbors are: a {@link Spacing} strategy, or a bare
        *  amount, which is `Spacing.box(amount)`. */
       spacing?: Gap | Spacing;
-      /** Where the children go along `dir` when minimum gaps leave them
-       *  room: the slack of the chain it elaborates to. */
-      slack?: Slack;
       alignment?: Alignment;
       reverse?: boolean;
       // When true, treat as a stack: glue children together, summing their
@@ -203,7 +198,6 @@ export const Spread = createNodeOperator(
           {
             dir: stackAxis,
             spacing,
-            slack,
             glue,
             order: reverse ? "reverse" : "forward",
             baseline:
@@ -236,17 +230,13 @@ export type SpreadOptions<T = any> = {
    *  `lon`/`lat` in geo). */
   dir: AxisName;
   /** How far apart neighbors are, a {@link Spacing} strategy:
-   *  `Spacing.box(gap)`, a gap between facing edges, or
-   *  `Spacing.pitch(distance, { at })`, a fixed distance between the same
-   *  point on each child. A bare amount is `Spacing.box(amount)`: pixels, a
+   *  `Spacing.box(gap, { ends })`, a gap between facing edges,
+   *  `Spacing.pitch(distance, { at, ends })`, a fixed distance between the
+   *  same point on each child, or `Spacing.atLeast(gap, { slack, ends })`,
+   *  a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, a
    *  percent of the spread's room, or an `fr` weight, so the gaps are the
    *  flexible parts (#1176 step 6). */
   spacing?: Gap | Spacing;
-  /** Where the children go along `dir` when minimum gaps
-   *  (`Spacing.atLeast`) leave them room, a {@link Slack} rule:
-   *  `Slack.start()` (the default), `Slack.end()`, `Slack.center()` or
-   *  `Slack.at(t)`. */
-  slack?: Slack;
   alignment?: "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   glue?: boolean;
@@ -344,7 +334,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
  * parts that only touch are a `spread({ spacing: 0 })`. */
 export type StackOptions<T = any> = Omit<
   SpreadOptions<T>,
-  "spacing" | "slack" | "glue" | "anchor"
+  "spacing" | "glue" | "anchor"
 >;
 
 export function stack(
