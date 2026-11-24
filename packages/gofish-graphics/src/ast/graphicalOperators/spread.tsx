@@ -17,6 +17,7 @@ import { layer } from "./layer";
 import { Constraint } from "../constraints";
 import { axisName, childSlots } from "../constraints/shared";
 import type { Spacing } from "../../families/spacing";
+import type { Slack } from "../../families/slack";
 import type { Gap } from "../constraints/gap";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
@@ -56,6 +57,7 @@ export const Spread = createNodeOperator(
       key,
       dir,
       spacing,
+      slack,
       alignment = "baseline",
       reverse = false,
       glue = false,
@@ -74,6 +76,9 @@ export const Spread = createNodeOperator(
       /** How far apart neighbors are: a {@link Spacing} strategy, or a bare
        *  amount, which is `Spacing.box(amount)`. */
       spacing?: Gap | Spacing;
+      /** Where the children go along `dir` when minimum gaps leave them
+       *  room: the slack rule of the layer it elaborates to, on `dir`. */
+      slack?: Slack;
       alignment?: Alignment;
       reverse?: boolean;
       // When true, treat as a stack: glue children together, summing their
@@ -160,11 +165,14 @@ export const Spread = createNodeOperator(
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
-    // node: it maps its keyed domain into that size.
+    // node: it maps its keyed domain into that size. The layer solves the
+    // chain, so its slack rule is the spread's, on `dir`, named as `dir`
+    // names it (the layer resolves it in the same scope).
     const node = (await layer(
       {
         key,
         ...fancyDims,
+        ...(slack === undefined ? {} : { slack: { [dirName]: slack } }),
       } as any,
       childList
     )) as GoFishNode;
@@ -236,6 +244,11 @@ export type SpreadOptions<T = any> = {
    *  percent of the spread's room, or an `fr` weight, so the gaps are the
    *  flexible parts (#1176 step 6). */
   spacing?: Gap | Spacing;
+  /** Where the children go along `dir` when minimum gaps
+   *  (`Spacing.atLeast`) leave them room, a {@link Slack} rule:
+   *  `Slack.start()` (the default), `Slack.end()`, `Slack.center()` or
+   *  `Slack.at(t)`. */
+  slack?: Slack;
   alignment?: "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   glue?: boolean;
@@ -333,7 +346,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
  * parts that only touch are a `spread({ spacing: 0 })`. */
 export type StackOptions<T = any> = Omit<
   SpreadOptions<T>,
-  "spacing" | "glue" | "anchor"
+  "spacing" | "slack" | "glue" | "anchor"
 >;
 
 export function stack(

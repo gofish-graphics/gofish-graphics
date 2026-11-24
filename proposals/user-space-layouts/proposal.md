@@ -9,7 +9,7 @@ A design for writing layout algorithms as GoFish code, on the smallest set of la
 - Every d3 layout was written this way and compared with d3's own numbers. Pie, stack, partition, treemap, tree, cluster, chord arcs and a sankey without relaxation match exactly. Circle packing, force and sankey relaxation need relations today's solver does not have.
 - Those are jobs for other solvers: one for geometry (touching, intersecting) and one that optimizes (pulls, repulsion). A scope picks its solver the way it picks a coordinate space, and solvers meet only at scope boundaries.
 - User code writes decisions three ways: a function that calls `measure` on its children, a `choose` among alternatives, or a `layout` that reads the room it was given.
-- Nothing is implemented except prototype stories, and the minimum gap and the average of positions, which are in the engine since commit b960e601d with a placeholder slack option.
+- Nothing is implemented except prototype stories, the minimum gap and the average of positions (in the engine since commit b960e601d), and the `Slack` family's `start`, `center`, `end` and `at(t)` on `layer` and `spread`.
 
 **Decisions.** Discrete. Made by plan code, or by `choose`. _which items share a row, the order in a column, which two circles a new one rests on_
 
@@ -23,13 +23,13 @@ This is the split issue \#485 asks for: a small relational core, and user-space 
 
 #### What today's symbolic solver needs
 
-| Primitive                                | In math                                                      | In GoFish                                                                             | Status                                                                                                           |
-| ---------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| A linear equation between positions      | a = b; b − a = g; p = the average of a, b, c                 | `Constraint.align`, `Constraint.distribute`, `Constraint.position`, `Constraint.nest` | Today, except the average. A dendrogram puts a parent at the mean of its children, and nothing public says that. |
-| A minimum gap, with a rule for the slack | b − a ≥ g, then start, end, center or even                   | `Spacing.atLeast(g)`, `Spacing.contour(g)` on `distribute` and `spread` (sketch)      | In the engine since commit b960e601d. The slack option is a placeholder; see "The slack rule".                   |
-| One scale per scope                      | size = value × scale; a container is the max of its contents | `rect({ h: "value" })`, shared across a scope                                         | Today. It solved d3-sankey's scale on its own.                                                                   |
-| A coordinate map                         | positions → f(positions), applied after the solve            | `Coord.polar()`, `Coord.clock()`                                                      | Today, except that an angle axis does not wrap.                                                                  |
-| A choice                                 | the minimum over alternatives                                | `choose([a, b])` (sketch)                                                             | The choice proposal. Needs `min` in the size algebra (\#630).                                                    |
+| Primitive                                | In math                                                      | In GoFish                                                                             | Status                                                                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| A linear equation between positions      | a = b; b − a = g; p = the average of a, b, c                 | `Constraint.align`, `Constraint.distribute`, `Constraint.position`, `Constraint.nest` | Today, except the average. A dendrogram puts a parent at the mean of its children, and nothing public says that.               |
+| A minimum gap, with a rule for the slack | b − a ≥ g, then start, end, center or even                   | `Spacing.atLeast(g)`, `Spacing.contour(g)` on `distribute` and `spread` (sketch)      | In the engine since commit b960e601d. The slack rule is `Slack` on `layer` and `spread`, without `even`; see "The slack rule". |
+| One scale per scope                      | size = value × scale; a container is the max of its contents | `rect({ h: "value" })`, shared across a scope                                         | Today. It solved d3-sankey's scale on its own.                                                                                 |
+| A coordinate map                         | positions → f(positions), applied after the solve            | `Coord.polar()`, `Coord.clock()`                                                      | Today, except that an angle axis does not wrap.                                                                                |
+| A choice                                 | the minimum over alternatives                                | `choose([a, b])` (sketch)                                                             | The choice proposal. Needs `min` in the size algebra (\#630).                                                                  |
 
 The first three are one piece of mathematics: equations and lower bounds on differences of positions, a max, and one unknown scale. That is why one pass solves them. Every operator below lowers into these.
 
@@ -1052,11 +1052,12 @@ A set of minimum gaps does not fix a position. It fixes a range. Each item has a
 
 _p is pinned at 0 and r at 290. q and s must each be 8 px from their neighbors. Solid outlines are the earliest places, dashed are the latest. The bars are each item's slack, 156 px._
 
-**Today (the placeholder)**
+**Before the Slack family (the placeholder, now removed)**
 
 ```ts
-// Today (commit b960e601d, placeholder): the rule rides on each gap, and
-// two linked gaps with different rules are an error.
+// Before the Slack family (commit b960e601d's placeholder, now removed):
+// the rule rode on each gap, and two linked gaps with different rules were
+// an error.
 layer([A, B, C, D, p, q, s, r]).relate((c) => [
   Constraint.align({ x: "start" }, [c.A, c.p]),
   Constraint.align({ x: "end" }, [c.D, c.r]),
@@ -1139,7 +1140,7 @@ Over 331 random trees, the even rule matched `d3.tree` to 0.05 px on 327, and wa
 
 ### Four approaches
 
-#### A. One slack rule per scope and axis (sketch)
+#### A. One slack rule per scope and axis (today, except even)
 
 A strategy family, `Slack`, set once on a layer or spread for each axis. Every item takes the same fraction _t_ of its own slack. `start`, `center` and `end` are _t_ = 0, 0.5 and 1, and `at(t)` is any point between. `even` shares the slack of each run in equal steps. A uniform _t_ always keeps every gap, on any set of gaps, because a gap that holds at both ends holds at every point between them.
 
@@ -1150,7 +1151,7 @@ Slack.start(); // t = 0: the least solution (ASAP, early start)
 Slack.end(); // t = 1: the greatest solution (ALAP, late start)
 Slack.center(); // t = 1/2
 Slack.at(0.25); // any t from 0 to 1; the three above are presets of it
-Slack.even(); // on a chain: t grows by one step per gap between tight items
+Slack.even(); // on a chain: t grows by one step per gap between tight items (not built)
 ```
 
 > **Fork: the name.** `slack: Slack.even()`, the word this page uses for the room, or `justify: Justify.even()`, CSS's word for the same choice on a line. Both follow the family rule (a noun, and its key the same word). `justify` is familiar but reads as "fill the line" in typography, which is only one member. Recommended: `Slack`.

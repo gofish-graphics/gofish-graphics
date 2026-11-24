@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
   Constraint,
+  Slack,
   Spacing,
   circle,
   createMark,
@@ -15,8 +16,8 @@ import {
 } from "../../src/lib";
 
 // The two placement primitives of the user-space layouts proposal, through
-// the public API: a minimum gap (`Spacing.atLeast`, its slack placed by
-// `justify`) and a mean of positions (`mean([...])`, an operand of
+// the public API: a minimum gap (`Spacing.atLeast`, its slack placed by the
+// `slack` rule of the layer that solves it) and a mean of positions (`mean([...])`, an operand of
 // `Constraint.align`). The `Spacing.atLeast` spelling is a PLACEHOLDER, not
 // signed off. No story computes a
 // position: every place comes from the solve. Not gallery-tagged.
@@ -45,16 +46,15 @@ const Box = createMark(
     ])
 );
 
-type Justify = "start" | "end" | "center";
-
 /**
  * Top row: two pairs, each glued by an exact gap of 2, and at least 16
  * apart. Bottom row: p starts where A starts and r ends where D ends
  * (exact), and q floats between them, at least 8 from each. The top row
- * sets the span, so q has room to spare, and `justify` says where it goes.
+ * sets the span, so q has room to spare, and the layer's `slack` on x says
+ * where it goes.
  */
-const rowOfRects = (justify: Justify) =>
-  layer([
+const rowOfRects = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [
     Box({ label: "A", w: 60, fill: "#a8dadc" }).name("A"),
     Box({ label: "B", w: 40, fill: "#a8dadc" }).name("B"),
     Box({ label: "C", w: 50, fill: "#f1c27d" }).name("C"),
@@ -65,32 +65,35 @@ const rowOfRects = (justify: Justify) =>
   ]).relate((c) => [
     Constraint.distribute({ dir: "x", spacing: 2 }, [c.A, c.B]),
     Constraint.distribute({ dir: "x", spacing: 2 }, [c.C, c.D]),
-    Constraint.distribute(
-      { dir: "x", spacing: Spacing.atLeast(16, { justify }) },
-      [c.B, c.C]
-    ),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(16) }, [
+      c.B,
+      c.C,
+    ]),
     Constraint.align({ x: "start" }, [c.A, c.p]),
     Constraint.align({ x: "end" }, [c.D, c.r]),
-    Constraint.distribute(
-      { dir: "x", spacing: Spacing.atLeast(8, { justify }) },
-      [c.p, c.q, c.r]
-    ),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
     Constraint.align({ y: "start" }, [c.A, c.B, c.C, c.D]),
     Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
     Constraint.distribute({ dir: "y", spacing: 12 }, [c.A, c.p]),
   ]);
 
-const rowStory = (justify: Justify): StoryObj => ({
+const rowStory = (slack: Slack.Slack): StoryObj => ({
   render: () => {
     const container = initializeContainer();
-    rowOfRects(justify).render(container, { w: 340, h: 80 });
+    rowOfRects(slack).render(container, { w: 340, h: 80 });
     return container;
   },
 });
 
-export const RowStart = rowStory("start");
-export const RowEnd = rowStory("end");
-export const RowCenter = rowStory("center");
+export const RowStart = rowStory(Slack.start());
+export const RowEnd = rowStory(Slack.end());
+export const RowCenter = rowStory(Slack.center());
+/** A quarter of the way from the least solution to the greatest. */
+export const RowQuarter = rowStory(Slack.at(0.25));
 
 /** The three rules one above another, as one picture. */
 export const RowAll: StoryObj = {
@@ -98,7 +101,7 @@ export const RowAll: StoryObj = {
     const container = initializeContainer();
     spread(
       { dir: "y", spacing: 24, alignment: "start" },
-      (["start", "center", "end"] as const).map(rowOfRects)
+      [Slack.start(), Slack.center(), Slack.end()].map(rowOfRects)
     ).render(container, { w: 340, h: 260 });
     return container;
   },
@@ -156,8 +159,9 @@ const treeLinks = (ns: Node[]) =>
 
 /**
  * The leaves one pitch apart; each parent's x the mean of its children's;
- * each child at least one level below its parent, with the slack at the
- * end, so every leaf lands on the last level (d3.cluster's levels).
+ * each child at least one level below its parent, with the layer's slack
+ * on y at the end, so every leaf lands on the last level (d3.cluster's
+ * levels).
  */
 export const Dendrogram: StoryObj = {
   render: () => {
@@ -165,7 +169,7 @@ export const Dendrogram: StoryObj = {
     const ns = nodes(budget);
     const leaves = ns.filter((n) => !n.t.children);
     const inner = ns.filter((n) => n.t.children);
-    layer([
+    layer({ slack: { y: Slack.end() } }, [
       spread(
         { dir: "x", spacing: Spacing.pitch(DX, { at: "middle" }) },
         leaves.map((n) => dot(n.path, "#457b9d"))
@@ -183,10 +187,7 @@ export const Dendrogram: StoryObj = {
           .filter((n) => n.parent)
           .map((n) =>
             Constraint.distribute(
-              {
-                dir: "y",
-                spacing: Spacing.atLeast(DY - 2 * R, { justify: "end" }),
-              },
+              { dir: "y", spacing: Spacing.atLeast(DY - 2 * R) },
               [c[n.parent!], c[n.path]]
             )
           ),

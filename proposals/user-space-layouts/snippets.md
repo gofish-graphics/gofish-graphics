@@ -520,8 +520,11 @@ const x = solveSeparations(ids, seps, { policy });
 Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(10) }, [a, b]);
 
 // Contour spacing lowers to one of these per pair of siblings, with the
-// gap read from their two contours. `justify` says where the slack goes.
-spread({ dir: "x", spacing: Spacing.contour(10), justify: "center" }, subtrees);
+// gap read from their two contours. `slack` says where the slack goes.
+spread(
+  { dir: "x", spacing: Spacing.contour(10), slack: Slack.center() },
+  subtrees
+);
 
 // Layering: every link's target is at least one column after its source.
 layer(nodes).relate((n) =>
@@ -893,8 +896,9 @@ spread({ by: "x", dir: "x", spacing: 14, alignment: "middle" });
 <!-- id: slack-today -->
 
 ```ts
-// Today (commit b960e601d, placeholder): the rule rides on each gap, and
-// two linked gaps with different rules are an error.
+// Before the Slack family (commit b960e601d's placeholder, now removed):
+// the rule rode on each gap, and two linked gaps with different rules were
+// an error.
 layer([A, B, C, D, p, q, s, r]).relate((c) => [
   Constraint.align({ x: "start" }, [c.A, c.p]),
   Constraint.align({ x: "end" }, [c.D, c.r]),
@@ -914,7 +918,7 @@ Slack.start(); // t = 0: the least solution (ASAP, early start)
 Slack.end(); // t = 1: the greatest solution (ALAP, late start)
 Slack.center(); // t = 1/2
 Slack.at(0.25); // any t from 0 to 1; the three above are presets of it
-Slack.even(); // on a chain: t grows by one step per gap between tight items
+Slack.even(); // on a chain: t grows by one step per gap between tight items (not built)
 ```
 
 <!-- id: slack-a-row -->

@@ -63,6 +63,10 @@
       "types": "./dist/families/shape.d.ts",
       "import": "./dist/shape.js"
     },
+    "./slack": {
+      "types": "./dist/families/slack.d.ts",
+      "import": "./dist/slack.js"
+    },
     "./spacing": {
       "types": "./dist/families/spacing.d.ts",
       "import": "./dist/spacing.js"

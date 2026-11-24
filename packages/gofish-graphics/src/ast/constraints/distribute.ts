@@ -74,9 +74,10 @@ export interface DistributeOptions {
    *  - `Spacing.pitch(distance, { at })`: `at[i+1] = at[i] + distance`, a
    *    fixed distance between the same point on each child, which does not
    *    (`"middle"` is center to center).
-   *  - `Spacing.atLeast(gap, { justify })`: `start[i+1] ≥ end[i] + gap`, a
-   *    minimum gap, which the solve meets after the exact constraints
-   *    (PLACEHOLDER name).
+   *  - `Spacing.atLeast(gap)`: `start[i+1] ≥ end[i] + gap`, a minimum gap,
+   *    which the solve meets after the exact constraints (PLACEHOLDER
+   *    name). Where the gaps leave room, the `slack` of the layer that
+   *    holds the chain places the children.
    *
    *  A bare amount is `Spacing.box(amount)`: pixels, a percent of the room
    *  of the layer that holds the chain, or an `fr` weight in its scope
@@ -408,11 +409,7 @@ export function lowerDistributePlacement<T>(
     };
     // A minimum gap is a fact of its own, which the solve separates the
     // rigid groups by (`separateGroups` in differenceGraph.ts).
-    if (constraint.spacing.kind === "atLeast")
-      emitter.atLeast({
-        ...edge,
-        slack: constraint.spacing.justify ?? "start",
-      });
+    if (constraint.spacing.kind === "atLeast") emitter.atLeast(edge);
     else emitter.relate(edge);
   }
   // A spread that states its 0 carries its {@link StackBaseline}, which the

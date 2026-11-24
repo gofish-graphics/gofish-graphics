@@ -1265,7 +1265,14 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
         family,
         name: pyKwarg(name),
         tag: p.kind,
-        params: spec.kinds[p.kind].params,
+        // A param the preset sets has the preset's value as its default,
+        // so the preset never requires it (`Slack.end()` sets `at`'s `t`).
+        params: Object.fromEntries(
+          Object.entries(spec.kinds[p.kind].params).map(([field, f]) => [
+            field,
+            field in p.values ? { ...f, required: false } : f,
+          ])
+        ),
         preset: p.values,
         doc: p.doc,
         positional: [],

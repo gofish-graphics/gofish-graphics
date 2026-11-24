@@ -16,7 +16,17 @@ import {
   type FixedSolve,
 } from "../solver/scopes";
 import { isToken } from "../createName";
-import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
+import {
+  Size,
+  elaborateOwnDims,
+  FancyDims,
+  displayTranslate,
+  resolveAxisName,
+  type AxisName,
+} from "../dims";
+import { Frontend } from "gofish-ir";
+import { kindValue } from "../strategyKind";
+import type { Slack } from "../../families/slack";
 import {
   UNDEFINED,
   UnderlyingSpace,
@@ -211,6 +221,12 @@ export type LayerOptions = {
   padding?: number;
   transform?: { scale?: { x?: number; y?: number } };
   box?: boolean;
+  /** Where the children go when minimum gaps (`Spacing.atLeast`) leave
+   *  them room, per axis (`{ y: Slack.end() }`), by an axis name in the
+   *  scope of the children: `x`/`y`, or a name the enclosing coordinate
+   *  space declares. The layer solves its constraints on each axis
+   *  together, so the rule is one per axis. Omitted, `Slack.start()`. */
+  slack?: Partial<Record<AxisName, Slack>>;
 } & WithEffect &
   FancyDims;
 
@@ -238,6 +254,9 @@ export const layer = createNodeOperatorSequential(
         transform: _transform,
         box: _box,
         effect: _effect,
+        // A coordinate space plans no constraints of its own, so it has no
+        // minimum gaps to place.
+        slack: _slack,
         ...rest
       } = options;
       // A coordinate space lays out nodes. A `ref` stand-in's place is its
@@ -260,6 +279,19 @@ export const layer = createNodeOperatorSequential(
     // node. A length is never data (`sizeForType`).
     const own = elaborateOwnDims<number>(options);
     const { dims, dataSize } = own;
+    // The slack rule on each axis, `Slack.at(t)`'s `t`: where the layer's
+    // minimum gaps put what they leave room for (`separateGroups`). Its
+    // keys name axes in the scope of the children, so they are resolved
+    // with it, in the resolveAliases pass (below, after `own.bind`).
+    const slack: [number, number] = [0, 0];
+    const slackRules = Object.entries(options.slack ?? {}).flatMap(
+      ([name, rule]) => {
+        if (rule === undefined) return [];
+        const value = kindValue(rule);
+        Frontend.checkStrategy("Slack", value, `slack.${name}`);
+        return [{ name, t: value.t }];
+      }
+    );
 
     // SIZED NODES (#1114). A layer with a size of its own on an axis (a
     // literal `w`/`h`, or a data-valued one) is a sized node there: at layout
@@ -825,7 +857,8 @@ export const layer = createNodeOperatorSequential(
                 refs,
                 nestedPlacement(axis, refs.operands),
                 ring,
-                scale[axis]
+                scale[axis],
+                slack[axis]
               )
             )
             .map((plan, axis) =>
@@ -1783,6 +1816,23 @@ export const layer = createNodeOperatorSequential(
     // Give it its own box, and defer the axis-name-keyed `dims` option to
     // the resolveAliases pass.
     own.bind(node);
+    if (slackRules.length > 0) {
+      const dimsHook = node._elaborateInAxisScope;
+      node._elaborateInAxisScope = async (outer, inner) => {
+        await dimsHook?.(outer, inner);
+        const named: (string | undefined)[] = [undefined, undefined];
+        for (const { name, t } of slackRules) {
+          const axis = resolveAxisName(inner, name, "layer({ slack })");
+          if (named[axis] !== undefined)
+            throw new Error(
+              `layer({ slack }): "${named[axis]}" and "${name}" name the ` +
+                `same axis. Give one slack rule per axis.`
+            );
+          named[axis] = name;
+          slack[axis] = t;
+        }
+      };
+    }
     // A size of its own makes it a scope of its own there.
     node.ownsScopeOn = (axis) => node.fixedSize(axis) !== undefined;
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)

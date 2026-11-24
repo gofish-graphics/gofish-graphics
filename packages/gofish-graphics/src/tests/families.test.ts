@@ -106,15 +106,23 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
 >) {
   const ns = (GoFish as Record<string, any>)[family];
   const members = [
-    ...Object.entries(spec.kinds).map(([name, k]) => ({ name, kind: k })),
+    ...Object.entries(spec.kinds).map(([name, k]) => ({
+      name,
+      kind: k,
+      preset: {} as Record<string, unknown>,
+    })),
     ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
       name,
       kind: spec.kinds[p.kind],
+      preset: p.values,
     })),
   ];
-  for (const { name, kind } of members) {
+  for (const { name, kind, preset } of members) {
     const member = ns?.[name];
-    const required = Object.values(kind.params).some((p) => p.required);
+    // A param a preset sets is not required of its factory.
+    const required = Object.entries(kind.params).some(
+      ([field, p]) => p.required && !(field in preset)
+    );
     if (required) {
       check(
         `${family}.${name} has a required option, so it is a call only`,

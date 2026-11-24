@@ -2,11 +2,14 @@
  * Minimum gaps and means of positions in the placement solve. A minimum gap
  * (`Spacing.atLeast`) is solved after the exact facts: they make rigid
  * groups, and the gaps separate the groups by the longest path over them,
- * with the slack placed by `justify`. A mean (`mean([...])`, an operand of
+ * with the slack placed by the scope's slack rule (`Slack.at(t)`, one per
+ * axis problem: a layer's `slack`, or a spread's along its `dir`). A mean (`mean([...])`, an operand of
  * `Constraint.align`) is an exact relation when its operands are in one
  * group, and is placed after its operands otherwise. The least, greatest and centered
- * solutions are checked against `solveSeparations`, the reference of the
- * "Proposals/User Space Separation" stories, copied here as the oracle.
+ * solutions, and points between them, are checked against
+ * `solveSeparations`, the reference of the "Proposals/User Space
+ * Separation" stories, copied here as the oracle (with a `t` for the
+ * points between).
  * Run: `tsx src/tests/minimumGap.test.ts` (wired into `pnpm test` as
  * `test:minimum-gap`).
  */
@@ -23,12 +26,14 @@ import { numbers, values, type Arith } from "../ast/solver/arith";
 import * as Pwl from "../ast/solver/pwl";
 import { UNDEFINED } from "../ast/underlyingSpace";
 import { atLeast, pitch } from "../families/spacing";
-import { check, report, seeded } from "./testHelpers";
+import * as Slack from "../families/slack";
+import * as GoFish from "../lib";
+import { check, items, report, seeded } from "./testHelpers";
 
 // ─── The oracle: `solveSeparations`, as in UserSpaceSeparation.stories.tsx ──
 
 type Sep = { after: string; before: string; gap: number };
-type Policy = "start" | "end" | "center";
+type Policy = "start" | "end" | "center" | { at: number };
 
 const topoOrder = (items: string[], seps: Sep[]): string[] => {
   const ins = new Map(items.map((id) => [id, 0]));
@@ -79,9 +84,14 @@ function solveSeparations(
   return new Map(
     items.map((id) => {
       const greatest = -mirrored.get(id)!;
+      const l = least.get(id)!;
       return [
         id,
-        policy === "end" ? greatest : (least.get(id)! + greatest) / 2,
+        policy === "end"
+          ? greatest
+          : policy === "center"
+            ? (l + greatest) / 2
+            : l + policy.at * (greatest - l),
       ];
     })
   );
@@ -95,7 +105,7 @@ function problem(
   nodes: string[],
   exact: [string, string, number][],
   gaps: [string, string, number][],
-  slack: Policy = "start",
+  slack: Slack.Slack = Slack.start(),
   extra: Partial<AxisProblem<number>> = {}
 ): AxisProblem<number> {
   return {
@@ -114,8 +124,8 @@ function problem(
       to,
       offset,
       owner: `gap ${from}→${to}`,
-      slack,
     })),
+    slack: slack.t,
     ...extra,
   };
 }
@@ -185,7 +195,8 @@ const solveIn = <T>(
   A: Arith<T>,
   children: Box[],
   constraints: ConstraintSpec[],
-  read: (v: Pwl.Value) => T
+  read: (v: Pwl.Value) => T,
+  slack = 0
 ) =>
   solvePlacementCells(
     A,
@@ -198,27 +209,75 @@ const solveIn = <T>(
         (c.type === "grid"
           ? c.spacing[axis]
           : spacingAmount(c.spacing)) as number
-      )
+      ),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    [slack, 0]
   )[0];
 
 /** Each child's `min` solved in numbers, at σ. */
 const layout = (
   children: Box[],
   constraints: ConstraintSpec[],
-  sigma = 1
+  sigma = 1,
+  slack = 0
 ): Map<string, number> => {
   const at = (v: Pwl.Value) => Pwl.at(v, sigma);
   const solved = solveIn(
     { ...numbers, fromValue: at },
     children,
     constraints,
-    at
+    at,
+    slack
   );
   return new Map([...solved.cells].map(([k, c]) => [k, c.min]));
 };
 
 const near = (a: number | undefined, b: number) =>
   a !== undefined && Math.abs(a - b) < 1e-9;
+
+/** The oracle's policy and the engine's rule, side by side. */
+const RULES: [Policy, Slack.Slack][] = [
+  ["start", Slack.start()],
+  ["end", Slack.end()],
+  ["center", Slack.center()],
+  ...[0.25, 0.6, 0.9].map((t): [Policy, Slack.Slack] => [
+    { at: t },
+    Slack.at(t),
+  ]),
+];
+const nameOf = (policy: Policy) =>
+  typeof policy === "string" ? policy : `at(${policy.at})`;
+
+/** The message `f` throws (or its promise rejects with), if any. */
+async function errorOf(f: () => unknown): Promise<string | undefined> {
+  try {
+    await f();
+  } catch (e) {
+    return (e as Error).message;
+  }
+  return undefined;
+}
+
+/** Each rect a rendered builder draws, by its fill: its box. */
+async function rectsOf(
+  builder: any,
+  size = { w: 400, h: 400 }
+): Promise<Map<string, { x: number; y: number; w: number; h: number }>> {
+  const dl = await builder.toDisplayList(size);
+  return new Map(
+    items(dl)
+      .filter((it: any) => it.kind === "rect")
+      .map((it: any) => [
+        it.style?.fill ?? it.fill,
+        { x: it.x, y: it.y, w: it.w, h: it.h },
+      ])
+  );
+}
 
 async function main() {
   console.log(
@@ -247,7 +306,7 @@ async function main() {
       }
       // Two gaps on one pair compose by max: repeat some with a smaller gap.
       if (seps.length > 1) seps.push({ ...seps[0], gap: seps[0].gap - 3 });
-      for (const policy of ["start", "end", "center"] as const) {
+      for (const [policy, rule] of RULES) {
         runs++;
         const want = solveSeparations(items, seps, { policy });
         const got = solve(
@@ -255,7 +314,7 @@ async function main() {
             items,
             [],
             seps.map((s) => [s.after, s.before, s.gap]),
-            policy
+            rule
           )
         );
         if (!sameUpToShift(want, got, items)) {
@@ -388,13 +447,31 @@ async function main() {
       ["a", "x", 5],
       ["x", "d", 5],
     ];
-    const x = (slack: Policy) => {
+    const x = (slack: Slack.Slack) => {
       const p = solve(problem(nodes, exact, gaps, slack));
       return p.get("x")! - p.get("a")!;
     };
-    check("start: x as early as it can be", x("start") === 5, x("start"));
-    check("end: x as late as it can be", x("end") === 25, x("end"));
-    check("center: halfway between", x("center") === 15, x("center"));
+    check(
+      "start: x as early as it can be",
+      x(Slack.start()) === 5,
+      x(Slack.start())
+    );
+    check("end: x as late as it can be", x(Slack.end()) === 25, x(Slack.end()));
+    check(
+      "center: halfway between",
+      x(Slack.center()) === 15,
+      x(Slack.center())
+    );
+    check(
+      "at(0.25): a quarter of the way",
+      x(Slack.at(0.25)) === 10,
+      x(Slack.at(0.25))
+    );
+    check(
+      "start, center and end are at(0), at(0.5) and at(1)",
+      JSON.stringify([Slack.start(), Slack.center(), Slack.end()]) ===
+        JSON.stringify([Slack.at(0), Slack.at(0.5), Slack.at(1)])
+    );
     // The end keeps each group inside the least solution's span, by its
     // size: a wide last item ends where the least solution ends.
     const sized = solve(
@@ -405,7 +482,7 @@ async function main() {
           ["a", "b", 10],
           ["a", "w", 2],
         ],
-        "end",
+        Slack.end(),
         {
           sizes: new Map([
             ["a", 0],
@@ -419,22 +496,6 @@ async function main() {
       "end: a group ends where the least solution ends",
       sized.get("w")! + 5 === sized.get("b")! + 30,
       [...sized]
-    );
-    const mixed = throws(
-      () =>
-        solveAxisProblem(numbers, "x", {
-          ...problem(["a", "b", "c"], [], [["a", "b", 1]], "start"),
-          minGaps: [
-            { from: "a", to: "b", offset: 1, owner: "one", slack: "start" },
-            { from: "b", to: "c", offset: 1, owner: "two", slack: "end" },
-          ],
-        }),
-      /one.*"start".*two.*"end"/
-    );
-    check(
-      "two slack rules on one cluster are an error",
-      mixed !== undefined && !mixed.startsWith("wrong"),
-      mixed
     );
   }
 
@@ -492,52 +553,172 @@ async function main() {
   {
     const kids = [box("a", 2), box("b", 3, 4), box("c", 1), box("x", 0, 2)];
     const [a, b, c, x] = kids.map((k) => ref(k.name));
-    for (const justify of ["start", "end", "center"] as const) {
-      const constraints = [
-        Constraint.distribute({ dir: "x", spacing: atLeast(4, { justify }) }, [
-          a,
-          b,
-          c,
-        ]),
-        Constraint.distribute({ dir: "x", spacing: atLeast(1, { justify }) }, [
-          a,
-          x,
-          c,
-        ]),
-      ];
-      const symbolic = solveIn(values, kids, constraints, (v) => v);
+    const constraints = [
+      Constraint.distribute({ dir: "x", spacing: atLeast(4) }, [a, b, c]),
+      Constraint.distribute({ dir: "x", spacing: atLeast(1) }, [a, x, c]),
+    ];
+    for (const [policy, rule] of RULES) {
+      const symbolic = solveIn(values, kids, constraints, (v) => v, rule.t);
       const misses: string[] = [];
       for (const sigma of [0, 1, 10]) {
-        const numeric = layout(kids, constraints, sigma);
+        const numeric = layout(kids, constraints, sigma, rule.t);
         for (const [name, min] of numeric) {
           const s = symbolic.cells.get(name);
           if (s === undefined || Math.abs(Pwl.at(s.min, sigma) - min) > 1e-9)
-            misses.push(`${justify} σ=${sigma} ${name}: ${min}`);
+            misses.push(`${nameOf(policy)} σ=${sigma} ${name}: ${min}`);
         }
       }
       check(
-        `${justify}: values in σ agree with numbers`,
+        `${nameOf(policy)}: values in σ agree with numbers`,
         misses.length === 0,
         misses
       );
     }
     // At σ = 10, x has slack: a ends at 20, c starts at 20 + 4 + 34 + 4.
-    const center = layout(
-      kids,
-      [
-        Constraint.distribute(
-          { dir: "x", spacing: atLeast(4, { justify: "center" }) },
-          [a, b, c]
-        ),
-        Constraint.distribute(
-          { dir: "x", spacing: atLeast(1, { justify: "center" }) },
-          [a, x, c]
-        ),
-      ],
-      10
-    );
+    const center = layout(kids, constraints, 10, Slack.center().t);
     // x's least start is 21, its greatest 62 − 1 − 2 = 59: halfway is 40.
     check("x is centered in its slack", near(center.get("x"), 40), [...center]);
+  }
+
+  console.log("\n# the slack rule through layer and spread");
+  {
+    const { layer, spread, rect, Constraint: C, Spacing: S } = GoFish as any;
+    // x: b at least 10 after a and 10 before c, and c at least 60 after a,
+    // all 20 wide: b starts 30 to 50 past a, so it has 20 of slack. y: the
+    // same, along y. (A gap into and out of one rigid group is a cycle, so
+    // the long edge is a minimum gap too.)
+    const row = (slack: Record<string, Slack.Slack> | undefined) =>
+      layer(slack === undefined ? {} : { slack }, [
+        rect({ w: 20, h: 20, fill: "red" }).name("a"),
+        rect({ w: 20, h: 20, fill: "green" }).name("b"),
+        rect({ w: 20, h: 20, fill: "blue" }).name("c"),
+        rect({ w: 20, h: 20, fill: "orange" }).name("p"),
+        rect({ w: 20, h: 20, fill: "purple" }).name("q"),
+        rect({ w: 20, h: 20, fill: "black" }).name("r"),
+      ]).relate((c: any) => [
+        C.distribute({ dir: "x", spacing: S.atLeast(10) }, [c.a, c.b, c.c]),
+        C.distribute({ dir: "x", spacing: S.atLeast(60) }, [c.a, c.c]),
+        C.distribute({ dir: "y", spacing: S.atLeast(10) }, [c.p, c.q, c.r]),
+        C.distribute({ dir: "y", spacing: S.atLeast(60) }, [c.p, c.r]),
+        C.align({ y: "start" }, [c.a, c.b, c.c]),
+        C.align({ x: "start" }, [c.p, c.q, c.r]),
+        C.distribute({ dir: "y", spacing: 10 }, [c.a, c.p]),
+      ]);
+    // The fraction of its slack a middle item takes: its offset from the
+    // first past the least (30), over the room (20). Sizes, not signs, so a
+    // y that reads either way gives the same.
+    const fraction = (
+      boxes: Map<string, { x: number; y: number }>,
+      axis: "x" | "y",
+      [lo, mid]: string[]
+    ) => (Math.abs(boxes.get(mid)![axis] - boxes.get(lo)![axis]) - 30) / 20;
+    const perAxis = await rectsOf(row({ x: Slack.end(), y: Slack.at(0.25) }));
+    check(
+      "a layer's slack per axis: x at the end, y a quarter of the way",
+      near(fraction(perAxis, "x", ["red", "green"]), 1) &&
+        near(fraction(perAxis, "y", ["orange", "purple"]), 0.25),
+      [...perAxis]
+    );
+    const plain = await rectsOf(row(undefined));
+    const started = await rectsOf(row({ x: Slack.start(), y: Slack.start() }));
+    check(
+      "no slack is Slack.start() on both axes",
+      near(fraction(plain, "x", ["red", "green"]), 0) &&
+        near(fraction(plain, "y", ["orange", "purple"]), 0) &&
+        JSON.stringify([...plain]) === JSON.stringify([...started]),
+      [...plain]
+    );
+
+    // A spread solves its own chain, in the layer it lowers to, and its
+    // slack is that layer's on its dir. A chain alone has no room (every
+    // gap is at its least), so every rule draws the same row; the rule is
+    // read, and checked, all the same.
+    const spreadRow = (slack: unknown, dir = "x") =>
+      spread(
+        {
+          dir,
+          spacing: S.atLeast(10),
+          ...(slack === undefined ? {} : { slack }),
+        },
+        [
+          rect({ w: 20, h: 20, fill: "red" }),
+          rect({ w: 30, h: 20, fill: "green" }),
+          rect({ w: 20, h: 20, fill: "blue" }),
+        ]
+      );
+    const spreadEnd = await rectsOf(spreadRow(Slack.end()));
+    const spreadStart = await rectsOf(spreadRow(undefined));
+    check(
+      "a spread's chain alone has no room: Slack.end() draws Slack.start()'s row",
+      JSON.stringify([...spreadEnd]) === JSON.stringify([...spreadStart]) &&
+        near(spreadEnd.get("green")!.x - spreadEnd.get("red")!.x, 30),
+      { end: [...spreadEnd], start: [...spreadStart] }
+    );
+    const spreadBad = await errorOf(() =>
+      rectsOf(spreadRow({ kind: "at", t: 2 }, "y"))
+    );
+    check(
+      "a spread's slack reaches the layer on its dir, which checks it",
+      spreadBad !== undefined && /slack\.y/.test(spreadBad),
+      spreadBad
+    );
+    const polar = await errorOf(() =>
+      rectsOf(
+        layer({ coord: GoFish.Coord.polar() }, [
+          spreadRow(Slack.center(), "theta"),
+        ])
+      )
+    );
+    check(
+      "a spread's dir named by its coordinate space names its slack's axis",
+      polar === undefined,
+      polar
+    );
+
+    // A scope with a slack rule and no minimum gaps: nothing has slack.
+    const exact = (slack: Record<string, unknown> | undefined) =>
+      layer(slack === undefined ? {} : { slack }, [
+        rect({ w: 20, h: 20, fill: "red" }).name("a"),
+        rect({ w: 30, h: 20, fill: "green" }).name("b"),
+      ]).relate((c: any) => [
+        C.distribute({ dir: "x", spacing: 5 }, [c.a, c.b]),
+      ]);
+    const exactEnd = await rectsOf(
+      exact({ x: Slack.end(), y: Slack.center() })
+    );
+    const exactNone = await rectsOf(exact(undefined));
+    check(
+      "a slack rule on a scope with no minimum gaps changes nothing",
+      JSON.stringify([...exactEnd]) === JSON.stringify([...exactNone]),
+      [...exactEnd]
+    );
+
+    // `t` is a fraction in [0, 1]: `Slack.at` checks it where it is made,
+    // and a layer checks a rule it is handed (from the wire, say).
+    for (const t of [-0.1, 1.5, NaN]) {
+      const made = await errorOf(() => Slack.at(t));
+      check(
+        `Slack.at(${t}) is an error`,
+        made !== undefined && made.includes(`Slack.at(${t})`),
+        made
+      );
+      const handed = await errorOf(() =>
+        rectsOf(exact({ x: { kind: "at", t } }))
+      );
+      check(
+        `a layer handed t = ${t} is an error naming slack.x`,
+        handed !== undefined && handed.includes("slack.x"),
+        handed
+      );
+    }
+    const unknownAxis = await errorOf(() =>
+      rectsOf(exact({ theta: Slack.end() }))
+    );
+    check(
+      "a slack key that names no axis of the scope is an error",
+      unknownAxis !== undefined && /theta/.test(unknownAxis),
+      unknownAxis
+    );
   }
 
   console.log("\n# the mean of positions");

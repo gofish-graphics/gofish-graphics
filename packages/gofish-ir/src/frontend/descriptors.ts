@@ -1192,9 +1192,9 @@ export const STRATEGIES = {
           },
         },
       },
-      // PLACEHOLDER: the name `atLeast` and its `justify` are not signed off.
+      // PLACEHOLDER: the name `atLeast` is not signed off.
       atLeast: {
-        doc: "A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer.",
+        doc: "A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer. A minimum gap gives each child a range of positions, not one position; the `slack` of the operator that solves it picks one.",
         positional: ["gap"],
         params: {
           gap: {
@@ -1202,12 +1202,40 @@ export const STRATEGIES = {
             required: true,
             doc: "The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much.",
           },
-          justify: {
-            type: t.enum("start", "end", "center"),
-            default: "start",
-            doc: 'Where the room the gaps leave goes: "start" puts each child as near the start as its gaps allow, "end" as near the end of the same span, and "center" halfway between.',
+        },
+      },
+    },
+  },
+  Slack: {
+    doc: "Where the parts go when minimum gaps (`Spacing.atLeast`) leave them room: the value of `spread`'s `slack` option, along its `dir`, and of `layer`'s, per axis. A minimum gap gives each part a range of positions, not one position. The least solution puts every part as early as its gaps allow, and the greatest puts it as late as they allow within the same span; a part's slack is the difference. The rule picks one point in each part's range, the same way for every part the scope solves on that axis. Where no gap leaves room, every rule gives the same positions.",
+    kinds: {
+      at: {
+        doc: "The point a fraction `t` of the way from the least solution to the greatest: each part at least + t × (greatest − least).",
+        positional: ["t"],
+        params: {
+          t: {
+            type: t.num({ min: 0, max: 1 }),
+            required: true,
+            doc: "The fraction of the way, from 0 (the least solution) to 1 (the greatest).",
           },
         },
+      },
+    },
+    presets: {
+      start: {
+        kind: "at",
+        values: { t: 0 },
+        doc: "The least solution: each part as early as its gaps allow. The default. It is `Slack.at(0)`.",
+      },
+      end: {
+        kind: "at",
+        values: { t: 1 },
+        doc: "The greatest solution within the least solution's span: each part as late as its gaps allow. It is `Slack.at(1)`.",
+      },
+      center: {
+        kind: "at",
+        values: { t: 0.5 },
+        doc: "Halfway between the least and the greatest solution: the mean of the two. It is `Slack.at(0.5)`.",
       },
     },
   },
@@ -1215,7 +1243,7 @@ export const STRATEGIES = {
 
 /** The name of a strategy family: `"Effect"`, `"Tiling"`, `"Overlap"`,
  *  `"Curve"`, `"Binning"`, `"Calendar"`, `"Shape"`, `"Placement"`,
- *  `"Baseline"` or `"Spacing"`. */
+ *  `"Baseline"`, `"Spacing"` or `"Slack"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Binning` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -1807,6 +1835,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       baseline: {
         type: t.ref("Baseline"),
         doc: "Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.",
+      },
+      slack: {
+        type: t.ref("Slack"),
+        doc: "Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). Omitted, Slack.start(). Where no gap leaves room it changes nothing.",
       },
       axes: { type: t.ref("AxesOptions") },
       ...operatorBoxFields,
@@ -2560,6 +2592,10 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       box: {
         type: t.boolean,
         doc: 'True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.',
+      },
+      slack: {
+        type: t.record(t.ref("Slack")),
+        doc: "Where the children go when minimum gaps (`Spacing.atLeast`) leave them room, per axis: an axis name (x, y, or a name the enclosing coordinate space declares) to a call in the Slack family, `{ y: Slack.end() }`. The layer solves its constraints on each axis together, so the rule is one per axis. An axis it leaves out takes Slack.start().",
       },
     },
   }),

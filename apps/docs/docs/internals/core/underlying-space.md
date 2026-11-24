@@ -30,6 +30,7 @@ covers:
   - packages/gofish-graphics/src/families/calendar.ts
   - packages/gofish-graphics/src/families/domain.ts
   - packages/gofish-graphics/src/families/spacing.ts
+  - packages/gofish-graphics/src/families/slack.ts
   - packages/gofish-graphics/src/families/trait.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
@@ -1337,9 +1338,16 @@ an exact gap from the layer's origin. The gaps then separate the groups
 a gap inside one group only checks it, and a cycle of gaps is an error naming
 its groups. The least solution is the longest path over the groups, each
 group with no gap into it starting at 0. The greatest is the least solution of
-the mirrored problem, inside the least solution's span. The gaps' `justify`
-picks one, or their mean, and a cluster with a pinned group then moves as one
-so the pins hold. It needs only add, max and negate, so it runs in formulas
+the mirrored problem, inside the least solution's span. So a minimum gap gives
+each group a range of positions, not one position, and a group's slack is its
+greatest place minus its least. The slack rule (`Slack.at(t)`, with `start`,
+`center` and `end` its points 0, 0.5 and 1) puts every group the same fraction
+`t` of the way through its range. The rule is one per layer and axis, not one
+per gap, since the gaps a layer solves on an axis share their room: the layer
+reads it from its `slack` option (keys are axis names in the scope of its
+children, resolved with them), a spread from its own `slack` on its `dir`, and
+it reaches `separateGroups` as the axis problem's `slack`. A cluster with a
+pinned group then moves as one so the pins hold. It needs only add, max and negate, so it runs in formulas
 like the rest of the solve. A **mean** (`anchor-mean`) puts one anchor at the
 weighted mean of others. It comes from an align with a `mean([...])` operand
 (`constraints/mean.ts`): the mean is no node, so `lowerAlignPlacement` puts the

@@ -326,7 +326,6 @@ function reduceToAxisProblem<T>(
         to: fact.to.node,
         offset: A.sub(A.add(fromOffset, fact.gap), toOffset),
         owner: fact.owner,
-        slack: fact.slack,
         chain: fact.chain,
       });
       for (const node of [fact.from.node, fact.to.node]) {
@@ -394,14 +393,18 @@ function solveRank2Axis<T>(
   facts: AnchorFact<T>[],
   targets: Map<string, SolvePlaceable<T>>,
   freeOrigin: T | undefined,
-  apart?: Set<string>
+  apart?: Set<string>,
+  slack?: number
 ): SolvedAxis<T> {
   const {
     sizes,
     owners,
     conflicts: sizeConflicts,
   } = closeSizes(A, axis, facts);
-  const problem = reduceToAxisProblem(A, axis, facts, sizes, targets, apart);
+  const problem = {
+    ...reduceToAxisProblem(A, axis, facts, sizes, targets, apart),
+    slack,
+  };
   const idx = axisIndex(axis);
   // The participants that carry a baseline the free origin may seat, and each
   // one's baseline offset from its `min` (#773). A free participant (a
@@ -522,7 +525,11 @@ export function solvePlacementCells<T>(
   freeOrigin?: FreeOrigin<T>,
   // Per axis, the targets that are no part of the plot (dressing, chrome):
   // a chain edge between two others lays them by their plots.
-  apart?: [Set<string>, Set<string>]
+  apart?: [Set<string>, Set<string>],
+  // Per axis, the slack rule of the layer (`Slack.at(t)`'s `t`): where its
+  // minimum gaps put what they leave room for. Default 0, the least
+  // solution.
+  slack?: readonly [number, number]
 ): readonly [SolvedAxis<T>, SolvedAxis<T>] {
   const lowered = lowerPlacementConstraints(
     A,
@@ -569,7 +576,8 @@ export function solvePlacementCells<T>(
       lowered.anchorProgram.axes[0],
       targets,
       freeOrigin?.[0],
-      apart?.[0]
+      apart?.[0],
+      slack?.[0]
     ),
     solveRank2Axis(
       A,
@@ -577,7 +585,8 @@ export function solvePlacementCells<T>(
       lowered.anchorProgram.axes[1],
       targets,
       freeOrigin?.[1],
-      apart?.[1]
+      apart?.[1],
+      slack?.[1]
     ),
   ] as const;
 }

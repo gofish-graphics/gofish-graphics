@@ -41,9 +41,6 @@ export type PitchSpacing = Omit<PitchIR, "distance"> & { distance: Gap };
  *  {@link atLeast}. */
 export type AtLeastSpacing = Extract<Frontend.SpacingIR, { kind: "atLeast" }>;
 
-/** Where the room a minimum gap leaves goes: see {@link atLeast}. */
-export type Justify = NonNullable<AtLeastSpacing["justify"]>;
-
 /** Every built-in spacing: the value of `spread`'s `spacing`. */
 export type Spacing = BoxSpacing | PitchSpacing | AtLeastSpacing;
 
@@ -84,18 +81,15 @@ export function pitch(
  * apart. The exact constraints are solved first, and the minimum gaps then
  * separate what they place.
  *
- * PLACEHOLDER: the name and the `justify` option are not signed off.
+ * A minimum gap gives each child a range of positions, not one position.
+ * The `slack` of the operator that solves the gaps (`spread`'s, or
+ * `layer`'s on the axis) picks one: see the `Slack` family.
+ *
+ * PLACEHOLDER: the name is not signed off.
  *
  * @param gap Pixels. A negative gap lets the children overlap by at most
  *   that much.
- * @param justify Where the room the gaps leave goes, where they leave some:
- *   `"start"`, each child as near the start as its gaps allow; `"end"`, as
- *   near the end of the same span; `"center"`, halfway between. Default
- *   `"start"`.
  */
-export function atLeast(
-  gap: number,
-  opts: { justify?: Justify } = {}
-): AtLeastSpacing {
-  return { kind: "atLeast", gap, ...given(opts) };
+export function atLeast(gap: number): AtLeastSpacing {
+  return { kind: "atLeast", gap };
 }

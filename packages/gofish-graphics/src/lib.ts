@@ -214,6 +214,7 @@ export { stackX } from "./ast/graphicalOperators/stackX";
 export { stackY } from "./ast/graphicalOperators/stackY";
 export { spread, stack } from "./ast/graphicalOperators/spread";
 export * as Spacing from "./families/spacing";
+export * as Slack from "./families/slack";
 export { scatter } from "./ast/graphicalOperators/scatter";
 export { spreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY } from "./ast/graphicalOperators/spreadY";

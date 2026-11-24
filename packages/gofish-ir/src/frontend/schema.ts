@@ -325,6 +325,9 @@ export interface SpreadOperator
   /** Where the result puts its own 0 (`Baseline`). Not taken yet without
    *  `glue`. */
   baseline?: BaselineIR;
+  /** Where the children go along `dir` when minimum gaps leave them room
+   *  (`Slack`). */
+  slack?: SlackIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -670,11 +673,13 @@ export type SpacingIR =
       distance: number | LengthIR;
       at?: AlignAnchorIR;
     }
-  | {
-      kind: "atLeast";
-      gap: number;
-      justify?: "start" | "end" | "center";
-    };
+  | { kind: "atLeast"; gap: number };
+
+/** Where the parts go when minimum gaps leave them room, made by a call in
+ *  the `Slack` family: `Slack.at(t)`, a fraction `t` of the way from the
+ *  least solution to the greatest. `Slack.start()`, `Slack.center()` and
+ *  `Slack.end()` are `at(0)`, `at(0.5)` and `at(1)`. */
+export type SlackIR = { kind: "at"; t: number };
 
 /** How a path runs through its points, made by a call in the `Curve` family
  *  (`Curve.monotone()`, `Curve.arc({ direction: "down" })`, ...). */

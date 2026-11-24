@@ -84,9 +84,11 @@
           given.
         </li>
         <li>
-          Nothing is implemented except prototype stories, and the minimum gap
-          and the average of positions, which are in the engine since commit
-          b960e601d with a placeholder slack option.
+          Nothing is implemented except prototype stories, the minimum gap and
+          the average of positions (in the engine since commit b960e601d), and
+          the <code>Slack</code> family's <code>start</code>,
+          <code>center</code>, <code>end</code> and <code>at(t)</code> on
+          <code>layer</code> and <code>spread</code>.
         </li>
       </ul>
     </div>
@@ -155,8 +157,10 @@
                   <code>spread</code> <span class="tag sketch">sketch</span>
                 </td>
                 <td>
-                  In the engine since commit b960e601d. The slack option is a
-                  placeholder; see "The slack rule".
+                  In the engine since commit b960e601d. The slack rule is
+                  <code>Slack</code> on <code>layer</code> and
+                  <code>spread</code>, without <code>even</code>; see "The slack
+                  rule".
                 </td>
               </tr>
               <tr>
@@ -1527,7 +1531,9 @@
           </figcaption>
         </figure>
       </div>
-      <p class="label">Today (the placeholder)</p>
+      <p class="label">
+        Before the Slack family (the placeholder, now removed)
+      </p>
       {{code:slack-today}}
     </div>
 
@@ -1835,7 +1841,7 @@
     <div class="card">
       <h3>
         A. One slack rule per scope and axis
-        <span class="tag sketch">sketch</span>
+        <span class="tag today">today, except even</span>
       </h3>
       <p>
         A strategy family, <code>Slack</code>, set once on a layer or spread for

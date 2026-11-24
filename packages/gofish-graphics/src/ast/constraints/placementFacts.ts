@@ -50,15 +50,6 @@ export type AnchorRelationFact<T = number> = {
   chain?: boolean;
 };
 
-/**
- * Which solution a set of minimum gaps takes where they leave room to
- * spare (the slack): `"start"` the least solution (each group as near the
- * start as its gaps allow), `"end"` the greatest one inside the least
- * solution's span, `"center"` the mean of the two. See `separateGroups` in
- * differenceGraph.ts.
- */
-export type Slack = "start" | "end" | "center";
-
 /** A minimum gap: `to`'s anchor is at least `gap` after `from`'s. Two on
  *  one pair compose by their max, and a cycle of them is an error. Exact
  *  facts ({@link AnchorRelationFact}, pins) are solved first, into rigid
@@ -71,8 +62,6 @@ export type AnchorMinGapFact<T = number> = {
   to: AnchorRef;
   gap: T;
   owner: string;
-  /** Where the gaps' slack goes. */
-  slack: Slack;
   /** Set on an edge of a spread's chain, as on {@link AnchorRelationFact}. */
   chain?: boolean;
 };
@@ -192,9 +181,7 @@ export type PlacementRelationRequest<T = number> = {
 };
 
 /** Request a minimum gap: see {@link AnchorMinGapFact}. */
-export type PlacementMinGapRequest<T = number> = PlacementRelationRequest<T> & {
-  slack: Slack;
-};
+export type PlacementMinGapRequest<T = number> = PlacementRelationRequest<T>;
 
 /** Request a mean of positions: see {@link AnchorMeanFact}. */
 export type PlacementMeanRequest = {
@@ -255,7 +242,6 @@ export type PlacementMinGap<T = number> = {
   to: NodeId;
   offset: T;
   owner: string;
-  slack: Slack;
   chain?: boolean;
 };
 

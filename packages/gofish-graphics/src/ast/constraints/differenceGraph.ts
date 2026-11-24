@@ -12,7 +12,6 @@ import {
   type PlacementMinGap,
   type PlacementParticipant,
   type PlacementRelation,
-  type Slack,
 } from "./placementFacts";
 
 /**
@@ -63,6 +62,11 @@ export type AxisProblem<T = number> = {
   /** The size of each node a minimum gap names: the greatest solution of
    *  the gaps keeps every group inside the least solution's span. */
   sizes?: Map<NodeId, T>;
+  /** Where the minimum gaps put the groups where they leave room (the
+   *  slack rule, `Slack.at(t)`): a fraction from 0, the least solution, to
+   *  1, the greatest. One per axis problem, since the gaps a scope solves
+   *  on an axis share their room. Default 0. */
+  slack?: number;
 };
 
 type RelationEdge<T> = {
@@ -263,8 +267,11 @@ const PINNED = -1;
  * other group as near the start as its gaps allow. The greatest solution is
  * the least one of the mirrored problem, inside the least solution's span:
  * a group no gap leads out of ends where the least solution ends. A
- * cluster's `slack` picks one of them, or their mean (`"center"`). A
- * cluster that holds the pinned group is then moved as one so that the
+ * minimum gap gives each group a range of positions, from its least place
+ * to its greatest, and the problem's slack rule (`problem.slack`, a
+ * fraction `t`) puts it at `(1 − t) · least + t · greatest`: the least
+ * solution at 0, the greatest at 1, their mean at 0.5. A cluster that
+ * holds the pinned group is then moved as one so that the
  * pins hold: the pins place the cluster, and never conflict with its gaps.
  * This is `solveSeparations` of the
  * "Proposals/User Space Separation" stories, over groups.
@@ -307,7 +314,6 @@ function separateGroups<T>(
   // The gaps between groups, `o[to] − o[from] ≥ w`, one per ordered pair.
   type Edge = { from: number; to: number; w: T; owners: string[] };
   const edges = new Map<string, Edge>();
-  const slacks = new Map<number, { slack: Slack; owner: string }[]>();
   for (const gap of problem.minGaps ?? []) {
     if (!componentOf.has(gap.from) || !componentOf.has(gap.to)) continue;
     const from = groupOf(gap.from);
@@ -343,11 +349,6 @@ function separateGroups<T>(
             owners: [...prior.owners, gap.owner],
           }
     );
-    for (const g of [from, to]) {
-      const list = slacks.get(g) ?? [];
-      list.push({ slack: gap.slack, owner: gap.owner });
-      slacks.set(g, list);
-    }
   }
   if (edges.size === 0) return { ...solved, conflicts };
 
@@ -381,18 +382,9 @@ function separateGroups<T>(
   const describe = (g: number) =>
     g === PINNED ? "the pinned nodes" : `{${nodesOf(g).join(", ")}}`;
 
+  const t = problem.slack ?? 0;
   const offsets = new Map<number, T>();
   for (const groups of clusters.values()) {
-    // The cluster's slack: every gap in it must agree.
-    const stated = groups.flatMap((g) => slacks.get(g) ?? []);
-    const slack = stated[0].slack;
-    const other = stated.find((s) => s.slack !== slack);
-    if (other !== undefined)
-      throw new Error(
-        `Minimum gaps on ${axis}: ${stated[0].owner} puts the slack at ` +
-          `"${slack}" but ${other.owner} puts it at "${other.slack}", and ` +
-          `their gaps separate the same nodes. Give them one \`justify\`.`
-      );
     const order = forwardOrder(groups, into, outOf, axis, describe);
     // Each group's extent in its own frame.
     const lo = new Map<number, T>();
@@ -417,32 +409,28 @@ function separateGroups<T>(
           : A.max(ins.map((e) => A.add(least.get(e.from)!, e.w)))
       );
     }
-    let chosen = least;
-    if (slack !== "start") {
-      const end = A.max(order.map((g) => A.add(least.get(g)!, hi.get(g)!)));
-      const greatest = new Map<number, T>();
-      for (const g of [...order].reverse()) {
-        const outs = outOf.get(g) ?? [];
-        greatest.set(
-          g,
-          outs.length === 0
-            ? A.sub(end, hi.get(g)!)
-            : minOf(
-                A,
-                outs.map((e) => A.sub(greatest.get(e.to)!, e.w))
-              )
-        );
-      }
-      chosen =
-        slack === "end"
-          ? greatest
-          : new Map(
-              order.map((g) => [
-                g,
-                A.scale(0.5, A.add(least.get(g)!, greatest.get(g)!)),
-              ])
-            );
+    const end = A.max(order.map((g) => A.add(least.get(g)!, hi.get(g)!)));
+    const greatest = new Map<number, T>();
+    for (const g of [...order].reverse()) {
+      const outs = outOf.get(g) ?? [];
+      greatest.set(
+        g,
+        outs.length === 0
+          ? A.sub(end, hi.get(g)!)
+          : minOf(
+              A,
+              outs.map((e) => A.sub(greatest.get(e.to)!, e.w))
+            )
+      );
     }
+    // The slack rule: each group `t` of the way from its least place to
+    // its greatest.
+    const chosen = new Map(
+      order.map((g) => [
+        g,
+        A.add(A.scale(1 - t, least.get(g)!), A.scale(t, greatest.get(g)!)),
+      ])
+    );
     // A cluster that holds the pinned group moves as one so the pins hold.
     const shift = chosen.has(PINNED)
       ? A.negate(chosen.get(PINNED)!)

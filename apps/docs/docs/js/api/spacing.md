@@ -46,9 +46,11 @@ import { pitch } from "gofish-graphics/spacing"; // the same function as Spacing
 | `Spacing.pitch()`   | the point `at` on one child | the point `at` on the next child                     | no                              |
 | `Spacing.atLeast()` | the end of one child's box  | the start of the next child's box, at least `gap` on | yes                             |
 
-`Spacing.atLeast(gap, { justify? })` is a minimum gap, a placeholder name that
-is not yet final. The exact constraints are solved first, and the minimum gaps
-then push apart what they would put closer. Its `gap` is pixels only.
+`Spacing.atLeast(gap)` is a minimum gap, a placeholder name that is not yet
+final. The exact constraints are solved first, and the minimum gaps then push
+apart what they would put closer. Its `gap` is pixels only. A minimum gap
+gives each child a range of positions, not one position, and the
+[`slack`](/js/api/slack) of the spread or layer that solves it picks one.
 
 `at` is `"start"`, `"middle"`, `"end"` or `"baseline"`. `"middle"` is center
 to center. `"baseline"` is each child's local 0, which for a ribbon or a text
@@ -90,5 +92,6 @@ spread({ by: "letter", dir: "x", spacing: Spacing.box(10) });
 
 - [`spread`](/js/api/operators/spread)
 - [`Constraint.distribute`](/js/api/constraints/relate#constraint-distribute)
+- [`Slack`](/js/api/slack), where minimum gaps put what they leave room for
 - [Underlying space](/internals/core/underlying-space), the essay on how a
   chain of children claims its room

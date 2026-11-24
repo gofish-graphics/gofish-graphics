@@ -47,6 +47,7 @@ import type {
   ShapeIR,
   PlacementIR,
   SpacingIR,
+  SlackIR,
   ConstraintIR,
   LabelSpecIR,
   OverlapIR,
@@ -95,6 +96,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "reverse",
     "glue",
     "baseline",
+    "slack",
     "axes",
     "x",
     "y",
@@ -362,12 +364,15 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Spacing: {
     box: { gap: true },
     pitch: { distance: true, at: true },
-    atLeast: { gap: true, justify: true },
+    atLeast: { gap: true },
   } satisfies StrategyKeys<SpacingIR>,
+  Slack: {
+    at: { t: true },
+  } satisfies StrategyKeys<SlackIR>,
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts EffectIR / TilingIR / OverlapIR / CurveIR / BinningIR / CalendarPartitionIR / ShapeIR / PlacementIR / BaselineIR / SpacingIR"
+  "\n# STRATEGIES agree with schema.ts EffectIR / TilingIR / OverlapIR / CurveIR / BinningIR / CalendarPartitionIR / ShapeIR / PlacementIR / BaselineIR / SpacingIR / SlackIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<

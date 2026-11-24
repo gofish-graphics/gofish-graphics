@@ -81,6 +81,7 @@ from . import effect as Effect
 from . import overlap as Overlap
 from . import placement as Placement
 from . import shape as Shape
+from . import slack as Slack
 from . import spacing as Spacing
 from . import tiling as Tiling
 from . import trait as Trait
@@ -161,6 +162,7 @@ __all__ = [
     "Overlap",
     "Placement",
     "Shape",
+    "Slack",
     "Spacing",
     "Tiling",
 ]

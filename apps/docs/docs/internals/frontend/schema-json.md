@@ -1275,6 +1275,10 @@ for the API.
           "$ref": "#/$defs/Baseline",
           "description": "Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`."
         },
+        "slack": {
+          "$ref": "#/$defs/Slack",
+          "description": "Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). Omitted, Slack.start(). Where no gap leaves room it changes nothing."
+        },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
         },
@@ -5583,17 +5587,32 @@ for the API.
             "gap": {
               "type": "number",
               "description": "The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much."
-            },
-            "justify": {
-              "enum": ["start", "end", "center"],
-              "description": "Where the room the gaps leave goes: \"start\" puts each child as near the start as its gaps allow, \"end\" as near the end of the same span, and \"center\" halfway between.",
-              "default": "start"
             }
           },
           "required": ["kind", "gap"]
         }
       ],
       "description": "How far apart `spread` sets its neighbors along `dir`: the value of its `spacing` option, beside a bare amount, which is `Spacing.box(amount)`. Also the `spacing` of `Constraint.distribute`."
+    },
+    "Slack": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "at"
+            },
+            "t": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "The fraction of the way, from 0 (the least solution) to 1 (the greatest)."
+            }
+          },
+          "required": ["kind", "t"]
+        }
+      ],
+      "description": "Where the parts go when minimum gaps (`Spacing.atLeast`) leave them room: the value of `spread`'s `slack` option, along its `dir`, and of `layer`'s, per axis. A minimum gap gives each part a range of positions, not one position. The least solution puts every part as early as its gaps allow, and the greatest puts it as late as they allow within the same span; a part's slack is the difference. The rule picks one point in each part's range, the same way for every part the scope solves on that axis. Where no gap leaves room, every rule gives the same positions."
     }
   }
 }

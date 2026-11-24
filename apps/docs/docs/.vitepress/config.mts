@@ -616,6 +616,11 @@ export default defineConfig({
               items: [{ text: "Spacing", link: "/js/api/spacing" }],
             },
             {
+              text: "Slack",
+              collapsed: true,
+              items: [{ text: "Slack", link: "/js/api/slack" }],
+            },
+            {
               text: "Effect",
               collapsed: true,
               items: [{ text: "Effect", link: "/js/api/effect" }],
@@ -765,6 +770,11 @@ export default defineConfig({
               text: "Spacing",
               collapsed: true,
               items: [{ text: "Spacing", link: "/python/api/spacing" }],
+            },
+            {
+              text: "Slack",
+              collapsed: true,
+              items: [{ text: "Slack", link: "/python/api/slack" }],
             },
             {
               text: "Effect",

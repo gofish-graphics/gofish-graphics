@@ -670,9 +670,11 @@
           given.
         </li>
         <li>
-          Nothing is implemented except prototype stories, and the minimum gap
-          and the average of positions, which are in the engine since commit
-          b960e601d with a placeholder slack option.
+          Nothing is implemented except prototype stories, the minimum gap and
+          the average of positions (in the engine since commit b960e601d), and
+          the <code>Slack</code> family's <code>start</code>,
+          <code>center</code>, <code>end</code> and <code>at(t)</code> on
+          <code>layer</code> and <code>spread</code>.
         </li>
       </ul>
     </div>
@@ -741,8 +743,10 @@
                   <code>spread</code> <span class="tag sketch">sketch</span>
                 </td>
                 <td>
-                  In the engine since commit b960e601d. The slack option is a
-                  placeholder; see "The slack rule".
+                  In the engine since commit b960e601d. The slack rule is
+                  <code>Slack</code> on <code>layer</code> and
+                  <code>spread</code>, without <code>even</code>; see "The slack
+                  rule".
                 </td>
               </tr>
               <tr>
@@ -2550,9 +2554,12 @@ const links = chart(edges)
           </figcaption>
         </figure>
       </div>
-      <p class="label">Today (the placeholder)</p>
-      <pre><code class="language-typescript">// Today (commit b960e601d, placeholder): the rule rides on each gap, and
-// two linked gaps with different rules are an error.
+      <p class="label">
+        Before the Slack family (the placeholder, now removed)
+      </p>
+      <pre><code class="language-typescript">// Before the Slack family (commit b960e601d&#x27;s placeholder, now removed):
+// the rule rode on each gap, and two linked gaps with different rules were
+// an error.
 layer([A, B, C, D, p, q, s, r]).relate((c) =&gt; [
   Constraint.align({ x: &quot;start&quot; }, [c.A, c.p]),
   Constraint.align({ x: &quot;end&quot; }, [c.D, c.r]),
@@ -2867,7 +2874,7 @@ layer([A, B, C, D, p, q, s, r]).relate((c) =&gt; [
     <div class="card">
       <h3>
         A. One slack rule per scope and axis
-        <span class="tag sketch">sketch</span>
+        <span class="tag today">today, except even</span>
       </h3>
       <p>
         A strategy family, <code>Slack</code>, set once on a layer or spread for
@@ -2884,7 +2891,7 @@ Slack.start(); // t = 0: the least solution (ASAP, early start)
 Slack.end(); // t = 1: the greatest solution (ALAP, late start)
 Slack.center(); // t = 1/2
 Slack.at(0.25); // any t from 0 to 1; the three above are presets of it
-Slack.even(); // on a chain: t grows by one step per gap between tight items</code></pre>
+Slack.even(); // on a chain: t grows by one step per gap between tight items (not built)</code></pre>
       <div class="callout">
         <b>Fork: the name.</b> <code>slack: Slack.even()</code>, the word this
         page uses for the room, or <code>justify: Justify.even()</code>, CSS's
@@ -2912,18 +2919,16 @@ Slack.even(); // on a chain: t grows by one step per gap between tight items</co
         </figure>
       </div>
       <p class="label prop">Proposed, the row</p>
-      <pre><code class="language-typescript">layer({ slack: { x: Slack.even() } }, [A, B, C, D, p, q, s, r]).relate(
-  (c) =&gt; [
-    Constraint.align({ x: &quot;start&quot; }, [c.A, c.p]),
-    Constraint.align({ x: &quot;end&quot; }, [c.D, c.r]),
-    Constraint.distribute({ dir: &quot;x&quot;, spacing: Spacing.atLeast(8) }, [
-      c.p,
-      c.q,
-      c.s,
-      c.r,
-    ]),
-  ]
-);</code></pre>
+      <pre><code class="language-typescript">layer({ slack: { x: Slack.even() } }, [A, B, C, D, p, q, s, r]).relate((c) =&gt; [
+  Constraint.align({ x: &quot;start&quot; }, [c.A, c.p]),
+  Constraint.align({ x: &quot;end&quot; }, [c.D, c.r]),
+  Constraint.distribute({ dir: &quot;x&quot;, spacing: Spacing.atLeast(8) }, [
+    c.p,
+    c.q,
+    c.s,
+    c.r,
+  ]),
+]);</code></pre>
       <pre><code class="language-python">from gofish import Constraint, Slack, Spacing, layer, spread
 
 row = layer([A, B, C, D, p, q, s, r], slack={&quot;x&quot;: Slack.even()}).relate(
@@ -2983,10 +2988,10 @@ siblings = spread(
       <pre><code class="language-typescript">// Columns: every link&#x27;s target at least one column after its source.
 layer({ slack: { x: Slack.end() } }, nodes).relate((c) =&gt;
   links.map((l) =&gt;
-    Constraint.distribute(
-      { dir: &quot;x&quot;, spacing: Spacing.atLeast(COLUMN_GAP) },
-      [c[l.source], c[l.target]]
-    )
+    Constraint.distribute({ dir: &quot;x&quot;, spacing: Spacing.atLeast(COLUMN_GAP) }, [
+      c[l.source],
+      c[l.target],
+    ])
   )
 );
 // Inside a column, a spread in the column&#x27;s room: the walls are its edges.
@@ -3100,10 +3105,12 @@ spread(
       <p class="label prop">Proposed, the row</p>
       <pre><code class="language-typescript">// Glue: each gap has a minimum and a weight for its share of the slack
 // in its run (TeX&#x27;s &quot;plus&quot;, CSS flex-grow, grid&#x27;s minmax(8px, 1fr)).
-Constraint.distribute(
-  { dir: &quot;x&quot;, spacing: Spacing.atLeast(8, { grow: 1 }) },
-  [c.p, c.q, c.s, c.r]
-);
+Constraint.distribute({ dir: &quot;x&quot;, spacing: Spacing.atLeast(8, { grow: 1 }) }, [
+  c.p,
+  c.q,
+  c.s,
+  c.r,
+]);
 // start: only the last gap grows. end: only the first. center: the first
 // and the last. Uneven shares: list one spacing per gap.
 Constraint.distribute(
@@ -3211,10 +3218,9 @@ layer(nodes).relate((c) =&gt; [
       </p>
       <pre><code class="language-typescript">// The rule as an objective, in the optimizing solver of the main design:
 // least squares on how far each gap stretches past its minimum.
-layer(
-  { solver: Solver.optimize({ cost: Cost.stretch() }) },
-  children
-).relate((c) =&gt; gaps(c));</code></pre>
+layer({ solver: Solver.optimize({ cost: Cost.stretch() }) }, children).relate(
+  (c) =&gt; gaps(c)
+);</code></pre>
     </div>
 
     <h2>Against d3</h2>
