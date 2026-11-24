@@ -789,8 +789,9 @@ chart(browsers, { coord: Coord.clock() })
   .flow(stack({ by: "name", dir: "x" }))
   .mark(rect({ w: "value", fill: "name" }));
 
-// With d3's padAngle: a spread, and a sweep one gap short of the circle.
-chart(browsers, { coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) })
+// With d3's padAngle: a spread. A full turn is closed, so it leaves a gap
+// after the last slice too.
+chart(browsers, { coord: Coord.clock() })
   .flow(spread({ by: "name", dir: "x", spacing: PAD }))
   .mark(rect({ w: "value", fill: "name" }));
 ```
@@ -799,7 +800,7 @@ chart(browsers, { coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) })
 
 ```ts
 // Chord arcs: a spread of groups along the angle, each a stack of sub-arcs.
-layer({ coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) }, [
+layer({ coord: Coord.clock() }, [
   spread(
     { dir: "x", spacing: PAD, y: 120 },
     matrix.map((row, i) =>
@@ -1082,4 +1083,484 @@ siblings = spread(
     spacing=Spacing.contour(10),
     slack=Slack.even(),
 )
+```
+
+<!-- id: rv-closed-pie -->
+
+```ts
+// Both variants: the same code, no option. A full turn closes.
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: rv-closed-seam-coord -->
+
+```ts
+// On the coord
+chart(browsers, { coord: Coord.clock({ closed: false }), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: rv-closed-seam-op -->
+
+```ts
+// On the operator
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04, closed: false }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: rv-closed-half -->
+
+```ts
+// Both variants: the same code. A half turn has two ends.
+chart(browsers, {
+  coord: Coord.clock({ centralAngle: Math.PI }),
+  w: 360,
+  h: 320,
+})
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: rv-closed-chord -->
+
+```ts
+// Both variants: the same code. The chain of groups closes; the sub-arcs
+// of a group are a stack, so they have no gaps.
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [
+  spread(
+    { dir: "x", spacing: 0.05, y: 120 },
+    trips.map((row, i) =>
+      stack(
+        { dir: "x", w: v(rowTotal(row)) },
+        row.map((m) => rect({ w: v(m), h: 18, fill: v(districts[i]) }))
+      )
+    )
+  ),
+]);
+```
+
+<!-- id: rv-closed-nested -->
+
+```ts
+// Both variants: the same code. The outer chain fills the turn and closes
+// (three gaps of 0.12). Each inner chain fills a share of it and stays open.
+chart(sales, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "x", spacing: 0.12 }),
+    spread({ by: "product", dir: "x", spacing: 0.03 })
+  )
+  .mark(rect({ w: "value", fill: "quarter" }));
+```
+
+<!-- id: rv-closed-err-coord -->
+
+```text
+Coord.clock({ centralAngle: Math.PI, closed: true })
+
+Thrown when the space is made, before anything renders:
+
+Coord.clock({ closed: true }): only a full turn can be closed, and
+centralAngle is 3.141592653589793, so the angle is an interval with two
+ends. Drop `closed`, or sweep the full turn (centralAngle: 2 * Math.PI).
+```
+
+<!-- id: rv-closed-err-op -->
+
+```text
+Thrown at render, from the pass where the chain learns it fills its room.
+Each starts:
+
+[gofish] spread({ closed: true }): a chain closes only when it fills a
+whole periodic axis (a full-turn polar angle), and ...
+
+... ends one of three ways, by where the spread is:
+
+1. Under Coord.clock({ centralAngle: Math.PI }):
+   "its space's theta is no full turn, so it has two ends."
+2. In a chart with no coord:
+   "its room is layer's own size, an interval with two ends."
+   (Without a chart `w`: "its room is the canvas, ...")
+3. As the inner spread of a nested pie:
+   "it is a part of another chain along theta, so its room is a share
+   of the axis."
+
+and all three end: Drop `closed`, or lay the chain around a full turn.
+
+A fourth, for a distribute inside .relate():
+
+[gofish] Constraint.distribute({ closed: true }): only a chain that lays
+out a whole layer (a spread) can close.
+```
+
+<!-- id: rv-spread-slack -->
+
+```ts
+// The same picture under Slack.start(), Slack.center() and Slack.end().
+spread(
+  { dir: "x", spacing: Spacing.atLeast(8), slack: Slack.center() },
+  [60, 40, 50, 70].map((w) => rect({ w, h: 24, rx: 3, fill: "#a8dadc" }))
+);
+```
+
+<!-- id: rv-row-all -->
+
+```ts
+// Top row: A B and C D glued, at least 16 apart. Bottom row: p under A's
+// start, r under D's end, q at least 8 from each. The layer's slack on x
+// places q.
+const rowOfRects = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [A, B, C, D, p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.A, c.B]),
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.C, c.D]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(16) }, [
+      c.B,
+      c.C,
+    ]),
+    Constraint.align({ x: "start" }, [c.A, c.p]),
+    Constraint.align({ x: "end" }, [c.D, c.r]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
+    Constraint.align({ y: "start" }, [c.A, c.B, c.C, c.D]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+    Constraint.distribute({ dir: "y", spacing: 12 }, [c.A, c.p]),
+  ]);
+
+spread(
+  { dir: "y", spacing: 24, alignment: "start" },
+  [Slack.start(), Slack.center(), Slack.end()].map(rowOfRects)
+);
+```
+
+<!-- id: rv-row-quarter -->
+
+```ts
+// A quarter of the way from the least solution to the greatest.
+rowOfRects(Slack.at(0.25));
+```
+
+<!-- id: rv-row-pinned -->
+
+```ts
+// p and r an exact 160 apart, q between them at least 8 from each:
+// 160 - 40 - 16 = 104 px of room, placed by the layer's slack.
+const pinnedRow = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 160 }, [c.p, c.r]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+  ]);
+```
+
+<!-- id: rv-dendrogram -->
+
+```ts
+// The leaves one pitch apart; each parent at the mean of its children;
+// each child at least a level below its parent, and the slack on y at the
+// end, so every leaf lands on the last level (d3.cluster).
+layer({ slack: { y: Slack.end() } }, [
+  spread(
+    { dir: "x", spacing: Spacing.pitch(20, { at: "middle" }) },
+    leaves.map((n) => dot(n.path))
+  ),
+  ...inner.map((n) => dot(n.path)),
+]).relate((c) => [
+  ...inner.map((n) =>
+    Constraint.align({ x: "middle" }, [
+      c[n.path],
+      mean(n.children.map((k) => c[k.path])),
+    ])
+  ),
+  ...links.map((l) =>
+    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
+      c[l.parent],
+      c[l.child],
+    ])
+  ),
+  ...links.map((l) =>
+    line({ stroke: "#9aa7b1" }, [ref(l.parent), ref(l.child)])
+  ),
+]);
+```
+
+<!-- id: rv-tidy -->
+
+```ts
+// A subtree: its node above its children's subtrees. At each depth, every
+// node at least 10 from the next, whichever subtree it is in. The node at
+// the mean of its first and last child.
+const tidy = (t: Tree, path = "n") => {
+  const self = circle({ r: 7, fill: "#457b9d" }).name(path);
+  if (!t.children?.length) return self;
+  const kids = t.children.map((_, i) => `${path}.${i}`);
+  return layer([
+    self,
+    layer(t.children.map((k, i) => tidy(k, kids[i])))
+      .relate((c) => [
+        Constraint.align({ y: "start" }, subtreesOf(c, t, kids)),
+        ...rowsByDepth(t, path).map((row) =>
+          Constraint.distribute(
+            { dir: "x", spacing: Spacing.atLeast(10) },
+            row.map((p) => c[p])
+          )
+        ),
+      ])
+      .name(`${path}/kids`),
+  ]).relate((c) => [
+    Constraint.distribute({ dir: "y", spacing: 40 }, [
+      c[path],
+      c[`${path}/kids`],
+    ]),
+    Constraint.align({ x: "middle" }, [
+      c[path],
+      mean([c[kids[0]], c[kids[kids.length - 1]]]),
+    ]),
+  ]);
+};
+```
+
+<!-- id: rv-rose -->
+
+```ts
+// Six months edge to edge around the circle, each a stack of two bars
+// with a literal width along the angle, and no emX. OneWidth passes
+// WEDGE for both bars; TwoWidths passes 0.8 * WEDGE for the inner one.
+const WEDGE = (Math.PI * 2) / 6;
+const rose = (innerWidth: number) =>
+  layer({ coord: Coord.clock(), w: 300, h: 300 }, [
+    spread(
+      { dir: "x", spacing: 0 },
+      months.map(([a, b]) =>
+        stack({ dir: "y" }, [
+          rect({ w: innerWidth, h: v(a), fill: "#457b9d" }),
+          rect({ w: WEDGE, h: v(b), fill: "#e9c46a" }),
+        ])
+      )
+    ),
+  ]);
+```
+
+<!-- id: rv-lone-bar -->
+
+```ts
+// A lone bar 0.6 wide along the angle, touching nothing.
+layer({ coord: Coord.clock(), w: 200, h: 200 }, [
+  rect({ w: 0.6, h: v(5), fill: "steelblue" }),
+]);
+```
+
+<!-- id: rv-pixel-bar-alone -->
+
+```ts
+// Proposals/Polar Edge To Edge, PixelBarAlone: written as 16 px wide.
+layer({ coord: Coord.clock(), w: 300, h: 300 }, [
+  rect({ w: 16, h: v(5), fill: "steelblue" }),
+]);
+```
+
+<!-- id: rv-radians-rule -->
+
+```ts
+// coord.tsx: the space declares, per axis, whether a plain number there is
+// a quantity of the space. The polar angle has HasCycle, so it is radians.
+coordNode._space = {
+  aliases: coordTransform.aliases,
+  type: coordTransform.type,
+  closed: [closesOn(coordTransform, 0), closesOn(coordTransform, 1)],
+  quantities: [
+    coordTransform.axisTraits?.[0]?.HasCycle !== undefined,
+    coordTransform.axisTraits?.[1]?.HasCycle !== undefined,
+  ],
+};
+
+// _node.ts, resolveEmbedding: a third route beside the data size (B) and
+// the shared edge (A).
+const embedded =
+  (baseEmbedded(box) && !(within && this.isGlyph(dir))) ||
+  (typeof dim.size === "number" &&
+    this.aspectLock === undefined &&
+    this.plainNumbersAreSpace(dir)) ||
+  sharesEdge(edges, dir);
+```
+
+<!-- id: rv-nodelink-sunburst -->
+
+```ts
+// GoTree / Node-Link, Sunburst: every ring 38 px thick, siblings aligned
+// at the middle along the radius.
+const sunburstNode = (d) =>
+  rect({ w: d.width * leafTheta, h: 38, emX: true, fill: greens[d.depth] });
+
+tree(
+  {
+    node: sunburstNode,
+    link: "none",
+    parentChild: distribute({ dir: "y", spacing: 0, alignment: "middle" }),
+    sibling: distribute({ dir: "x", spacing: 0, alignment: "middle" }),
+    coord: Coord.clock(),
+  },
+  deepBalancedTree
+);
+```
+
+<!-- id: rv-pies -->
+
+```ts
+const pie = (coord) =>
+  chart(slices, { coord, w: 200, h: 200, color: palette })
+    .flow(spread({ by: "name", dir: "x", spacing: 0.06 }))
+    .mark(rect({ w: "value", fill: "name" }));
+
+pie(Coord.polar()); // 0 at 3 o'clock, counter-clockwise
+pie(Coord.clock()); // 0 at 12 o'clock, clockwise
+pie(Coord.clock({ baselineAngle: 0 })); // 0 at 3 o'clock, clockwise
+```
+
+<!-- id: rv-pies-preset -->
+
+```ts
+// If Coord.clock is a preset, it takes no baselineAngle or direction, and
+// "clockwise from 3 o'clock" is written on the kind. Same render, same DOM.
+pie(Coord.polar({ baselineAngle: 0, direction: -1 }));
+```
+
+<!-- id: rv-pie-spaced -->
+
+```ts
+// UserSpaceD3Hierarchy, PieSpaced: plain Coord.clock(), no option.
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: rv-sunburst -->
+
+```ts
+// A node: its ring, then its children's subtrees end to end along the
+// angle, the two laid out along the radius with no gap.
+const partitionNode = (t: Tree, ring: number) => {
+  const self = rect({ w: v(total(t)), h: ring, fill: v(t.name) });
+  if (!t.children) return self;
+  return spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+    self,
+    stack(
+      { dir: "x", alignment: "start" },
+      t.children.map((c) => partitionNode(c, ring))
+    ),
+  ]);
+};
+
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [partitionNode(budget, 37.5)]);
+```
+
+<!-- id: rv-gotree-sunburst -->
+
+```ts
+// GoTree / Gallery / sunburst
+const node = (d) =>
+  rect({
+    ...(d.height === 0 ? { w: datum(1) } : {}),
+    h: 42,
+    emY: true,
+    fill: byDepth()(d),
+    stroke: "white",
+    strokeWidth: 1.5,
+  });
+
+tree(
+  {
+    node,
+    link: "none",
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: { kind: "distribute", spacing: 42 },
+    }),
+    sibling: combine({ x: { kind: "distribute", spacing: 0 } /* ... */ }),
+    coord: Coord.clock(),
+  },
+  deepBalancedTree
+);
+```
+
+<!-- id: rv-radar-two -->
+
+```ts
+layer({ w: 320, h: 320 }, [
+  // Inside the polar space: the spokes, the grid points, the data points.
+  layer({ coord: Coord.clock() }, [
+    chart(spokes)
+      .flow(scatter({ by: "metric", x: "metric" }))
+      .mark(rect({ w: 0, h: "max", stroke: GRID, strokeWidth: 1 })),
+    chart(levels)
+      .flow(
+        group({ by: "level" }),
+        scatter({ by: "metric", x: "metric", y: "level" })
+      )
+      .mark(circle({ r: 0 }).name("grid")),
+    chart(both, { color: Color.palette([INK, RED]) })
+      .flow(
+        group({ by: "series" }),
+        scatter({ by: "metric", x: "metric", y: "value" })
+      )
+      .mark(circle({ r: 4, fill: "series" }).name("pts")),
+  ]),
+  // Outside it: straight, closed outlines through the points.
+  chart(selectAll("grid"))
+    .flow(group({ by: "level" }))
+    .mark(polygon({ fill: "none", stroke: GRID, strokeWidth: 1 })),
+  chart(selectAll("pts"))
+    .flow(group({ by: "series" }))
+    .mark(polygon({ fill: "series", opacity: 0.2 })),
+  chart(selectAll("pts"))
+    .flow(group({ by: "series" }))
+    .mark(polygon({ fill: "none", stroke: "series", strokeWidth: 2 })),
+]);
+```
+
+<!-- id: rv-radar-inside -->
+
+```ts
+// The line inside the polar space: each segment is warped into an arc,
+// and the loop is open.
+chart(rows, { coord: Coord.clock(), w: 320, h: 320 })
+  .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+  .mark(circle({ r: 4, fill: INK }))
+  .layer(line({ stroke: INK, strokeWidth: 2 }));
+```
+
+<!-- id: rv-radar-outside-open -->
+
+```ts
+// A line outside the space, over selectAll: straight, and open, since a
+// line has no segment from its last point back to its first.
+layer({ w: 320, h: 320 }, [
+  layer({ coord: Coord.clock() }, [
+    chart(rows)
+      .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+      .mark(circle({ r: 4, fill: INK }).name("pts")),
+  ]),
+  chart(selectAll("pts")).mark(
+    line({ stroke: RED, strokeWidth: 2, curve: Curve.linear() })
+  ),
+]);
+```
+
+<!-- id: rv-hull-error -->
+
+```text
+Shape.hull({ convexity: 0.9 })
+
+[gofish] Shape.hull({ convexity }): Shape.hull is Shape.blob with
+convexity 1 and neck 1, and takes only the options it does not fix. For
+another convexity, write the kind: Shape.blob({ convexity: 0.9, neck: 1 }).
 ```

@@ -2,6 +2,816 @@
 
 A design for writing layout algorithms as GoFish code, on the smallest set of layout primitives that covers them. Every d3 layout is checked against it. (today) marks a real render on today's public API. (sketch) marks proposed syntax that does not run yet.
 
+## Review: what landed and what is open
+
+This tab has two parts. The first part shows four decisions that are still open, each with real renders and a recommendation. The second part shows what has landed on the branch since the last review. Every picture is a render of the code under it, made on the branch today unless its caption says otherwise.
+
+### Open decisions
+
+#### 1\. Where a full-turn angle says it is closed (two prototypes)
+
+The decision is where the option that opens a closed angle axis lives. It can be on the coordinate space, as `Coord.clock({ closed: false })`, or on the operator, as `spread({ closed: false })`. Today the branch has no option. A spread that fills a full turn leaves a gap after its last part too, and nothing can turn that off. Both prototypes keep that default and add the option. For every example below, the two prototypes draw byte-identical images, so each picture is shown once.
+
+![Pie with six gaps](img/review-closed-pie-default.png)
+
+**\*Default.** Six slices, six gaps, the last between Opera and Chrome. Equal to **d3.pie().padAngle(0.04)** within 5e-7 rad.\*
+
+![Pie with a seam](img/review-closed-pie-seam.png)
+
+**\*closed: false.** Five gaps. Opera's end touches Chrome's start at 12 o'clock.\*
+
+**The default, both variants**
+
+```ts
+// Both variants: the same code, no option. A full turn closes.
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+**The seam, on the coord**
+
+```ts
+// On the coord
+chart(browsers, { coord: Coord.clock({ closed: false }), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+**The seam, on the operator**
+
+```ts
+// On the operator
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04, closed: false }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+![Half-turn pie](img/review-closed-half-turn.png)
+
+**\*A half turn.** An interval with two ends, so five gaps.\*
+
+![Chord arcs](img/review-closed-chord.png)
+
+**\*Chord arcs.** The chain of five groups closes, so five gaps.\*
+
+![Nested pie](img/review-closed-nested.png)
+
+**\*Nested.** The outer chain closes (three gaps of 0.12). Each inner chain fills only a share of the turn, so it stays open.\*
+
+**The half turn**
+
+```ts
+// Both variants: the same code. A half turn has two ends.
+chart(browsers, {
+  coord: Coord.clock({ centralAngle: Math.PI }),
+  w: 360,
+  h: 320,
+})
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+**The chord arcs**
+
+```ts
+// Both variants: the same code. The chain of groups closes; the sub-arcs
+// of a group are a stack, so they have no gaps.
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [
+  spread(
+    { dir: "x", spacing: 0.05, y: 120 },
+    trips.map((row, i) =>
+      stack(
+        { dir: "x", w: v(rowTotal(row)) },
+        row.map((m) => rect({ w: v(m), h: 18, fill: v(districts[i]) }))
+      )
+    )
+  ),
+]);
+```
+
+**The nested pie**
+
+```ts
+// Both variants: the same code. The outer chain fills the turn and closes
+// (three gaps of 0.12). Each inner chain fills a share of it and stays open.
+chart(sales, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "x", spacing: 0.12 }),
+    spread({ by: "product", dir: "x", spacing: 0.03 })
+  )
+  .mark(rect({ w: "value", fill: "quarter" }));
+```
+
+A wrong `closed: true` fails differently in each variant. On the coord there is one message, and it comes when the space is made. On the operator there are three messages for a spread, and they come at render, because only the layout pass knows whether the chain fills a full turn.
+
+**The error, on the coord**
+
+```text
+Coord.clock({ centralAngle: Math.PI, closed: true })
+
+Thrown when the space is made, before anything renders:
+
+Coord.clock({ closed: true }): only a full turn can be closed, and
+centralAngle is 3.141592653589793, so the angle is an interval with two
+ends. Drop `closed`, or sweep the full turn (centralAngle: 2 * Math.PI).
+```
+
+**The errors, on the operator**
+
+```text
+Thrown at render, from the pass where the chain learns it fills its room.
+Each starts:
+
+[gofish] spread({ closed: true }): a chain closes only when it fills a
+whole periodic axis (a full-turn polar angle), and ...
+
+... ends one of three ways, by where the spread is:
+
+1. Under Coord.clock({ centralAngle: Math.PI }):
+   "its space's theta is no full turn, so it has two ends."
+2. In a chart with no coord:
+   "its room is layer's own size, an interval with two ends."
+   (Without a chart `w`: "its room is the canvas, ...")
+3. As the inner spread of a nested pie:
+   "it is a part of another chain along theta, so its room is a share
+   of the axis."
+
+and all three end: Drop `closed`, or lay the chain around a full turn.
+
+A fourth, for a distribute inside .relate():
+
+[gofish] Constraint.distribute({ closed: true }): only a chain that lays
+out a whole layer (a spread) can close.
+```
+
+|                            | On the coord                                                    | On the operator                                                                                       |
+| -------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Where it is decided        | Once, by the space. A chain closes when it fills a closed axis. | By each chain. The default still asks the space whether the angle is a full turn.                     |
+| Public options touched     | `closed` on `Coord.polar` and `Coord.clock`                     | `closed` on `spread` and on `Constraint.distribute`                                                   |
+| A wrong `closed: true`     | One message, when the space is made                             | Three messages for a spread and one for a distribute, at render                                       |
+| Library lines changed      | about +40 and −20                                               | about +68 and −30                                                                                     |
+| What only this form can do | Nothing extra.                                                  | Open one chain and close another under the same full turn. No example has been found that needs this. |
+
+The prototypes also differed on whether a radar line closes. That is left out here, because a radar outline is now drawn outside the coordinate space (see "Radar" below), so no line inside the space needs to ask.
+
+> **Fork.** Put `closed` on the coord, or on the operator. Recommended: on the coord, because the operator's default has to ask the space anyway, and the coord form gives one error at the call. If you say yes, the coord patch moves onto the branch with its tests, the descriptor entry and its Python mirror, and the reference pages for `Coord.polar` and `Coord.clock` gain the option.
+
+#### 2\. Whether `spread` keeps its `slack` option (today)
+
+The decision is whether `spread` keeps a `slack` option. `Slack` is on `layer` (`slack: { x, y }`) and on `spread` (`slack`, along its `dir`). On a spread it does nothing today. A lone chain of minimum gaps has no room to spare, because nothing else fixes its span, so every rule puts every part at its earliest place.
+
+![Slack.start](img/review-spread-slack-start.png)
+
+**_Slack.start()_**
+
+![Slack.center](img/review-spread-slack-center.png)
+
+**_Slack.center()_**
+
+![Slack.end](img/review-spread-slack-end.png)
+
+**_Slack.end()_**
+
+The three renders have byte-identical normalized DOM. In the throwaway copy I also gave the spread its own width, `w: 340`, and `Slack.start` and `Slack.end` still gave identical DOM, so a spread's own size does not give its chain room either.
+
+**On a spread**
+
+```ts
+// The same picture under Slack.start(), Slack.center() and Slack.end().
+spread(
+  { dir: "x", spacing: Spacing.atLeast(8), slack: Slack.center() },
+  [60, 40, 50, 70].map((w) => rect({ w, h: 24, rx: 3, fill: "#a8dadc" }))
+);
+```
+
+On a `layer`, the same rule moves things, because other relations in the layer fix a span that the minimum gaps do not fill.
+
+![Rows under start, center, end](img/review-mingap-row-all.png)
+
+**\*RowAll.** The top row sets the span. q moves under start, center and end.\*
+
+![Pinned rows](img/review-mingap-row-pinned.png)
+
+**\*RowPinned.** p and r are 160 apart. q has 104 px of room.\*
+
+![Dendrogram](img/review-mean-dendrogram.png)
+
+**\*Dendrogram.** `slack: { y: Slack.end() }` puts every leaf on the last level.\*
+
+**RowAll**
+
+```ts
+// Top row: A B and C D glued, at least 16 apart. Bottom row: p under A's
+// start, r under D's end, q at least 8 from each. The layer's slack on x
+// places q.
+const rowOfRects = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [A, B, C, D, p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.A, c.B]),
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.C, c.D]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(16) }, [
+      c.B,
+      c.C,
+    ]),
+    Constraint.align({ x: "start" }, [c.A, c.p]),
+    Constraint.align({ x: "end" }, [c.D, c.r]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
+    Constraint.align({ y: "start" }, [c.A, c.B, c.C, c.D]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+    Constraint.distribute({ dir: "y", spacing: 12 }, [c.A, c.p]),
+  ]);
+
+spread(
+  { dir: "y", spacing: 24, alignment: "start" },
+  [Slack.start(), Slack.center(), Slack.end()].map(rowOfRects)
+);
+```
+
+**RowPinned**
+
+```ts
+// p and r an exact 160 apart, q between them at least 8 from each:
+// 160 - 40 - 16 = 104 px of room, placed by the layer's slack.
+const pinnedRow = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 160 }, [c.p, c.r]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+  ]);
+```
+
+**Dendrogram**
+
+```ts
+// The leaves one pitch apart; each parent at the mean of its children;
+// each child at least a level below its parent, and the slack on y at the
+// end, so every leaf lands on the last level (d3.cluster).
+layer({ slack: { y: Slack.end() } }, [
+  spread(
+    { dir: "x", spacing: Spacing.pitch(20, { at: "middle" }) },
+    leaves.map((n) => dot(n.path))
+  ),
+  ...inner.map((n) => dot(n.path)),
+]).relate((c) => [
+  ...inner.map((n) =>
+    Constraint.align({ x: "middle" }, [
+      c[n.path],
+      mean(n.children.map((k) => c[k.path])),
+    ])
+  ),
+  ...links.map((l) =>
+    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
+      c[l.parent],
+      c[l.child],
+    ])
+  ),
+  ...links.map((l) =>
+    line({ stroke: "#9aa7b1" }, [ref(l.parent), ref(l.child)])
+  ),
+]);
+```
+
+> **Fork.** Keep `slack` on `spread`, since it is harmless, consistent with `layer`, and might matter once a spread can carry extra relations. Or remove it, since an option that does nothing is a wart. Recommended: remove it from `spread`. If you say yes, `spread` loses the option in JS, Python and the descriptor table, and the `Slack` reference page names only `layer`. The sankey sketch on "The slack rule" tab, which puts `Slack.even()` on a spread inside a column, would need a layer instead. That sketch does not work today anyway, as the note above shows.
+
+#### 3\. The rule for marks of one size at one anchor (prototype)
+
+A mark's axis is either embedded or not. An embedded axis is a length of the coordinate space, so it is drawn warped, e.g., a wedge in polar space. An axis that is not embedded is ink, drawn flat with a fixed pixel width, e.g., a line. GoFish decides this in `GoFishNode.resolveEmbedding` in `_node.ts`, with the rules for shared edges in `sharedEdges.ts`, and the hand-set `emX` and `emY` flags are being removed.
+
+The decision is about one of the new rules, called R4 in the code comments. It says that marks aligned at one anchor with the same literal size share both edges, so they embed. It works when every bar in a rose has one width. When the inner bar is 0.8 of the width, the rule no longer applies, and every bar collapses to a line.
+
+![One width, wedges](img/review-embed-one-width-r4.png)
+
+**\*OneWidth, today.** All wedges.\*
+
+![Two widths, lines](img/review-embed-two-widths-r4.png)
+
+**\*TwoWidths, today.** Every bar is a line, the outer ones too.\*
+
+![Two widths, wedges](img/review-embed-two-widths-radians.png)
+
+**\*TwoWidths, radians rule.** Every bar is a wedge. The inner bars are 0.8 of the month, so a gap shows beside each.\*
+
+**The rose (EqualSizeEmbedding)**
+
+```ts
+// Six months edge to edge around the circle, each a stack of two bars
+// with a literal width along the angle, and no emX. OneWidth passes
+// WEDGE for both bars; TwoWidths passes 0.8 * WEDGE for the inner one.
+const WEDGE = (Math.PI * 2) / 6;
+const rose = (innerWidth: number) =>
+  layer({ coord: Coord.clock(), w: 300, h: 300 }, [
+    spread(
+      { dir: "x", spacing: 0 },
+      months.map(([a, b]) =>
+        stack({ dir: "y" }, [
+          rect({ w: innerWidth, h: v(a), fill: "#457b9d" }),
+          rect({ w: WEDGE, h: v(b), fill: "#e9c46a" }),
+        ])
+      )
+    ),
+  ]);
+```
+
+The proposed replacement says that a plain number along the angle is in radians, a unit of the space, so that axis embeds whatever its neighbors are. A plain number along the radius stays pixels. I built it in a throwaway copy. The space declares, per axis, whether a plain number there is a quantity of the space, and the polar angle says yes because it has the `HasCycle` trait (its coordinates measure a turn). This is the nearest honest statement. A fully general one needs a new axis trait for "the unit of a plain number", since today only the polar budget rule in `coord.tsx` knows that the radius is in pixels and the angle in radians.
+
+```ts
+// coord.tsx: the space declares, per axis, whether a plain number there is
+// a quantity of the space. The polar angle has HasCycle, so it is radians.
+coordNode._space = {
+  aliases: coordTransform.aliases,
+  type: coordTransform.type,
+  closed: [closesOn(coordTransform, 0), closesOn(coordTransform, 1)],
+  quantities: [
+    coordTransform.axisTraits?.[0]?.HasCycle !== undefined,
+    coordTransform.axisTraits?.[1]?.HasCycle !== undefined,
+  ],
+};
+
+// _node.ts, resolveEmbedding: a third route beside the data size (B) and
+// the shared edge (A).
+const embedded =
+  (baseEmbedded(box) && !(within && this.isGlyph(dir))) ||
+  (typeof dim.size === "number" &&
+    this.aspectLock === undefined &&
+    this.plainNumbersAreSpace(dir)) ||
+  sharesEdge(edges, dir);
+```
+
+The rule needed one exception. A circle with a literal radius in polar space has a fixed aspect ratio, so its size along the angle is tied to its size along the radius, which is pixels. Without the exception, GoTree's radial node-link diagram drew every 8 px dot as a full ring. I think this case belongs to the domain, since a ratio between radians and pixels has no meaning, but you should check it.
+
+The radians rule changes one documented behavior. Along the angle a lone bar with a literal width no longer stays a line, because along the angle there are no pixels. A width of 0.6 becomes a wedge of 0.6 rad. The stories in "Polar Edge To Edge" were written with `w: 16` as "16 px", and 16 rad is more than two full turns, so they draw as a full disc.
+
+![Lone bar as a line](img/review-lone-angle-bar-r4.png)
+
+**\*w: 0.6, today.** A line 0.6 px wide.\*
+
+![Lone bar as a wedge](img/review-lone-angle-bar-radians.png)
+
+**\*w: 0.6, radians rule.** A wedge of 0.6 rad.\*
+
+![16 px band](img/review-bar-alone-r4.png)
+
+**\*w: 16, today.** A band 16 px wide.\*
+
+![Full disc](img/review-bar-alone-radians.png)
+
+**\*w: 16, radians rule.** 16 rad, a full disc.\*
+
+**The lone bar**
+
+```ts
+// A lone bar 0.6 wide along the angle, touching nothing.
+layer({ coord: Coord.clock(), w: 200, h: 200 }, [
+  rect({ w: 0.6, h: v(5), fill: "steelblue" }),
+]);
+```
+
+**PixelBarAlone**
+
+```ts
+// Proposals/Polar Edge To Edge, PixelBarAlone: written as 16 px wide.
+layer({ coord: Coord.clock(), w: 300, h: 300 }, [
+  rect({ w: 16, h: v(5), fill: "steelblue" }),
+]);
+```
+
+PixelBarsApart has the same issue. Its bars are laid out 16 rad wide today too, since layout already reads a plain number along the angle as radians, and only the drawing reads it as pixels. Today they draw as bands that point in scattered directions. Under the radians rule they draw as a full disc.
+
+The prototype found a problem with replacing R4. R4 also works along the radius, where plain numbers are pixels and the radians rule does not apply. GoTree's node-link sunburst has rings of one pixel thickness aligned at their middle, and R4 is what makes them embed. With R4 removed, its outermost ring of sixteen leaves is not drawn.
+
+![Sunburst with R4](img/review-nodelink-sunburst-r4.png)
+
+**\*With R4.** Five levels.\*
+
+![Sunburst without R4](img/review-nodelink-sunburst-no-r4.png)
+
+**\*R4 removed.** The leaf ring is gone. The same with or without `emX`.\*
+
+```ts
+// GoTree / Node-Link, Sunburst: every ring 38 px thick, siblings aligned
+// at the middle along the radius.
+const sunburstNode = (d) =>
+  rect({ w: d.width * leafTheta, h: 38, emX: true, fill: greens[d.depth] });
+
+tree(
+  {
+    node: sunburstNode,
+    link: "none",
+    parentChild: distribute({ dir: "y", spacing: 0, alignment: "middle" }),
+    sibling: distribute({ dir: "x", spacing: 0, alignment: "middle" }),
+    coord: Coord.clock(),
+  },
+  deepBalancedTree
+);
+```
+
+| GoTree story with a hand-set `emX` | R4 alone (today) | Radians rule, R4 removed         | Radians rule, R4 kept |
+| ---------------------------------- | ---------------- | -------------------------------- | --------------------- |
+| violin tree                        | needed           | freed                            | freed                 |
+| tornado tree                       | needed           | freed                            | freed                 |
+| tornado tree 2                     | needed           | freed                            | freed                 |
+| nested pie tree                    | needed           | freed                            | freed                 |
+| node-link sunburst                 | needed           | freed, but the leaf ring is lost | freed                 |
+
+"Freed" means the story's normalized DOM is byte-identical to the branch's render after the `emX` is deleted. "Needed" means deleting it changes the render. With the radians rule and R4 kept, every other story I rendered is unchanged, i.e., both rose stories, the pie stories, all of "Polar Edge To Edge" except the three bar stories, every GoTree node-link story, and the GoTree gallery sunburst. The d3 hierarchy stories were checked with R4 removed, and were unchanged. In `test:embedding`, three cases change: the lone bar, the bars apart, and the two-width rose. Removing R4 also changes the two cases for sunburst rings of one size aligned at the middle.
+
+> **Fork.** Keep R4 alone, replace it with the radians rule, or add the radians rule and keep R4. Replacing it loses the node-link sunburst's leaf ring, so I do not recommend that. Recommended: add the radians rule and keep R4. Along the angle, R4 then has nothing left to do, so its TwoWidths problem goes away, and along the radius it stays the rule that embeds rings of one pixel thickness. The cost is that a lone bar with a literal width along the angle becomes a wedge, so the three "Polar Edge To Edge" bar stories and their tests change, and a pixel band along the angle can no longer be written with a plain number. If you say yes, the patch from the copy goes onto the branch with the R4 deletion reverted, the five `emX` flags come out, and those three tests and stories are rewritten to say what they now show.
+
+#### 4\. Whether `Coord.clock` is a preset (today)
+
+The decision is whether `Coord.clock` is its own kind or a preset. The new rule "a preset takes only the options it does not fix" (commit 4834a5814) now holds for `Overlap.sina`, `Overlap.jitter`, `Shape.hull`, `Shape.spine`, and `Slack.start`, `center` and `end`. The code calls `Coord.clock` a polar preset (`polarPreset("clock")`), but it is its own entry with its own wire type. It sets `baselineAngle: π/2` and `direction: -1` as defaults, and its docs say you can override them. In each pie the red slice is the first one.
+
+![Coord.polar](img/review-pie-polar.png)
+
+**\*Coord.polar()**, from 3 o'clock, counter-clockwise\*
+
+![Coord.clock](img/review-pie-clock.png)
+
+**\*Coord.clock()**, from 12 o'clock, clockwise\*
+
+![Clock from three](img/review-pie-clock-from-three.png)
+
+**\*Coord.clock({ baselineAngle: 0 })**, from 3 o'clock, clockwise\*
+
+```ts
+const pie = (coord) =>
+  chart(slices, { coord, w: 200, h: 200, color: palette })
+    .flow(spread({ by: "name", dir: "x", spacing: 0.06 }))
+    .mark(rect({ w: "value", fill: "name" }));
+
+pie(Coord.polar()); // 0 at 3 o'clock, counter-clockwise
+pie(Coord.clock()); // 0 at 12 o'clock, clockwise
+pie(Coord.clock({ baselineAngle: 0 })); // 0 at 3 o'clock, clockwise
+```
+
+**The third pie, if clock is a preset**
+
+```ts
+// If Coord.clock is a preset, it takes no baselineAngle or direction, and
+// "clockwise from 3 o'clock" is written on the kind. Same render, same DOM.
+pie(Coord.polar({ baselineAngle: 0, direction: -1 }));
+```
+
+The two spellings of the third pie have byte-identical normalized DOM.
+
+> **Fork.** (a) `Coord.clock` is a kind with its own defaults. It keeps its options, and the code and docs stop calling it a preset. (b) It is a preset of `Coord.polar`. It loses `baselineAngle` and `direction`, and "clockwise from 3 o'clock" is written on `Coord.polar`, as above. Recommended: (a). If you say yes, `polarPreset` is renamed, and the word "preset" leaves its comments, the descriptor's doc and the root `CLAUDE.md`. Nothing a user writes changes.
+
+### What landed
+
+#### Minimum gaps and slack
+
+![RowAll](img/review-mingap-row-all.png)
+
+**_Slack.start, center, end_**
+
+![RowQuarter](img/review-mingap-row-quarter.png)
+
+**_Slack.at(0.25)_**
+
+![RowPinned](img/review-mingap-row-pinned.png)
+
+**\*Pinned ends**, start, center, end\*
+
+`Spacing.atLeast(g)` asks for a gap of at least g. The layer's `slack` says where each part goes in the room the gaps leave, from its earliest place (`start`) to its latest (`end`).
+
+```ts
+// Top row: A B and C D glued, at least 16 apart. Bottom row: p under A's
+// start, r under D's end, q at least 8 from each. The layer's slack on x
+// places q.
+const rowOfRects = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [A, B, C, D, p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.A, c.B]),
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.C, c.D]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(16) }, [
+      c.B,
+      c.C,
+    ]),
+    Constraint.align({ x: "start" }, [c.A, c.p]),
+    Constraint.align({ x: "end" }, [c.D, c.r]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
+    Constraint.align({ y: "start" }, [c.A, c.B, c.C, c.D]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+    Constraint.distribute({ dir: "y", spacing: 12 }, [c.A, c.p]),
+  ]);
+
+spread(
+  { dir: "y", spacing: 24, alignment: "start" },
+  [Slack.start(), Slack.center(), Slack.end()].map(rowOfRects)
+);
+```
+
+```ts
+// A quarter of the way from the least solution to the greatest.
+rowOfRects(Slack.at(0.25));
+```
+
+```ts
+// p and r an exact 160 apart, q between them at least 8 from each:
+// 160 - 40 - 16 = 104 px of room, placed by the layer's slack.
+const pinnedRow = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 160 }, [c.p, c.r]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+  ]);
+```
+
+#### The mean of positions
+
+![Dendrogram with mean](img/review-mean-dendrogram.png)
+
+**\*Dendrogram**, with `mean([...])`\*
+
+![Cluster by hand](img/review-cluster-hand.png)
+
+**\*Cluster**, the places computed by hand. It matched d3.cluster.\*
+
+A parent sits at `mean([...])` of its children, an operand of `Constraint.align`. The dendrogram draws the same 23 links as the hand-computed Cluster story, to the pixel.
+
+```ts
+// The leaves one pitch apart; each parent at the mean of its children;
+// each child at least a level below its parent, and the slack on y at the
+// end, so every leaf lands on the last level (d3.cluster).
+layer({ slack: { y: Slack.end() } }, [
+  spread(
+    { dir: "x", spacing: Spacing.pitch(20, { at: "middle" }) },
+    leaves.map((n) => dot(n.path))
+  ),
+  ...inner.map((n) => dot(n.path)),
+]).relate((c) => [
+  ...inner.map((n) =>
+    Constraint.align({ x: "middle" }, [
+      c[n.path],
+      mean(n.children.map((k) => c[k.path])),
+    ])
+  ),
+  ...links.map((l) =>
+    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
+      c[l.parent],
+      c[l.child],
+    ])
+  ),
+  ...links.map((l) =>
+    line({ stroke: "#9aa7b1" }, [ref(l.parent), ref(l.child)])
+  ),
+]);
+```
+
+![Tidy tree with mean](img/review-mean-tidy-tree.png)
+
+**\*TidyTree**, with `mean([...])`\*
+
+![SepTreeStart](img/review-sep-tree-start.png)
+
+**\*SepTreeStart**, the places computed by hand\*
+
+The tidy tree puts each node at the mean of its first and last child, and keeps nodes at one depth at least 10 apart. It draws the same 26 links as SepTreeStart.
+
+```ts
+// A subtree: its node above its children's subtrees. At each depth, every
+// node at least 10 from the next, whichever subtree it is in. The node at
+// the mean of its first and last child.
+const tidy = (t: Tree, path = "n") => {
+  const self = circle({ r: 7, fill: "#457b9d" }).name(path);
+  if (!t.children?.length) return self;
+  const kids = t.children.map((_, i) => `${path}.${i}`);
+  return layer([
+    self,
+    layer(t.children.map((k, i) => tidy(k, kids[i])))
+      .relate((c) => [
+        Constraint.align({ y: "start" }, subtreesOf(c, t, kids)),
+        ...rowsByDepth(t, path).map((row) =>
+          Constraint.distribute(
+            { dir: "x", spacing: Spacing.atLeast(10) },
+            row.map((p) => c[p])
+          )
+        ),
+      ])
+      .name(`${path}/kids`),
+  ]).relate((c) => [
+    Constraint.distribute({ dir: "y", spacing: 40 }, [
+      c[path],
+      c[`${path}/kids`],
+    ]),
+    Constraint.align({ x: "middle" }, [
+      c[path],
+      mean([c[kids[0]], c[kids[kids.length - 1]]]),
+    ]),
+  ]);
+};
+```
+
+#### A full-turn angle closes
+
+![Spaced pie](img/review-pie-spaced.png)
+
+**\*PieSpaced.** Six gaps. Within 4e-7 rad of d3.pie.\*
+
+![Chord arcs](img/review-chord.png)
+
+**\*Chord.** Five gaps. Within 1e-5 rad of d3.chord.\*
+
+A spread that fills a full-turn angle leaves a gap after its last part too, as d3's `padAngle` does. Both are plain `Coord.clock()`, with no workaround.
+
+```ts
+// UserSpaceD3Hierarchy, PieSpaced: plain Coord.clock(), no option.
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+```ts
+// Both variants: the same code. The chain of groups closes; the sub-arcs
+// of a group are a stack, so they have no gaps.
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [
+  spread(
+    { dir: "x", spacing: 0.05, y: 120 },
+    trips.map((row, i) =>
+      stack(
+        { dir: "x", w: v(rowTotal(row)) },
+        row.map((m) => rect({ w: v(m), h: 18, fill: v(districts[i]) }))
+      )
+    )
+  ),
+]);
+```
+
+#### Sunburst seams and the root disc
+
+![Sunburst before](img/d3-sunburst.png)
+
+**\*Before**, an older capture of the same code. White seams between rings, and no root disc.\*
+
+![Sunburst after](img/review-sunburst-after.png)
+
+**\*After.** The same code. No seams, and the root disc is drawn.\*
+
+The rings have a pixel height, so they were drawn as ink, as thick stroked arcs that did not meet. They should have embedded because they touch, but that relational route to embedding was never implemented. It is now, in `sharedEdges.ts`.
+
+```ts
+// A node: its ring, then its children's subtrees end to end along the
+// angle, the two laid out along the radius with no gap.
+const partitionNode = (t: Tree, ring: number) => {
+  const self = rect({ w: v(total(t)), h: ring, fill: v(t.name) });
+  if (!t.children) return self;
+  return spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+    self,
+    stack(
+      { dir: "x", alignment: "start" },
+      t.children.map((c) => partitionNode(c, ring))
+    ),
+  ]);
+};
+
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [partitionNode(budget, 37.5)]);
+```
+
+![**GoTree / Gallery / sunburst** now draws its center disc. The render still looks wrong in two ways. The rings sit one band apart, with a white ring between each level, and a white line runs from the center to 12 o'clock across the disc, where its outline starts and ends.](img/review-gotree-sunburst.png)
+
+```ts
+// GoTree / Gallery / sunburst
+const node = (d) =>
+  rect({
+    ...(d.height === 0 ? { w: datum(1) } : {}),
+    h: 42,
+    emY: true,
+    fill: byDepth()(d),
+    stroke: "white",
+    strokeWidth: 1.5,
+  });
+
+tree(
+  {
+    node,
+    link: "none",
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: { kind: "distribute", spacing: 42 },
+    }),
+    sibling: combine({ x: { kind: "distribute", spacing: 0 } /* ... */ }),
+    coord: Coord.clock(),
+  },
+  deepBalancedTree
+);
+```
+
+#### Radar outlines
+
+![Radar, two series](img/review-radar-two-series.png)
+
+**\*RadarTwoSeries.** Points in the polar space, straight closed outlines outside it.\*
+
+![Line inside the coord](img/review-radar-inside-coord.png)
+
+**\*InsideCoord.** A line inside the space is warped into arcs, and open.\*
+
+![Line outside, open](img/review-radar-outside-open.png)
+
+**\*OutsideOpen.** A line outside the space runs straight through the points. This was a regression, now fixed.\*
+
+A mark outside a coordinate space reads a mark inside it where the space draws it. So a `polygon` over `selectAll("pts")` in a layer outside the polar space is a straight, closed outline through the points.
+
+```ts
+layer({ w: 320, h: 320 }, [
+  // Inside the polar space: the spokes, the grid points, the data points.
+  layer({ coord: Coord.clock() }, [
+    chart(spokes)
+      .flow(scatter({ by: "metric", x: "metric" }))
+      .mark(rect({ w: 0, h: "max", stroke: GRID, strokeWidth: 1 })),
+    chart(levels)
+      .flow(
+        group({ by: "level" }),
+        scatter({ by: "metric", x: "metric", y: "level" })
+      )
+      .mark(circle({ r: 0 }).name("grid")),
+    chart(both, { color: Color.palette([INK, RED]) })
+      .flow(
+        group({ by: "series" }),
+        scatter({ by: "metric", x: "metric", y: "value" })
+      )
+      .mark(circle({ r: 4, fill: "series" }).name("pts")),
+  ]),
+  // Outside it: straight, closed outlines through the points.
+  chart(selectAll("grid"))
+    .flow(group({ by: "level" }))
+    .mark(polygon({ fill: "none", stroke: GRID, strokeWidth: 1 })),
+  chart(selectAll("pts"))
+    .flow(group({ by: "series" }))
+    .mark(polygon({ fill: "series", opacity: 0.2 })),
+  chart(selectAll("pts"))
+    .flow(group({ by: "series" }))
+    .mark(polygon({ fill: "none", stroke: "series", strokeWidth: 2 })),
+]);
+```
+
+**InsideCoord**
+
+```ts
+// The line inside the polar space: each segment is warped into an arc,
+// and the loop is open.
+chart(rows, { coord: Coord.clock(), w: 320, h: 320 })
+  .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+  .mark(circle({ r: 4, fill: INK }))
+  .layer(line({ stroke: INK, strokeWidth: 2 }));
+```
+
+**OutsideOpen**
+
+```ts
+// A line outside the space, over selectAll: straight, and open, since a
+// line has no segment from its last point back to its first.
+layer({ w: 320, h: 320 }, [
+  layer({ coord: Coord.clock() }, [
+    chart(rows)
+      .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+      .mark(circle({ r: 4, fill: INK }).name("pts")),
+  ]),
+  chart(selectAll("pts")).mark(
+    line({ stroke: RED, strokeWidth: 2, curve: Curve.linear() })
+  ),
+]);
+```
+
+Two caveats. First, the points sit at the right radius only because the spokes beside them claim radius zero. A position channel along the radius starts at the data's minimum, so without the spokes the smallest value would sit at the center. Second, `opacity` applies to the stroke too, so a faint fill with a crisp outline takes two polygons.
+
+#### Presets take only the options they do not fix
+
+| Preset             | Is the kind     | Fixes                                          | Still takes                               |
+| ------------------ | --------------- | ---------------------------------------------- | ----------------------------------------- |
+| `Overlap.sina()`   | `Overlap.noise` | `smoothing: "silverman"`                       | `randomness`, `padding`, `seed`           |
+| `Overlap.jitter()` | `Overlap.noise` | `randomness: "uniform"`, `smoothing: Infinity` | `padding`, `seed`                         |
+| `Shape.hull()`     | `Shape.blob`    | `convexity: 1`, `neck: 1`                      | `connection`, `holes`, `separate`         |
+| `Shape.spine()`    | `Shape.blob`    | `convexity: 0`                                 | `connection`, `neck`, `holes`, `separate` |
+| `Slack.start()`    | `Slack.at`      | `t: 0`                                         | nothing                                   |
+| `Slack.center()`   | `Slack.at`      | `t: 0.5`                                       | nothing                                   |
+| `Slack.end()`      | `Slack.at`      | `t: 1`                                         | nothing                                   |
+
+Passing a fixed option is a type error in TypeScript and an error at the call in both languages. The message names the kind to write instead.
+
+```text
+Shape.hull({ convexity: 0.9 })
+
+[gofish] Shape.hull({ convexity }): Shape.hull is Shape.blob with
+convexity 1 and neck 1, and takes only the options it does not fix. For
+another convexity, write the kind: Shape.blob({ convexity: 0.9, neck: 1 }).
+```
+
 ## The design
 
 - A layout algorithm has two parts. Its **decisions** are discrete: an order, a grouping into rows, which side a dot goes on. Its **relations** say how positions and sizes depend on each other once the decisions are made. A **solver** turns relations into positions.
@@ -9,7 +819,7 @@ A design for writing layout algorithms as GoFish code, on the smallest set of la
 - Every d3 layout was written this way and compared with d3's own numbers. Pie, stack, partition, treemap, tree, cluster, chord arcs and a sankey without relaxation match exactly. Circle packing, force and sankey relaxation need relations today's solver does not have.
 - Those are jobs for other solvers: one for geometry (touching, intersecting) and one that optimizes (pulls, repulsion). A scope picks its solver the way it picks a coordinate space, and solvers meet only at scope boundaries.
 - User code writes decisions three ways: a function that calls `measure` on its children, a `choose` among alternatives, or a `layout` that reads the room it was given.
-- Nothing is implemented except prototype stories, the minimum gap and the average of positions (in the engine since commit b960e601d), and the `Slack` family's `start`, `center`, `end` and `at(t)` on `layer` and `spread`.
+- Nothing is implemented except prototype stories, the minimum gap and the average of positions (in the engine since commit b960e601d, and written `mean([...])` inside `Constraint.align`), the `Slack` family's `start`, `center`, `end` and `at(t)` on `layer` and `spread`, and an angle axis that closes around a full turn.
 
 **Decisions.** Discrete. Made by plan code, or by `choose`. _which items share a row, the order in a column, which two circles a new one rests on_
 
@@ -23,13 +833,13 @@ This is the split issue \#485 asks for: a small relational core, and user-space 
 
 #### What today's symbolic solver needs
 
-| Primitive                                | In math                                                      | In GoFish                                                                             | Status                                                                                                                         |
-| ---------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| A linear equation between positions      | a = b; b − a = g; p = the average of a, b, c                 | `Constraint.align`, `Constraint.distribute`, `Constraint.position`, `Constraint.nest` | Today, except the average. A dendrogram puts a parent at the mean of its children, and nothing public says that.               |
-| A minimum gap, with a rule for the slack | b − a ≥ g, then start, end, center or even                   | `Spacing.atLeast(g)`, `Spacing.contour(g)` on `distribute` and `spread` (sketch)      | In the engine since commit b960e601d. The slack rule is `Slack` on `layer` and `spread`, without `even`; see "The slack rule". |
-| One scale per scope                      | size = value × scale; a container is the max of its contents | `rect({ h: "value" })`, shared across a scope                                         | Today. It solved d3-sankey's scale on its own.                                                                                 |
-| A coordinate map                         | positions → f(positions), applied after the solve            | `Coord.polar()`, `Coord.clock()`                                                      | Today, except that an angle axis does not wrap.                                                                                |
-| A choice                                 | the minimum over alternatives                                | `choose([a, b])` (sketch)                                                             | The choice proposal. Needs `min` in the size algebra (\#630).                                                                  |
+| Primitive                                | In math                                                      | In GoFish                                                                                            | Status                                                                                                                         |
+| ---------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| A linear equation between positions      | a = b; b − a = g; p = the average of a, b, c                 | `Constraint.align`, `Constraint.distribute`, `Constraint.position`, `Constraint.nest`, `mean([...])` | Today. The average is `mean([...])`, an operand of `Constraint.align`.                                                         |
+| A minimum gap, with a rule for the slack | b − a ≥ g, then start, end, center or even                   | `Spacing.atLeast(g)`, `Spacing.contour(g)` on `distribute` and `spread` (sketch)                     | In the engine since commit b960e601d. The slack rule is `Slack` on `layer` and `spread`, without `even`; see "The slack rule". |
+| One scale per scope                      | size = value × scale; a container is the max of its contents | `rect({ h: "value" })`, shared across a scope                                                        | Today. It solved d3-sankey's scale on its own.                                                                                 |
+| A coordinate map                         | positions → f(positions), applied after the solve            | `Coord.polar()`, `Coord.clock()`                                                                     | Today. A full-turn angle is closed, so a spread around it leaves a gap after its last part too.                                |
+| A choice                                 | the minimum over alternatives                                | `choose([a, b])` (sketch)                                                                            | The choice proposal. Needs `min` in the size algebra (\#630).                                                                  |
 
 The first three are one piece of mathematics: equations and lower bounds on differences of positions, a max, and one unknown scale. That is why one pass solves them. Every operator below lowers into these.
 
@@ -215,7 +1025,7 @@ a stack along the angle, sizes on one scale, a polar map
 
 symbolic, today
 
-(exact) angles identical. `padAngle` matches once the sweep is shortened by one gap by hand, because the angle axis does not wrap.
+(exact) angles identical. `padAngle` matches within 4e-7 rad with no workaround, because a full-turn angle is closed.
 
 stack: none, expand, silhouette
 
@@ -255,7 +1065,7 @@ each node stacked above the stack of its children; the same in a polar map
 
 symbolic, today
 
-(exact) 1e-4 px; angles identical. The sunburst's root disc is not drawn (a bug).
+(exact) 1e-4 px; angles identical. The sunburst's root disc is drawn, and its rings have no seams.
 
 tree (tidy)
 
@@ -275,7 +1085,7 @@ leaves in a spread; levels by minimum gaps packed to the end; the parent at the 
 
 symbolic, with the minimum gap and the average
 
-(exact) all 24 nodes. The average is computed by hand.
+(exact) all 24 nodes. The average is `mean([...])`, and the result draws the same links as the version computed by hand.
 
 sankey, no relaxation
 
@@ -367,8 +1177,9 @@ chart(browsers, { coord: Coord.clock() })
   .flow(stack({ by: "name", dir: "x" }))
   .mark(rect({ w: "value", fill: "name" }));
 
-// With d3's padAngle: a spread, and a sweep one gap short of the circle.
-chart(browsers, { coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) })
+// With d3's padAngle: a spread. A full turn is closed, so it leaves a gap
+// after the last slice too.
+chart(browsers, { coord: Coord.clock() })
   .flow(spread({ by: "name", dir: "x", spacing: PAD }))
   .mark(rect({ w: "value", fill: "name" }));
 ```
@@ -393,7 +1204,7 @@ layer({ coord: Coord.clock() }, [node(budget)]);
 
 ```ts
 // Chord arcs: a spread of groups along the angle, each a stack of sub-arcs.
-layer({ coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) }, [
+layer({ coord: Coord.clock() }, [
   spread(
     { dir: "x", spacing: PAD, y: 120 },
     matrix.map((row, i) =>
@@ -406,7 +1217,7 @@ layer({ coord: Coord.clock({ centralAngle: 2 * Math.PI - PAD }) }, [
 ]);
 ```
 
-These are written the way GoFish already writes a pie. They have no plan at all. What is missing: an angle axis that wraps, so a spread around a circle has a gap after the last slice too, and a ribbon that crosses the center.
+These are written the way GoFish already writes a pie. They have no plan at all. What is missing is a ribbon that crosses the center. A spread around a full turn now has a gap after the last slice too.
 
 #### Stack and its offsets (today)
 
@@ -682,7 +1493,7 @@ export function solveSeparations(
 }
 ```
 
-**A dendrogram today: levels from the solver, the average by hand**
+**The first dendrogram prototype: levels from the solver, the average by hand**
 
 ```ts
 // The plan: a level per node, and an x per node in units of one leaf.
@@ -982,13 +1793,13 @@ const links = chart(edges)
 
 ### What to build, by how much it unlocks
 
-1.  **The minimum gap**, with a rule for the slack. Tidy trees, dendrogram levels, sankey columns, layered graphs. One pass, and it stays symbolic. It is a second kind of fact inside the solver: exact gaps glue items into rigid groups, and minimum gaps separate the groups.
-2.  **An average of positions.** A parent over its children. The last missing piece of "a linear equation between positions".
+1.  **The minimum gap**, with a rule for the slack. (done) Tidy trees, dendrogram levels, sankey columns, layered graphs. One pass, and it stays symbolic. It is a second kind of fact inside the solver: exact gaps glue items into rigid groups, and minimum gaps separate the groups.
+2.  **An average of positions.** (done) A parent over its children. The last missing piece of "a linear equation between positions".
 3.  **`layout`: read the room offered.** Every tiling, and any mark that adapts to its box.
 4.  **One sequential tiling with settings.** `squarify`, strip, spiral, pivot, `slice` and `dice` become presets of it. The built-in `binary` is not shown to be one.
 5.  **Custom members (\#1101, \#692).** So a function that returns GoFish can be passed as `tiling:` and work in `.flow()`.
 6.  **`measure`, in lengths.** Only the box exists in lengths in the engine today. The circle, the outline and a contour exist only in pixels after layout.
-7.  **An angle axis that wraps.** Small, and it removes the workaround in the pie and chord prototypes. The other workaround, a baseline per group on `stack`, is already on main as `Baseline.wiggle()` (\#1375).
+7.  **An angle axis that wraps.** (done) Small, and it removes the workaround in the pie and chord prototypes. The other workaround, a baseline per group on `stack`, is already on main as `Baseline.wiggle()` (\#1375).
 8.  **`choose`**, from the choice proposal, with `min` in the size algebra (\#630).
 9.  **A relation vocabulary that names its solver.** Needed before a second solver exists, so the first one's relations are not special.
 
@@ -1034,7 +1845,7 @@ Each is a candidate issue. The stories mark every workaround with a comment.
 - **Even slack cannot be stated beside data sizes.** `spacing: fr(1)` with data-sized rects gives the wrong scale.
 - **A `distribute` between two nested operands is ignored with no warning**, and `Constraint.position` inside a spread with `alignment: "start"` or `"middle"` is discarded with no warning.
 - **`stack({ dir: "y", alignment: "start" })` over a rect and a stack throws a placement conflict** on some trees. `"middle"` works.
-- **In polar space:** a rect spanning the full circle draws nothing, a rect with a pixel height is drawn as a thick stroked arc (so `stroke` repaints it and its ends are not radial), a sunburst with data-sized rings gets its radii wrong, a spread along the angle does not wrap, and a `ribbon` runs around the ring instead of across it.
+- **In polar space:** a rect with a pixel height that touches nothing is drawn as a thick stroked arc (so `stroke` repaints it and its ends are not radial), a sunburst with data-sized rings gets its radii wrong, and a `ribbon` runs around the ring instead of across it.
 - **`Bin.voronoi` clips to the data's bounding box**, which cannot be set, and a `rect` inside a `Tile.voronoi` treemap draws its cell's bounding box with no error.
 - **`stack` along y runs up and `spread` along y runs down** in the same frame.
 - **A `.name()` inside a `.mark((d) => ...)` function does not register**, and a `createMark` prop declared `"raw"` arrives wrapped.
