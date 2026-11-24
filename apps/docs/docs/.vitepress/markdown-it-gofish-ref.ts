@@ -22,8 +22,8 @@
  * descriptors.ts): `::: gofish-ref ChartOptions` renders the chart-level
  * options as one table. Or it may name one member of a strategy family
  * (`STRATEGIES`), as `Family.member`: `::: gofish-ref Shape.blob` renders that
- * kind's params, and a preset (`Shape.hull`) renders its kind's params with
- * the preset's values as their defaults. A construct of a table in
+ * kind's params, and a preset (`Shape.hull`) renders the params of its kind
+ * it does not fix (`presetParams`). A construct of a table in
  * `DESCRIPTOR_NAMESPACES` is named as it is called, `<Namespace>.<type>`:
  * `::: gofish-ref Constraint.position` renders the constraint's options,
  * never the `position` combinator's.
@@ -58,6 +58,7 @@ import {
   OPTION_TYPES,
   SHARED_FIELD_GROUPS,
   STRATEGIES,
+  presetParams,
   pyKwarg,
   pyType,
   resolveFields,
@@ -301,8 +302,8 @@ function renderDescriptor(
 }
 
 /** The params of a strategy family member named `Family.member` (a kind, or
- *  a preset with its values as the defaults), or undefined for any other
- *  name. */
+ *  a preset, which takes the params of its kind it does not fix), or
+ *  undefined for any other name. */
 function strategyParams(name: string): FieldGroup | undefined {
   const parts = splitDottedName(name);
   if (parts === undefined) return undefined;
@@ -311,15 +312,8 @@ function strategyParams(name: string): FieldGroup | undefined {
   if (spec === undefined) return undefined;
   const kind = spec.kinds[member];
   if (kind !== undefined) return kind.params;
-  const preset = spec.presets?.[member];
-  if (preset === undefined) return undefined;
-  const params: FieldGroup = spec.kinds[preset.kind].params;
-  return Object.fromEntries(
-    Object.entries(params).map(([field, f]) => [
-      field,
-      field in preset.values ? { ...f, default: preset.values[field] } : f,
-    ])
-  );
+  if (spec.presets?.[member] === undefined) return undefined;
+  return presetParams(family, member);
 }
 
 /** Distinct by resolved field set: the dual-form constructs (spread, stack,

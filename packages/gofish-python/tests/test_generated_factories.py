@@ -243,15 +243,25 @@ def test_scatter_serializes_noise_overlap():
     # checked at the factory call: see test_families.py.
 
 
-def test_sina_and_jitter_are_noise_with_other_defaults():
+def test_sina_and_jitter_are_noise_with_some_params_fixed():
     import math
 
     assert Overlap.sina() == {"kind": "noise", "smoothing": "silverman"}
     assert Overlap.noise(smoothing="silverman") == Overlap.sina()
     assert Overlap.jitter() == {"kind": "noise", "randomness": "uniform", "smoothing": math.inf}
-    # Any option overrides the default.
-    assert Overlap.sina(smoothing=50, padding=1) == {"kind": "noise", "smoothing": 50, "padding": 1}
-    assert Overlap.jitter(randomness="blue")["randomness"] == "blue"
+    # A preset takes the options it does not fix.
+    assert Overlap.sina(randomness="quasi", padding=1) == {
+        "kind": "noise",
+        "smoothing": "silverman",
+        "randomness": "quasi",
+        "padding": 1,
+    }
+    assert Overlap.jitter(padding=1)["padding"] == 1
+    # A fixed one is a TypeError; another value of it is the kind.
+    with pytest.raises(TypeError):
+        Overlap.sina(smoothing=50)
+    with pytest.raises(TypeError):
+        Overlap.jitter(randomness="blue")
     d = ir(scatter(x="mass", alignment="middle", overlap=Overlap.sina()))
     assert d["overlap"] == {"kind": "noise", "smoothing": "silverman"}
 
@@ -264,7 +274,7 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
 
     node = (
         chart([{"v": 1.0}, {"v": math.inf}])
-        .flow(scatter(x="v", overlap=Overlap.jitter(smoothing=math.inf)))
+        .flow(scatter(x="v", overlap=Overlap.jitter()))
         .mark(circle(r=3))
         .to_ir()["root"]
     )
@@ -368,9 +378,9 @@ def test_tile_combinator_accepts_key():
     assert d["options"]["size"] == "gross"
 
 
-def test_polygon_requires_points():
-    with pytest.raises(TypeError):
-        polygon(fill="red")
+def test_polygon_points_are_optional():
+    # With no points a polygon is the ring through the marks it is given.
+    assert "points" not in ir(polygon(fill="red"))
     d = ir(polygon(points=[[0, 0], [1, 1], [0, 1]]))
     assert d["points"] == [[0, 0], [1, 1], [0, 1]]
 

@@ -656,8 +656,10 @@ build the chart options table from it (`::: gofish-ref ChartOptions`).
 `Effect`, `Tiling`, `Overlap`, `Curve`, `Binning`, `Calendar`, `Shape`,
 `Placement` and `Spacing`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
-kind with some params already set, such as `Overlap.sina()`, which is
-`noise` with `smoothing: "silverman"`. Each family derives its
+kind with some params fixed, such as `Overlap.sina()`, which is `noise`
+with `smoothing: "silverman"`. A preset takes only its kind's other params
+(`presetParams`), and a fixed one passed to it is an error (`presetValue`
+in JS, a `TypeError` from the generated signature in Python). Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
 so an option that takes a family is `t.ref` of its name, as in
 `t.ref("Tiling")`. A kind may take a param by position

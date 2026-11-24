@@ -19,15 +19,15 @@
  * `lib.ts` binds this module as `Slack` (`Slack.end()`), and
  * `gofish-graphics/slack` exports the same module. There is one rule,
  * {@link at}, a fraction of the way from the least solution to the greatest.
- * `start`, `center` and `end` are its points 0, 0.5 and 1, so their objects
- * have kind `"at"`. They have no options, so each is a value as it is
- * (`Slack.end` is `Slack.end()`, #1133). A rule is a plain object,
+ * `start`, `center` and `end` are its presets at 0, 0.5 and 1, so their
+ * objects have kind `"at"`. A preset fixes `t`, its one param, so it takes
+ * no options and is a value as it is (`Slack.end` is `Slack.end()`, #1133). A rule is a plain object,
  * `{ kind, t }`, and that object is also its wire form. The kind and its
- * param are declared once, in gofish-ir's `STRATEGIES` table, which checks a
- * rule where `at` makes it and where `layer` reads it.
+ * param, and the presets, are declared once, in gofish-ir's `STRATEGIES`
+ * table, which checks a rule where `at` makes it and where `layer` reads it.
  */
 import { Frontend } from "gofish-ir";
-import { bareKind } from "../ast/strategyKind";
+import { preset } from "../ast/strategyKind";
 
 /** A slack rule: what a `slack` option takes. */
 export type Slack = Frontend.SlackIR;
@@ -45,13 +45,13 @@ export function at(t: number): Slack {
 }
 
 /** The least solution: each part as early as its gaps allow. The default.
- *  It is `at(0)`. */
-export const start = bareKind("Slack.start", (): Slack => at(0));
+ *  It is `at(0)`, and takes no options. */
+export const start = preset<Slack>()("Slack", "start");
 
 /** Halfway between the least and the greatest solution, their mean. It is
- *  `at(0.5)`. */
-export const center = bareKind("Slack.center", (): Slack => at(0.5));
+ *  `at(0.5)`, and takes no options. */
+export const center = preset<Slack>()("Slack", "center");
 
 /** The greatest solution within the least solution's span: each part as
- *  late as its gaps allow. It is `at(1)`. */
-export const end = bareKind("Slack.end", (): Slack => at(1));
+ *  late as its gaps allow. It is `at(1)`, and takes no options. */
+export const end = preset<Slack>()("Slack", "end");

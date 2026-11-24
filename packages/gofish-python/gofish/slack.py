@@ -16,7 +16,7 @@ options: ``Slack.start`` is ``Slack.start()`` (#1133).
 """
 
 import math
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from ._strategy import bare_kind
 
@@ -47,75 +47,18 @@ def at(t: float, /) -> Dict[str, Any]:
 
 
 @bare_kind("Slack")
-def start(*, t: Optional[float] = None) -> Dict[str, Any]:
-    """The least solution: each part as early as its gaps allow. The default. It is `Slack.at(0)`.
-
-    Args:
-        t: The fraction of the way, from 0 (the least solution) to 1 (the greatest). Default 0.
-    """
-    if t is not None:
-        if not (isinstance(t, (int, float)) and not isinstance(t, bool)):
-            raise TypeError(f"Slack.start(t=...) must be a number >= 0 and <= 1, got {type(t).__name__}")
-        if math.isnan(t):
-            raise ValueError(f"Slack.start(t=...) must not be NaN, got {t!r}")
-        if t < 0:
-            raise ValueError(f"Slack.start(t=...) must be >= 0, got {t!r}")
-        if t > 1:
-            raise ValueError(f"Slack.start(t=...) must be <= 1, got {t!r}")
-    out: Dict[str, Any] = {"kind": "at", "t": 0}
-    for _k, _v in [
-        ("t", t),
-    ]:
-        if _v is not None:
-            out[_k] = _v
-    return out
+def start() -> Dict[str, Any]:
+    """The least solution: each part as early as its gaps allow. The default. It is `Slack.at(0)`. It takes no options."""
+    return {"kind": "at", "t": 0}
 
 
 @bare_kind("Slack")
-def end(*, t: Optional[float] = None) -> Dict[str, Any]:
-    """The greatest solution within the least solution's span: each part as late as its gaps allow. It is `Slack.at(1)`.
-
-    Args:
-        t: The fraction of the way, from 0 (the least solution) to 1 (the greatest). Default 1.
-    """
-    if t is not None:
-        if not (isinstance(t, (int, float)) and not isinstance(t, bool)):
-            raise TypeError(f"Slack.end(t=...) must be a number >= 0 and <= 1, got {type(t).__name__}")
-        if math.isnan(t):
-            raise ValueError(f"Slack.end(t=...) must not be NaN, got {t!r}")
-        if t < 0:
-            raise ValueError(f"Slack.end(t=...) must be >= 0, got {t!r}")
-        if t > 1:
-            raise ValueError(f"Slack.end(t=...) must be <= 1, got {t!r}")
-    out: Dict[str, Any] = {"kind": "at", "t": 1}
-    for _k, _v in [
-        ("t", t),
-    ]:
-        if _v is not None:
-            out[_k] = _v
-    return out
+def end() -> Dict[str, Any]:
+    """The greatest solution within the least solution's span: each part as late as its gaps allow. It is `Slack.at(1)`. It takes no options."""
+    return {"kind": "at", "t": 1}
 
 
 @bare_kind("Slack")
-def center(*, t: Optional[float] = None) -> Dict[str, Any]:
-    """Halfway between the least and the greatest solution: the mean of the two. It is `Slack.at(0.5)`.
-
-    Args:
-        t: The fraction of the way, from 0 (the least solution) to 1 (the greatest). Default 0.5.
-    """
-    if t is not None:
-        if not (isinstance(t, (int, float)) and not isinstance(t, bool)):
-            raise TypeError(f"Slack.center(t=...) must be a number >= 0 and <= 1, got {type(t).__name__}")
-        if math.isnan(t):
-            raise ValueError(f"Slack.center(t=...) must not be NaN, got {t!r}")
-        if t < 0:
-            raise ValueError(f"Slack.center(t=...) must be >= 0, got {t!r}")
-        if t > 1:
-            raise ValueError(f"Slack.center(t=...) must be <= 1, got {t!r}")
-    out: Dict[str, Any] = {"kind": "at", "t": 0.5}
-    for _k, _v in [
-        ("t", t),
-    ]:
-        if _v is not None:
-            out[_k] = _v
-    return out
+def center() -> Dict[str, Any]:
+    """Halfway between the least and the greatest solution: the mean of the two. It is `Slack.at(0.5)`. It takes no options."""
+    return {"kind": "at", "t": 0.5}

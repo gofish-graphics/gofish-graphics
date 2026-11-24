@@ -528,10 +528,40 @@ console.log("# noise(), sina(), jitter(): strategy objects");
       JSON.stringify({ kind: "noise", randomness: "uniform", smoothing: Infinity })
   );
   check(
-    "options override the wrapper defaults",
-    JSON.stringify(sina({ smoothing: 3, randomness: "quasi" })) ===
-      '{"kind":"noise","smoothing":3,"randomness":"quasi"}' &&
-      jitter({ randomness: "blue" }).randomness === "blue"
+    "a preset takes the options it does not fix",
+    JSON.stringify(sina({ randomness: "quasi", padding: 1 })) ===
+      '{"kind":"noise","smoothing":"silverman","randomness":"quasi","padding":1}' &&
+      JSON.stringify(jitter({ padding: 1, seed: 2 })) ===
+        JSON.stringify({
+          kind: "noise",
+          randomness: "uniform",
+          smoothing: Infinity,
+          padding: 1,
+          seed: 2,
+        })
+  );
+  const smoothing = await errorOf(() =>
+    // @ts-expect-error sina fixes smoothing
+    sina({ smoothing: 3 })
+  );
+  check(
+    "sina({ smoothing }) is an error naming the noise call",
+    smoothing?.includes(
+      'Overlap.sina({ smoothing }): Overlap.sina is Overlap.noise with smoothing "silverman"'
+    ) === true &&
+      smoothing.includes("Overlap.noise({ smoothing: 3 })"),
+    smoothing
+  );
+  const randomness = await errorOf(() =>
+    // @ts-expect-error jitter fixes randomness
+    jitter({ randomness: "blue", padding: 1 })
+  );
+  check(
+    "jitter({ randomness }) is an error naming the noise call",
+    randomness?.includes(
+      'Overlap.noise({ randomness: "blue", smoothing: Infinity, padding: 1 })'
+    ) === true,
+    randomness
   );
   /** The error resolving `strategy` throws, if any. */
   const resolveError = (strategy: any) =>

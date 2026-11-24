@@ -57,7 +57,8 @@ spread({ dir, spacing: Spacing.atLeast(gap), slack: Slack });
 are values as they are, and `Slack.end` and `Slack.end()` are the same rule. A
 rule is a plain object, `{ kind: "at", t }`, of type `Slack.Slack`.
 `Slack.start()`, `Slack.center()` and `Slack.end()` make the objects of
-`Slack.at(0)`, `Slack.at(0.5)` and `Slack.at(1)`. The same object is the rule's
+`Slack.at(0)`, `Slack.at(0.5)` and `Slack.at(1)`. They fix `t` and take no
+options, so another fraction is `Slack.at(t)`. The same object is the rule's
 wire form.
 
 A layer solves its constraints on each axis together, so it takes one rule per

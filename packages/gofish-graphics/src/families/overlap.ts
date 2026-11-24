@@ -9,13 +9,13 @@
  * (#1133, `ast/strategyKind.ts`). A strategy is a plain object,
  * `{ kind, ...params }`, and that object is also its wire form, so it crosses
  * the Python bridge as IR. `kind` names the strategy. `sina()` and `jitter()`
- * are `noise()` with other params preset, so their objects have kind
- * `"noise"`. The kinds, their params and the presets are declared once, in
+ * are presets of `noise()`: each fixes some params and takes only the others,
+ * and their objects have kind `"noise"`. The kinds, their params and the presets are declared once, in
  * gofish-ir's `STRATEGIES` table, which checks a strategy where `scatter`
  * reads it. The placement itself is in `ast/graphicalOperators/overlap.ts`.
  */
 import type { Frontend } from "gofish-ir";
-import { bareKind, given } from "../ast/strategyKind";
+import { bareKind, given, preset } from "../ast/strategyKind";
 
 /** Every built-in overlap strategy: the value of `scatter`'s `overlap`. */
 export type Overlap = Frontend.OverlapIR;
@@ -24,10 +24,11 @@ export type Overlap = Frontend.OverlapIR;
 export type SeparateOverlap = Extract<Overlap, { kind: "separate" }>;
 
 /** `noise()`: dots spread inside a density outline. See {@link noise}.
- *  `sina()` and `jitter()` make this same object with other params preset. */
+ *  `sina()` and `jitter()` make this same object with some params fixed. */
 export type NoiseOverlap = Extract<Overlap, { kind: "noise" }>;
 
-/** The options `noise()`, `sina()` and `jitter()` share. */
+/** The options of `noise()`. `sina()` and `jitter()` take those they do not
+ *  fix. */
 export type NoiseOptions = Omit<NoiseOverlap, "kind">;
 
 /** How `noise()` draws each dot's offset inside the outline. */
@@ -63,7 +64,7 @@ export const separate = bareKind(
  * Unlike `separate()`, the outline, not the collisions, sets how far the dots
  * spread, so dots may still touch.
  *
- * `sina()` and `jitter()` are this strategy with other defaults.
+ * `sina()` and `jitter()` are this strategy with some params fixed.
  *
  * @param randomness How offsets are drawn inside the outline:
  *   `"blue"` (default) keeps each dot as far from its placed neighbors as it
@@ -94,28 +95,14 @@ export const noise = bareKind(
  * Silverman's rule of thumb, as ggforce's `geom_sina` does (R's `bw.nrd0`).
  * The outline is the smooth curve a violin plot draws, filled with dots.
  * The bandwidth is computed per scatter, so each group of a `spread` gets its
- * own. Any option overrides the default.
+ * own. It fixes `smoothing` and takes the other options of `noise()`; another
+ * bandwidth is `noise({ smoothing })`.
  */
-export const sina = bareKind(
-  "Overlap.sina",
-  (opts: NoiseOptions = {}): NoiseOverlap => ({
-    kind: "noise",
-    smoothing: "silverman",
-    ...given(opts),
-  })
-);
+export const sina = preset<NoiseOverlap>()("Overlap", "sina");
 
 /**
  * Classic jitter: `noise()` with uniform random offsets in a flat band
- * (`randomness: "uniform"`, `smoothing: Infinity`). Any option overrides the
- * default.
+ * (`randomness: "uniform"`, `smoothing: Infinity`). It fixes `randomness` and
+ * `smoothing` and takes the other options of `noise()`.
  */
-export const jitter = bareKind(
-  "Overlap.jitter",
-  (opts: NoiseOptions = {}): NoiseOverlap => ({
-    kind: "noise",
-    randomness: "uniform",
-    smoothing: Infinity,
-    ...given(opts),
-  })
-);
+export const jitter = preset<NoiseOverlap>()("Overlap", "jitter");

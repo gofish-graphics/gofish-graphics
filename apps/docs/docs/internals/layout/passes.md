@@ -1337,8 +1337,8 @@ itself to the space it is given (#967). The design note is
 `internals/design/shape-geometry.md` on the geometry-representations branch.
 
 The second consumer is `scatter`'s `overlap` option, `Overlap.separate()` (#969) or
-`Overlap.noise()` (#970, #1014). `Overlap.sina()` and `Overlap.jitter()` are `Overlap.noise()` with other
-defaults filled in, so they reach layout as the same `{kind: "noise"}` object.
+`Overlap.noise()` (#970, #1014). `Overlap.sina()` and `Overlap.jitter()` are `Overlap.noise()` with some
+params fixed, so they reach layout as the same `{kind: "noise"}` object.
 `scatter` elaborates to a layer with a `position` constraint per child on each
 axis a field places, and an `align` on every other ("free") axis. With an
 overlap strategy, the free axis gets an `overlap` constraint

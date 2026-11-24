@@ -9,7 +9,7 @@ import pytest
 import gofish
 
 from ._ir import ir
-from gofish import Binning, Calendar, Constraint, Coord, Curve, Overlap, Placement, Spacing, Tiling, chunk, field, fr, line, ribbon, scatter, chart, circle, percent, select_all
+from gofish import Binning, Calendar, Constraint, Coord, Curve, Overlap, Placement, Shape, Slack, Spacing, Tiling, chunk, field, fr, line, ribbon, scatter, chart, circle, percent, select_all
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
@@ -217,6 +217,55 @@ def test_strategy_wrong_type_is_a_type_error(call, message):
 def test_strategy_unknown_kwarg_is_a_type_error(call):
     with pytest.raises(TypeError, match="unexpected keyword argument"):
         call()
+
+
+# A preset fixes its values and takes only the options it does not fix, so a
+# fixed one is a TypeError from its signature. Another value of it is the kind
+# (``Overlap.noise(smoothing=3)``, ``Slack.at(0.3)``).
+PRESET_FIXED = [
+    lambda: Overlap.sina(smoothing=3),
+    lambda: Overlap.jitter(randomness="blue"),
+    lambda: Overlap.jitter(smoothing=0),
+    lambda: Shape.hull(convexity=0.9),
+    lambda: Shape.hull(neck=0.5),
+    lambda: Shape.spine(convexity=0.2),
+    lambda: Slack.start(t=0.3),
+    lambda: Slack.center(t=0.3),
+    lambda: Slack.end(t=0.3),
+]
+
+
+@pytest.mark.parametrize("call", PRESET_FIXED)
+def test_preset_rejects_an_option_it_fixes(call):
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        call()
+
+
+def test_preset_takes_the_options_it_does_not_fix():
+    assert Overlap.sina(randomness="quasi", padding=1, seed=2) == {
+        "kind": "noise",
+        "smoothing": "silverman",
+        "randomness": "quasi",
+        "padding": 1,
+        "seed": 2,
+    }
+    assert Overlap.jitter(padding=1, seed=2) == {
+        "kind": "noise",
+        "randomness": "uniform",
+        "smoothing": math.inf,
+        "padding": 1,
+        "seed": 2,
+    }
+    assert Shape.hull(connection=0.5, holes=True, separate=True) == {
+        "kind": "blob",
+        "convexity": 1,
+        "neck": 1,
+        "connection": 0.5,
+        "holes": True,
+        "separate": True,
+    }
+    assert Shape.spine(neck=0.5) == {"kind": "blob", "convexity": 0, "neck": 0.5}
+    assert Slack.end() == Slack.at(1)
 
 
 def test_strategy_values_in_range_pass():

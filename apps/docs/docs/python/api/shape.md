@@ -46,16 +46,19 @@ Shape.box(rx=None, ry=None)
 Shape.oval()
 Shape.fillet(radius=None, neck=None, holes=None)
 Shape.blob(convexity=None, connection=None, neck=None, holes=None, separate=None)
-Shape.hull(convexity=None, connection=None, neck=None, holes=None, separate=None)
-Shape.spine(convexity=None, connection=None, neck=None, holes=None, separate=None)
+Shape.hull(connection=None, holes=None, separate=None)
+Shape.spine(connection=None, neck=None, holes=None, separate=None)
 ```
 
 Every member is a function call. Each returns a plain dict,
 `{"kind": ..., **params}`, for example `{"kind": "box", "rx": 16, "ry": 16}`.
-`Shape.hull()` and `Shape.spine()` are `Shape.blob()` with some params preset, so
-their dicts have kind `"blob"`: `Shape.hull(**opts)` is
+`Shape.hull()` and `Shape.spine()` are presets of `Shape.blob()`, so their
+dicts have kind `"blob"`: `Shape.hull(**opts)` is
 `Shape.blob(convexity=1, neck=1, **opts)`, and `Shape.spine(**opts)` is
-`Shape.blob(convexity=0, **opts)`. Any option overrides the preset. The nodes an
+`Shape.blob(convexity=0, **opts)`. A preset fixes those values and takes only
+the other options of `Shape.blob()`. A fixed option passed to it is a
+`TypeError`, and another value of it is written as `Shape.blob()`:
+`Shape.blob(convexity=0.9, neck=1)`, not `Shape.hull(convexity=0.9)`. The nodes an
 outline keeps out of are `enclose`'s `avoiding`, not a shape option, so every
 shape avoids them.
 

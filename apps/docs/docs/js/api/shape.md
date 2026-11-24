@@ -43,16 +43,19 @@ Shape.box({ rx?, ry? });
 Shape.oval();
 Shape.fillet({ radius?, neck?, holes? });
 Shape.blob({ convexity?, connection?, neck?, holes?, separate? });
-Shape.hull({ convexity?, connection?, neck?, holes?, separate? });
-Shape.spine({ convexity?, connection?, neck?, holes?, separate? });
+Shape.hull({ connection?, holes?, separate? });
+Shape.spine({ connection?, neck?, holes?, separate? });
 ```
 
 Every member is a function call. Each returns a plain object, `{ kind, ...params }`,
 of type `Shape.Shape`, for example `{ kind: "box", rx: 16, ry: 16 }`.
-`Shape.hull()` and `Shape.spine()` are `Shape.blob()` with some params preset, so
-their objects have kind `"blob"`: `Shape.hull(opts)` is
+`Shape.hull()` and `Shape.spine()` are presets of `Shape.blob()`, so their
+objects have kind `"blob"`: `Shape.hull(opts)` is
 `Shape.blob({ convexity: 1, neck: 1, ...opts })`, and `Shape.spine(opts)` is
-`Shape.blob({ convexity: 0, ...opts })`. Any option overrides the preset. The same
+`Shape.blob({ convexity: 0, ...opts })`. A preset fixes those values and takes
+only the other options of `Shape.blob()`. A fixed option passed to it is an
+error, and another value of it is written as `Shape.blob()`:
+`Shape.blob({ convexity: 0.9, neck: 1 })`, not `Shape.hull({ convexity: 0.9 })`. The same
 object is the shape's wire form. The nodes an outline keeps out of are
 `enclose`'s `avoiding`, not a shape option, so every shape avoids them.
 

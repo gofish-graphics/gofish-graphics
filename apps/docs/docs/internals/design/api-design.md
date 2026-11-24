@@ -293,6 +293,17 @@ for one member: a bare `spacing` amount is `Spacing.box(amount)`. The
 details, and why an option with one strategy has no option at all, are in
 [Three Surfaces](/internals/design-evolution/three-surfaces).
 
+**A preset takes only the options it does not fix.** A preset is a member that
+is another kind with some params fixed: `Overlap.sina` is `Overlap.noise` with
+`smoothing: "silverman"`, and `Slack.end` is `Slack.at(1)`. It is one exact
+point of its kind's space, so it takes the kind's other options and none of
+the ones it fixes. A preset with one of them changed is a different point, and
+it is written as the kind: `Shape.blob({ convexity: 0.9, neck: 1 })`, not
+`Shape.hull({ convexity: 0.9 })`. Passing a fixed option is a type error in
+TypeScript and an error at the call in both languages. The `STRATEGIES` table
+declares the fixed values once, and the JS option types, the run-time check,
+the Python signatures and the reference tables all come from it.
+
 **Say "visualization" unless it is a chart.** GoFish draws charts, diagrams,
 simulations and teaching figures on one substrate. Prose and examples say
 "visualization" unless the subject really is a statistical chart.

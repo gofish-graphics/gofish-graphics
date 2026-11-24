@@ -64,6 +64,7 @@ import {
   PY_OPERATOR_BASE_KWARGS,
   LABEL_OPTIONS,
   STRATEGIES,
+  presetParams,
   pyKwarg,
   resolveFields,
   type StrategyFamily,
@@ -1021,7 +1022,8 @@ interface FamilyFactory {
   /** The value of the dict's tag key. */
   tag: string;
   params: FieldGroup;
-  /** Param values, by field name, this member sets before the caller's. */
+  /** Param values, by field name, this member fixes (a preset); `params`
+   *  leaves them out. */
   preset: Record<string, unknown>;
   doc: string;
   /** The params that are positional-only, in order; the rest are
@@ -1049,11 +1051,8 @@ function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
   const ents = fields.map(
     (field) => [field, pyKwarg(field), params[field]] as const
   );
-  // A preset value is this factory's default for that param.
   const docLines = ents
-    .map(([field, py, spec]) =>
-      docLine(py, field in preset ? { ...spec, default: preset[field] } : spec)
-    )
+    .map(([, py, spec]) => docLine(py, spec))
     .filter(Boolean);
   const docstring = docLines.length
     ? [`    """${doc}`, "", "    Args:", ...docLines, `    """`].join("\n")
@@ -1265,14 +1264,9 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
         family,
         name: pyKwarg(name),
         tag: p.kind,
-        // A param the preset sets has the preset's value as its default,
-        // so the preset never requires it (`Slack.end()` sets `at`'s `t`).
-        params: Object.fromEntries(
-          Object.entries(spec.kinds[p.kind].params).map(([field, f]) => [
-            field,
-            field in p.values ? { ...f, required: false } : f,
-          ])
-        ),
+        // A preset takes only the params it does not fix, so passing a fixed
+        // one is a TypeError from the signature (`Slack.end(t=0.3)`).
+        params: presetParams(family, name),
         preset: p.values,
         doc: p.doc,
         positional: [],

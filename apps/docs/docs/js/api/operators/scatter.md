@@ -82,8 +82,9 @@ There are two strategies. They differ in what sets the width of the cloud.
   data axis and narrow where few do, so it shows the shape of the
   distribution. The dots are placed inside it and may touch.
 
-Two more functions make `noise` with other defaults. Any option you pass
-replaces the default.
+Two more functions are presets of `noise`. Each fixes the values in the
+table and takes only the other options of `noise`. Passing a fixed option is
+an error, and another value of one is a `noise` call.
 
 | Function           | Same as                                                         | Looks like                         |
 | ------------------ | --------------------------------------------------------------- | ---------------------------------- |
@@ -194,7 +195,8 @@ that would let dots with nearly equal values draw on top of each other.
 
 ### Options
 
-`noise`, `sina` and `jitter` take these options:
+`noise` takes these options. `sina` takes all of them but `smoothing`, and
+`jitter` takes `padding` and `seed`:
 
 - `randomness` says how the dots are placed inside the outline.
   - `"blue"` is the default for `noise` and `sina`. Each dot tries a few
@@ -204,7 +206,7 @@ that would let dots with nearly equal values draw on top of each other.
     quasirandom does. It is the fastest, so use it for very large data. Faint
     regular patterns can show in it.
   - `"uniform"` draws each offset at random, as classic jitter does. Dots can
-    clump and leave gaps. It is the default for `jitter`.
+    clump and leave gaps. `jitter` fixes it.
 - `smoothing` is the bandwidth of each bump, in data units of the data axis,
   for example grams. It can be:
   - a number, 0 or more. The default for `noise` is 0, which means no
@@ -213,14 +215,14 @@ that would let dots with nearly equal values draw on top of each other.
     would let dots with nearly equal values draw on top of each other, so
     each bump is always at least as wide as a dot, and the smoothing widens
     it from there.
-  - `"silverman"`, the default for `sina`. The bandwidth is worked out from
+  - `"silverman"`, the value `sina` fixes. The bandwidth is worked out from
     the data with Silverman's rule of thumb, `0.9 · min(sd, IQR / 1.34) ·
 n^(-1/5)`, separately for each group. This is the rule that ggforce's
     `geom_sina` and R's `density()` use, so the outline is the curve a violin
     plot draws. Spread out data gets wider bumps, and more data gets narrower
     ones. When a group has fewer than two dots, or every dot in it has the
     same value, the rule gives 0, so each bump is just the size of a dot.
-  - `Infinity`, the default for `jitter`. Every bump is flat, so the outline
+  - `Infinity`, the value `jitter` fixes. Every bump is flat, so the outline
     is a band of fixed width. With `randomness: "uniform"`, that is classic
     jitter, as in seaborn's `stripplot` or ggplot's `position_jitter`.
 - `padding` is a number of pixels added to each dot's width. The default

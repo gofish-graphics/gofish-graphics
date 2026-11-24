@@ -58,7 +58,8 @@ call only. The other members are values as they are, and `Slack.end` and
 `Slack.end()` are the same rule. A rule is a plain dict,
 `{"kind": "at", "t": ...}`. `Slack.start()`, `Slack.center()` and
 `Slack.end()` make the dicts of `Slack.at(0)`, `Slack.at(0.5)` and
-`Slack.at(1)`.
+`Slack.at(1)`. They fix `t` and take no options, so another fraction is
+`Slack.at(t)`.
 
 A layer solves its constraints on each axis together, so it takes one rule per
 axis, in a dict. Its keys are axis names in the scope of its children: `"x"`,

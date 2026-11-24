@@ -100,10 +100,38 @@ export function withKindValues<O>(opts: O): O {
   return (out ?? opts) as O;
 }
 
-/** The options that were given: an option left `undefined` does not
- *  override a preset (`Overlap.sina({ smoothing: undefined })` keeps the
- *  preset's smoothing). */
+/** The options that were given: an option left `undefined` is not given,
+ *  so it neither sets a param nor counts as an option a preset fixes. */
 export const given = <T extends object>(opts: T): Partial<T> =>
   Object.fromEntries(
     Object.entries(opts).filter(([, v]) => v !== undefined)
   ) as Partial<T>;
+
+/** The options of a preset that makes `V`: `V`'s params less the ones the
+ *  preset fixes (`Fixed`). A preset that fixes all of them takes none, so
+ *  any option is a type error. */
+export type PresetOptions<V extends { kind: string }, Fixed extends string> = [
+  Exclude<keyof V, "kind" | Fixed>,
+] extends [never]
+  ? Record<string, never>
+  : Omit<V, "kind" | Fixed>;
+
+/**
+ * The bare kind of preset `name` of `family`, made from its declaration in
+ * gofish-ir's `STRATEGIES` table, which is the one place that says what it
+ * fixes: its options are its kind's params less the fixed ones, in its type
+ * ({@link PresetOptions}) and at run time (`Frontend.presetValue`, which
+ * throws on a fixed one). `V` is the object its kind makes:
+ * `preset<NoiseOverlap>()("Overlap", "sina")`.
+ */
+export const preset =
+  <V extends { kind: string }>() =>
+  <F extends Frontend.StrategyFamilyName, P extends Frontend.PresetName<F>>(
+    family: F,
+    name: P
+  ) =>
+    bareKind(
+      `${family}.${name}`,
+      (opts?: PresetOptions<V, Frontend.PresetFixed<F, P>>): V =>
+        Frontend.presetValue(family, name, given(opts ?? {})) as V
+    );

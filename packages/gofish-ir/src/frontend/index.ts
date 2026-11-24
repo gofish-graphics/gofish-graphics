@@ -67,6 +67,8 @@ export {
   DESCRIPTOR_NAMESPACES,
   splitDottedName,
   optionsRequired,
+  presetParams,
+  presetValue,
   type ChannelInner,
   type FieldType,
   type FieldSpec,
@@ -78,4 +80,6 @@ export {
   type StrategyFamilyName,
   type StrategyKind,
   type StrategyPreset,
+  type PresetName,
+  type PresetFixed,
 } from "./descriptors.js";

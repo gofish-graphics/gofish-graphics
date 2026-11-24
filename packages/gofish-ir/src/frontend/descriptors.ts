@@ -567,12 +567,15 @@ export interface StrategyKind {
   positional?: readonly string[];
 }
 
-/** A factory that makes a kind with some of its params already set
- *  (`Overlap.sina()` is `noise` with `smoothing: "silverman"`). An option the
- *  caller passes overrides the preset value. */
+/** A factory that makes a kind with some of its params fixed
+ *  (`Overlap.sina()` is `noise` with `smoothing: "silverman"`). A preset is
+ *  one exact point of its kind's space: it takes only the params it does
+ *  not fix ({@link presetParams}), and a fixed one passed to it is an error
+ *  ({@link presetValue}). Another value of a fixed param is another point,
+ *  written as the kind (`Overlap.noise({ smoothing: 3 })`). */
 export interface StrategyPreset {
   kind: string;
-  /** Param values, by field name, set before the caller's options. */
+  /** The params it fixes, by field name, with their values. At least one. */
   values: Record<string, unknown>;
   doc: string;
 }
@@ -761,12 +764,12 @@ export const STRATEGIES = {
       sina: {
         kind: "noise",
         values: { smoothing: "silverman" },
-        doc: 'A sina plot: noise with smoothing "silverman", a bandwidth computed per scatter from the data (ggforce\'s `geom_sina`). The outline is the curve a violin plot draws. Any option overrides the preset.',
+        doc: 'A sina plot: noise with smoothing "silverman", a bandwidth computed per scatter from the data (ggforce\'s `geom_sina`). The outline is the curve a violin plot draws. It fixes smoothing and takes the other options of noise.',
       },
       jitter: {
         kind: "noise",
         values: { randomness: "uniform", smoothing: Infinity },
-        doc: 'Classic jitter: noise with randomness "uniform" and smoothing Infinity, so the dots get uniform random offsets in a flat band. Any option overrides the preset.',
+        doc: 'Classic jitter: noise with randomness "uniform" and smoothing Infinity, so the dots get uniform random offsets in a flat band. It fixes randomness and smoothing and takes the other options of noise.',
       },
     },
   },
@@ -1040,12 +1043,12 @@ export const STRATEGIES = {
       hull: {
         kind: "blob",
         values: { convexity: 1, neck: 1 },
-        doc: "The padded convex hull, rounded: blob with convexity 1 and neck 1. Any option overrides the preset.",
+        doc: "The padded convex hull, rounded: blob with convexity 1 and neck 1. It fixes convexity and neck and takes the other options of blob.",
       },
       spine: {
         kind: "blob",
         values: { convexity: 0 },
-        doc: "The routed spanning tree of tubes and nothing else: blob with convexity 0. Any option overrides the preset.",
+        doc: "The routed spanning tree of tubes and nothing else: blob with convexity 0. It fixes convexity and takes the other options of blob.",
       },
     },
   },
@@ -1225,17 +1228,17 @@ export const STRATEGIES = {
       start: {
         kind: "at",
         values: { t: 0 },
-        doc: "The least solution: each part as early as its gaps allow. The default. It is `Slack.at(0)`.",
+        doc: "The least solution: each part as early as its gaps allow. The default. It is `Slack.at(0)`. It takes no options.",
       },
       end: {
         kind: "at",
         values: { t: 1 },
-        doc: "The greatest solution within the least solution's span: each part as late as its gaps allow. It is `Slack.at(1)`.",
+        doc: "The greatest solution within the least solution's span: each part as late as its gaps allow. It is `Slack.at(1)`. It takes no options.",
       },
       center: {
         kind: "at",
         values: { t: 0.5 },
-        doc: "Halfway between the least and the greatest solution: the mean of the two. It is `Slack.at(0.5)`.",
+        doc: "Halfway between the least and the greatest solution: the mean of the two. It is `Slack.at(0.5)`. It takes no options.",
       },
     },
   },
@@ -1245,6 +1248,93 @@ export const STRATEGIES = {
  *  `"Curve"`, `"Binning"`, `"Calendar"`, `"Shape"`, `"Placement"`,
  *  `"Baseline"`, `"Spacing"` or `"Slack"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
+
+/** The presets of family `F`, as `STRATEGIES` declares them. */
+type PresetsOf<F extends StrategyFamilyName> = (typeof STRATEGIES)[F] extends {
+  presets: infer Ps;
+}
+  ? Ps
+  : Record<never, never>;
+
+/** The name of a preset of family `F`: `"sina"` or `"jitter"` of `"Overlap"`. */
+export type PresetName<F extends StrategyFamilyName> = keyof PresetsOf<F> &
+  string;
+
+/** The params preset `P` of family `F` fixes: `"smoothing"` for
+ *  `Overlap.sina`. */
+export type PresetFixed<
+  F extends StrategyFamilyName,
+  P extends PresetName<F>,
+> = PresetsOf<F>[P] extends { values: infer V } ? keyof V & string : never;
+
+/** The preset `name` of `family`, or an error naming the family. */
+function presetOf(family: string, name: string): StrategyPreset {
+  const spec = (STRATEGIES as Record<string, StrategyFamily>)[family];
+  const preset = spec?.presets?.[name];
+  if (preset === undefined)
+    throw new Error(`[gofish] ${family} has no preset ${name}.`);
+  return preset;
+}
+
+/** The params a preset takes: its kind's params, less the ones it fixes.
+ *  The JS factory's options, the Python factory's parameters and the API
+ *  reference's options table are these. */
+export function presetParams(family: string, name: string): FieldGroup {
+  const preset = presetOf(family, name);
+  const spec = (STRATEGIES as Record<string, StrategyFamily>)[family];
+  return Object.fromEntries(
+    Object.entries(spec.kinds[preset.kind].params).filter(
+      ([field]) => !Object.hasOwn(preset.values, field)
+    )
+  );
+}
+
+/** A param value as a call writes it: `"silverman"`, `Infinity`, `0.5`. */
+const argText = (v: unknown): string =>
+  typeof v === "number" ? String(v) : JSON.stringify(v);
+
+/**
+ * The strategy object preset `name` of `family` makes with the options
+ * `opts` (the ones given; leave an undefined one out first): its kind, the
+ * values it fixes, then `opts`. An option it fixes is an error that names
+ * the kind call with the same values, so the caller can write that point
+ * instead: `Overlap.sina({ smoothing: 3 })` names
+ * `Overlap.noise({ smoothing: 3 })`.
+ */
+export function presetValue(
+  family: string,
+  name: string,
+  opts: Record<string, unknown>
+): Record<string, unknown> {
+  const preset = presetOf(family, name);
+  const fixed = Object.keys(opts).filter((k) =>
+    Object.hasOwn(preset.values, k)
+  );
+  if (fixed.length > 0) {
+    const kind = (STRATEGIES as Record<string, StrategyFamily>)[family].kinds[
+      preset.kind
+    ];
+    const values: Record<string, unknown> = { ...preset.values, ...opts };
+    const positional = kind.positional ?? [];
+    const named = Object.keys(values).filter((k) => !positional.includes(k));
+    const args = [
+      ...positional.map((k) => argText(values[k])),
+      ...(named.length > 0
+        ? [`{ ${named.map((k) => `${k}: ${argText(values[k])}`).join(", ")} }`]
+        : []),
+    ];
+    const what = Object.entries(preset.values)
+      .map(([k, v]) => `${k} ${argText(v)}`)
+      .join(" and ");
+    throw new Error(
+      `[gofish] ${family}.${name}({ ${fixed.join(", ")} }): ${family}.${name} ` +
+        `is ${family}.${preset.kind} with ${what}, and takes only the options ` +
+        `it does not fix. For another ${fixed.join(" or ")}, write the kind: ` +
+        `${family}.${preset.kind}(${args.join(", ")}).`
+    );
+  }
+  return { kind: preset.kind, ...preset.values, ...opts };
+}
 
 /** The `Binning` kinds by the key they bin: one field, `field(x).bin(b)`, whose
  *  cells are intervals of a line, or two fields together,
@@ -1697,7 +1787,7 @@ const ENCLOSE_FIELDS: FieldGroup = group({
   },
   shape: {
     type: t.ref("Shape"),
-    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a `tile`, a region), the outline is the space it is given: Shape.box() is that space (a `tile`'s Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
+    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); each takes the options of blob it does not fix. Around a fresh member with no size of its own (a `tile`, a region), the outline is the space it is given: Shape.box() is that space (a `tile`'s Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
   },
   avoiding: {
     type: t.ref("NodeSelectionIR"),

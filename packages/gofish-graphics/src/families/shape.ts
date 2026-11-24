@@ -11,8 +11,9 @@
  * object, `{ kind, ...params }`. No shape has a required option, so each is
  * a value as it is, and calling it sets options: `Shape.hull` is
  * `Shape.hull()` (#1133, `ast/strategyKind.ts`). `hull()` and
- * `spine()` are `blob()` with other params preset, so their objects have
- * kind `"blob"`, the way `sina()` and `jitter()` are `noise()`. The kinds,
+ * `spine()` are presets of `blob()`: each fixes some params and takes only
+ * the others, and their objects have kind `"blob"`, the way `sina()` and
+ * `jitter()` are `noise()`. The kinds,
  * their params and the presets are declared once, in gofish-ir's
  * `STRATEGIES` table. The outline itself is built in
  * `ast/graphicalOperators/enclose/`. The nodes an outline keeps out of
@@ -20,12 +21,12 @@
  * `ast/nodeSelection.ts`).
  */
 import type { Frontend } from "gofish-ir";
-import { bareKind, given } from "../ast/strategyKind";
+import { bareKind, given, preset } from "../ast/strategyKind";
 /** `box()`: the padded bounding box. See {@link box}. */
 export type BoxShape = Extract<Frontend.ShapeIR, { kind: "box" }>;
 
 /** `blob()`: a smooth region. See {@link blob}. `hull()` and `spine()` make
- *  this same object with other params preset. */
+ *  this same object with some params fixed. */
 export type BlobShape = Extract<Frontend.ShapeIR, { kind: "blob" }>;
 
 /** `oval()`: the minimum-area enclosing ellipse. See {@link oval}. */
@@ -37,7 +38,8 @@ export type FilletShape = Extract<Frontend.ShapeIR, { kind: "fillet" }>;
 /** Every built-in outline: the value of `enclose`'s `shape`. */
 export type Shape = BoxShape | OvalShape | FilletShape | BlobShape;
 
-/** The options `blob()`, `hull()` and `spine()` share. */
+/** The options of `blob()`. `hull()` and `spine()` take those they do not
+ *  fix. */
 export type BlobOptions = Omit<BlobShape, "kind">;
 
 /**
@@ -124,27 +126,13 @@ export const blob = bareKind(
 
 /**
  * The padded convex hull, rounded: `blob()` with `convexity: 1` and
- * `neck: 1`. Any option overrides the preset.
+ * `neck: 1`. It fixes those two and takes the other options of `blob()`.
  */
-export const hull = bareKind(
-  "Shape.hull",
-  (opts: BlobOptions = {}): BlobShape => ({
-    kind: "blob",
-    convexity: 1,
-    neck: 1,
-    ...given(opts),
-  })
-);
+export const hull = preset<BlobShape>()("Shape", "hull");
 
 /**
  * The routed spanning tree of tubes and nothing else: `blob()` with
- * `convexity: 0`. Any option overrides the preset.
+ * `convexity: 0`. It fixes `convexity` and takes the other options of
+ * `blob()`.
  */
-export const spine = bareKind(
-  "Shape.spine",
-  (opts: BlobOptions = {}): BlobShape => ({
-    kind: "blob",
-    convexity: 0,
-    ...given(opts),
-  })
-);
+export const spine = preset<BlobShape>()("Shape", "spine");

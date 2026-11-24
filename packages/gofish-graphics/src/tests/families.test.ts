@@ -108,21 +108,16 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
   const members = [
     ...Object.entries(spec.kinds).map(([name, k]) => ({
       name,
-      kind: k,
-      preset: {} as Record<string, unknown>,
+      params: k.params,
     })),
-    ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
+    ...Object.keys(spec.presets ?? {}).map((name) => ({
       name,
-      kind: spec.kinds[p.kind],
-      preset: p.values,
+      params: Frontend.presetParams(family, name),
     })),
   ];
-  for (const { name, kind, preset } of members) {
+  for (const { name, params } of members) {
     const member = ns?.[name];
-    // A param a preset sets is not required of its factory.
-    const required = Object.entries(kind.params).some(
-      ([field, p]) => p.required && !(field in preset)
-    );
+    const required = Object.values(params).some((p) => p.required);
     if (required) {
       check(
         `${family}.${name} has a required option, so it is a call only`,
@@ -152,6 +147,58 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
       why ||
         `bare ${JSON.stringify(member)}, called ${JSON.stringify(called)}`
     );
+  }
+}
+// A preset is an exact point of its kind: it fixes the values `STRATEGIES`
+// declares and takes only its kind's other params. A fixed one is an error
+// that names the kind call with the same values; an open one sets that param.
+console.log("\n# a preset takes only the options it does not fix");
+for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
+  [string, Frontend.StrategyFamily]
+>) {
+  const ns = (GoFish as Record<string, any>)[family];
+  for (const [name, preset] of Object.entries(spec.presets ?? {})) {
+    const kindParams = spec.kinds[preset.kind].params;
+    const open = Frontend.presetParams(family, name);
+    check(
+      `${family}.${name} fixes at least one param, and its options are ` +
+        `${family}.${preset.kind}'s others`,
+      Object.keys(preset.values).length > 0 &&
+        JSON.stringify(Object.keys(open)) ===
+          JSON.stringify(
+            Object.keys(kindParams).filter((k) => !(k in preset.values))
+          ),
+      JSON.stringify(Object.keys(open))
+    );
+    for (const [field, value] of Object.entries(preset.values)) {
+      let message = "";
+      try {
+        ns[name]({ [field]: value });
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      check(
+        `${family}.${name}({ ${field} }) is an error naming ${family}.${preset.kind}`,
+        message.includes(`${family}.${name}({ ${field} })`) &&
+          message.includes(`${family}.${preset.kind}(`),
+        message
+      );
+    }
+    // An open param, set to its declared default, reaches the object, and
+    // the fixed values stay.
+    for (const [field, p] of Object.entries(open)) {
+      if (p.default === undefined) continue;
+      const made = ns[name]({ [field]: p.default });
+      check(
+        `${family}.${name}({ ${field} }) sets ${field}`,
+        made.kind === preset.kind &&
+          JSON.stringify(made[field]) === JSON.stringify(p.default) &&
+          Object.entries(preset.values).every(
+            ([k, v]) => JSON.stringify(made[k]) === JSON.stringify(v)
+          ),
+        JSON.stringify(made)
+      );
+    }
   }
 }
 {

@@ -158,25 +158,14 @@ def blob(*, convexity: Optional[float] = None, connection: Optional[float] = Non
 
 
 @bare_kind("Shape")
-def hull(*, convexity: Optional[float] = None, connection: Optional[float] = None, neck: Optional[float] = None, holes: Optional[bool] = None, separate: Optional[bool] = None) -> Dict[str, Any]:
-    """The padded convex hull, rounded: blob with convexity 1 and neck 1. Any option overrides the preset.
+def hull(*, connection: Optional[float] = None, holes: Optional[bool] = None, separate: Optional[bool] = None) -> Dict[str, Any]:
+    """The padded convex hull, rounded: blob with convexity 1 and neck 1. It fixes convexity and neck and takes the other options of blob.
 
     Args:
-        convexity: How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval. Default 1.
         connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
-        neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
         separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
-    if convexity is not None:
-        if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.hull(convexity=...) must be a number >= 0 and <= 2, got {type(convexity).__name__}")
-        if math.isnan(convexity):
-            raise ValueError(f"Shape.hull(convexity=...) must not be NaN, got {convexity!r}")
-        if convexity < 0:
-            raise ValueError(f"Shape.hull(convexity=...) must be >= 0, got {convexity!r}")
-        if convexity > 2:
-            raise ValueError(f"Shape.hull(convexity=...) must be <= 2, got {convexity!r}")
     if connection is not None:
         if not (isinstance(connection, (int, float)) and not isinstance(connection, bool)):
             raise TypeError(f"Shape.hull(connection=...) must be a number >= 0 and <= 1, got {type(connection).__name__}")
@@ -186,15 +175,6 @@ def hull(*, convexity: Optional[float] = None, connection: Optional[float] = Non
             raise ValueError(f"Shape.hull(connection=...) must be >= 0, got {connection!r}")
         if connection > 1:
             raise ValueError(f"Shape.hull(connection=...) must be <= 1, got {connection!r}")
-    if neck is not None:
-        if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
-            raise TypeError(f"Shape.hull(neck=...) must be a number > 0 and <= 1, got {type(neck).__name__}")
-        if math.isnan(neck):
-            raise ValueError(f"Shape.hull(neck=...) must not be NaN, got {neck!r}")
-        if neck <= 0:
-            raise ValueError(f"Shape.hull(neck=...) must be > 0, got {neck!r}")
-        if neck > 1:
-            raise ValueError(f"Shape.hull(neck=...) must be <= 1, got {neck!r}")
     if holes is not None:
         if not isinstance(holes, bool):
             raise TypeError(f"Shape.hull(holes=...) must be a bool, got {type(holes).__name__}")
@@ -203,9 +183,7 @@ def hull(*, convexity: Optional[float] = None, connection: Optional[float] = Non
             raise TypeError(f"Shape.hull(separate=...) must be a bool, got {type(separate).__name__}")
     out: Dict[str, Any] = {"kind": "blob", "convexity": 1, "neck": 1}
     for _k, _v in [
-        ("convexity", convexity),
         ("connection", connection),
-        ("neck", neck),
         ("holes", holes),
         ("separate", separate),
     ]:
@@ -215,25 +193,15 @@ def hull(*, convexity: Optional[float] = None, connection: Optional[float] = Non
 
 
 @bare_kind("Shape")
-def spine(*, convexity: Optional[float] = None, connection: Optional[float] = None, neck: Optional[float] = None, holes: Optional[bool] = None, separate: Optional[bool] = None) -> Dict[str, Any]:
-    """The routed spanning tree of tubes and nothing else: blob with convexity 0. Any option overrides the preset.
+def spine(*, connection: Optional[float] = None, neck: Optional[float] = None, holes: Optional[bool] = None, separate: Optional[bool] = None) -> Dict[str, Any]:
+    """The routed spanning tree of tubes and nothing else: blob with convexity 0. It fixes convexity and takes the other options of blob.
 
     Args:
-        convexity: How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval. Default 0.
         connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
         neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
         separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
-    if convexity is not None:
-        if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.spine(convexity=...) must be a number >= 0 and <= 2, got {type(convexity).__name__}")
-        if math.isnan(convexity):
-            raise ValueError(f"Shape.spine(convexity=...) must not be NaN, got {convexity!r}")
-        if convexity < 0:
-            raise ValueError(f"Shape.spine(convexity=...) must be >= 0, got {convexity!r}")
-        if convexity > 2:
-            raise ValueError(f"Shape.spine(convexity=...) must be <= 2, got {convexity!r}")
     if connection is not None:
         if not (isinstance(connection, (int, float)) and not isinstance(connection, bool)):
             raise TypeError(f"Shape.spine(connection=...) must be a number >= 0 and <= 1, got {type(connection).__name__}")
@@ -260,7 +228,6 @@ def spine(*, convexity: Optional[float] = None, connection: Optional[float] = No
             raise TypeError(f"Shape.spine(separate=...) must be a bool, got {type(separate).__name__}")
     out: Dict[str, Any] = {"kind": "blob", "convexity": 0}
     for _k, _v in [
-        ("convexity", convexity),
         ("connection", connection),
         ("neck", neck),
         ("holes", holes),
