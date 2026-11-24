@@ -1196,6 +1196,170 @@ A fourth, for a distribute inside .relate():
 out a whole layer (a spread) can close.
 ```
 
+<!-- id: rv-ends-pie -->
+
+```ts
+// No option. The chain fills a full turn, so its two ends share one gap:
+// half at each end under (H), all of it after the last slice under (F).
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: rv-ends-pie-stated -->
+
+```ts
+// (H) stated, whatever the default is
+spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: 0.5 }) });
+
+// (F) stated
+spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: [0, 1] }) });
+```
+
+<!-- id: rv-ends-chord -->
+
+```ts
+// No option. The chain of groups fills the turn; the sub-arcs of a group
+// are a stack, so they have no gaps.
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [
+  spread(
+    { dir: "x", spacing: 0.05, y: 120 },
+    trips.map((row, i) =>
+      stack(
+        { dir: "x", w: v(rowTotal(row)) },
+        row.map((m) => rect({ w: v(m), h: 18, fill: v(districts[i]) }))
+      )
+    )
+  ),
+]);
+```
+
+<!-- id: rv-ends-seam -->
+
+```ts
+// No room at the ends: a seam at 12 o'clock
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: 0 }) })
+  )
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: rv-ends-half -->
+
+```ts
+// A half turn has two ends, so the default is 0, as on a line
+chart(browsers, {
+  coord: Coord.clock({ centralAngle: Math.PI }),
+  w: 360,
+  h: 320,
+})
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+
+// Half a gap at each end, stated
+spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: 0.5 }) });
+```
+
+<!-- id: rv-ends-nested -->
+
+```ts
+// The outer chain fills the turn, so its ends share one gap of 0.12. Each
+// inner chain fills a share of the turn, so its ends are 0.
+chart(sales, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "x", spacing: 0.12 }),
+    spread({ by: "product", dir: "x", spacing: 0.03 })
+  )
+  .mark(rect({ w: "value", fill: "quarter" }));
+```
+
+<!-- id: rv-ends-rings -->
+
+```ts
+// Each ring's chain fills the turn, so each ring has the default
+chart(sales, { coord: Coord.clock({ innerRadius: 0.3 }), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "y", spacing: 4 }),
+    spread({ by: "product", dir: "x", spacing: 0.08 })
+  )
+  .mark(rect({ w: "value", fill: "product" }));
+```
+
+<!-- id: rv-ends-radar -->
+
+```ts
+// Spokes one share apart. The first spoke is at 12 o'clock under (F), and
+// half a step past it under (H). Under (H), `ends: [0, 1]` puts it at 12.
+chart(skills, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({
+      by: "metric",
+      dir: "x",
+      spacing: Spacing.pitch(fr(1), { at: "start" }),
+    })
+  )
+  .mark(rect({ w: 0, h: "value", stroke: "#bbb" }))
+  .layer(line({ stroke: "#555", strokeWidth: 2 }));
+```
+
+<!-- id: rv-ends-bars -->
+
+```ts
+// Bars one share apart, with no room at the ends (the default on a line)
+chart(fruit, { w: 320, h: 160 })
+  .flow(spread({ by: "name", dir: "x", spacing: Spacing.box(fr(1)) }))
+  .mark(rect({ h: "count", fill: "#4e79a7" }));
+
+// Half a gap at each end
+spread({ by: "name", dir: "x", spacing: Spacing.box(fr(1), { ends: 0.5 }) });
+
+// A whole gap at each end
+spread({ by: "name", dir: "x", spacing: Spacing.box(fr(1), { ends: 1 }) });
+```
+
+<!-- id: rv-ends-bars-today -->
+
+```ts
+// Bars that touch, each drawn in by a quarter of its width. The inset is
+// paint only, so the boxes still touch and the ends stay at 0.
+chart(fruit, { w: 320, h: 160 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0 }))
+  .mark(rect({ h: "count", fill: "#4e79a7", inset: percent(25) }));
+```
+
+<!-- id: rv-ends-fixed -->
+
+```ts
+// A spread 360 px wide: 12 px gaps, two gaps (24 px) at each end, and
+// three boxes that share what is left in the ratio 1 : 2 : 1
+spread(
+  { dir: "x", spacing: Spacing.box(12, { ends: 2 }), w: 360 },
+  [1, 2, 1].map((k) => rect({ w: fr(k), h: 40, fill: "#f28e2b" }))
+);
+```
+
+<!-- id: rv-ends-atleast -->
+
+```ts
+// At least 10 px between, and 10 px more past the first and last box
+spread(
+  { dir: "x", spacing: Spacing.atLeast(10, { ends: 1 }), w: 300 },
+  [40, 70, 55].map((w) => rect({ w, h: 40, fill: "#59a14f" }))
+);
+```
+
+<!-- id: rv-ends-spelling -->
+
+```ts
+// Recommended: an option of the spacing strategy
+spread({ by: "name", spacing: Spacing.box(fr(1), { ends: 0.5 }) });
+spread({ by: "metric", spacing: Spacing.pitch(fr(1), { ends: 0.5 }) });
+
+// Alternative: an option of spread, next to spacing
+spread({ by: "name", spacing: fr(1), ends: 0.5 });
+```
+
 <!-- id: rv-spread-slack -->
 
 ```ts

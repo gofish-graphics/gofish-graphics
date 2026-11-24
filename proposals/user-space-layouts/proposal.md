@@ -8,26 +8,366 @@ This tab has two parts. The first part shows four decisions that are still open,
 
 ### Open decisions
 
-#### 1\. Where a full-turn angle says it is closed (two prototypes)
+#### 1\. The room at the two ends of a spread (prototype)
 
-The decision is where the option that opens a closed angle axis lives. It can be on the coordinate space, as `Coord.clock({ closed: false })`, or on the operator, as `spread({ closed: false })`. Today the branch has no option. A spread that fills a full turn leaves a gap after its last part too, and nothing can turn that off. Both prototypes keep that default and add the option. For every example below, the two prototypes draw byte-identical images, so each picture is shown once.
+Last round asked where a `closed` option should live. This round splits it in two. A spread gets one parameter, `ends`, for the room it keeps before its first part and after its last. It is a multiple of the gap and works the same way on a line and around a turn. The coordinate space keeps one job only. A full-turn angle is glued, so a chain that fills it gets a default whose two ends add up to one gap. A stated `ends` always wins, and `ends: 0` on a full turn is a seam. No `closed` option is needed for any example below.
 
-![Pie with six gaps](img/review-closed-pie-default.png)
+Two defaults for the glued case are built behind a switch, so every picture is a render. Under **(H)** each end gets half a gap. Under **(F)** the start gets nothing and the end gets the whole gap. Today's branch draws (F).
 
-**\*Default.** Six slices, six gaps, the last between Opera and Chrome. Equal to **d3.pie().padAngle(0.04)** within 5e-7 rad.\*
+#### A pie under each default
 
-![Pie with a seam](img/review-closed-pie-seam.png)
+![Pie under default H](img/review-ends-pie-h.png)
 
-**\*closed: false.** Five gaps. Opera's end touches Chrome's start at 12 o'clock.\*
+**\*(H).** Half a gap on each side of 12 o'clock. Equal to the rim that **d3.arc** draws for **d3.pie().padAngle(0.04)** within 2e-15 rad. It is 0.02 rad, half a gap, off from d3.pie's own angles.\*
 
-**The default, both variants**
+![Pie under default F](img/review-ends-pie-f.png)
+
+**\*(F).** Chrome starts at 12 o'clock, and the whole gap sits before it. Equal to d3.pie's start and end angles within 9e-16 rad. It is 0.02 rad off from the rim that d3.arc draws.\*
+
+![Zoom at 12 o'clock under H](img/review-ends-pie-h-zoom.png)
+
+**\*(H), 5× at the top.** The red line is 12 o'clock. The gap is centered on it.\*
+
+![Zoom at 12 o'clock under F](img/review-ends-pie-f-zoom.png)
+
+**\*(F), 5× at the top.** The first slice starts on the red line. The gap is all to its left.\*
+
+**Proposed, both defaults**
 
 ```ts
-// Both variants: the same code, no option. A full turn closes.
+// No option. The chain fills a full turn, so its two ends share one gap:
+// half at each end under (H), all of it after the last slice under (F).
 chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
   .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
   .mark(rect({ w: "value", fill: "name" }));
 ```
+
+**Proposed, a default stated**
+
+```ts
+// (H) stated, whatever the default is
+spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: 0.5 }) });
+
+// (F) stated
+spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: [0, 1] }) });
+```
+
+**Code today**
+
+The same code as the first block. It draws (F), and there is no way to ask for (H) or for a seam.
+
+#### Chord arcs under each default
+
+![Chord arcs under H](img/review-ends-chord-h.png)
+
+**\*(H).** Every group sits 0.025 rad, half a gap, further round than in **d3.chord().padAngle(0.05)**.\*
+
+![Chord arcs under F](img/review-ends-chord-f.png)
+
+**\*(F).** Equal to d3.chord's groups within 5e-4 rad. That is the error of finding the center from the picture, since (H) less 0.025 gives (F) exactly.\*
+
+**Proposed, both defaults**
+
+```ts
+// No option. The chain of groups fills the turn; the sub-arcs of a group
+// are a stack, so they have no gaps.
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [
+  spread(
+    { dir: "x", spacing: 0.05, y: 120 },
+    trips.map((row, i) =>
+      stack(
+        { dir: "x", w: v(rowTotal(row)) },
+        row.map((m) => rect({ w: v(m), h: 18, fill: v(districts[i]) }))
+      )
+    )
+  ),
+]);
+```
+
+**Code today**
+
+The same code. It draws (F).
+
+> **Fork: the default on a glued axis.** d3 itself is split. Its layouts, d3.pie and d3.chord, compute (F). Its painter, d3.arc, draws each pie slice inset by half the pad on each side, so a d3 pie on screen looks like (H). ECharts computes (H) as well. (H) is the same rule as half a gap at each end on a line, so a pie and a bar chart read alike, and nothing is turned. (F) keeps today's output and matches d3.chord. It also keeps a radar's first spoke at 12 o'clock. Either default is one option away from the other.  
+> Recommended: (H). It matches what d3 users see, and it needs no rotation rule. The cost is that existing pies and chord diagrams turn by half a gap, and a radar has to say `ends: [0, 1]` to keep its first spoke at 12.
+
+#### The other turns
+
+![Pie with a seam](img/review-ends-pie-seam.png)
+
+**\*ends: 0.** Five gaps. Opera's end touches Chrome's start at 12 o'clock.\*
+
+![Half-turn pie](img/review-ends-half-turn.png)
+
+**\*A half turn.** Not glued, so the default is 0, with five gaps.\*
+
+![Half-turn pie with half a gap at each end](img/review-ends-half-turn-around.png)
+
+**\*A half turn, ends: 0.5.** Half a gap inside each end of the sweep.\*
+
+**The seam**
+
+```ts
+// No room at the ends: a seam at 12 o'clock
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: 0 }) })
+  )
+  .mark(rect({ w: "value", fill: "name" }));
+```
+
+**The half turn**
+
+```ts
+// A half turn has two ends, so the default is 0, as on a line
+chart(browsers, {
+  coord: Coord.clock({ centralAngle: Math.PI }),
+  w: 360,
+  h: 320,
+})
+  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
+  .mark(rect({ w: "value", fill: "name" }));
+
+// Half a gap at each end, stated
+spread({ by: "name", dir: "x", spacing: Spacing.box(0.04, { ends: 0.5 }) });
+```
+
+**Code today**
+
+The half turn with no option is the same today. The seam and the half turn with ends cannot be written.
+
+![Nested pie](img/review-ends-nested.png)
+
+**\*Nested, (H).** The outer chain fills the turn, so its ends share one gap of 0.12. Each inner chain fills a share, so its ends are 0.\*
+
+![Rings](img/review-ends-rings.png)
+
+**\*Rings, (H).** Each ring fills the turn, so each ring gets the default.\*
+
+**Nested**
+
+```ts
+// The outer chain fills the turn, so its ends share one gap of 0.12. Each
+// inner chain fills a share of the turn, so its ends are 0.
+chart(sales, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "x", spacing: 0.12 }),
+    spread({ by: "product", dir: "x", spacing: 0.03 })
+  )
+  .mark(rect({ w: "value", fill: "quarter" }));
+```
+
+**Rings**
+
+```ts
+// Each ring's chain fills the turn, so each ring has the default
+chart(sales, { coord: Coord.clock({ innerRadius: 0.3 }), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "y", spacing: 4 }),
+    spread({ by: "product", dir: "x", spacing: 0.08 })
+  )
+  .mark(rect({ w: "value", fill: "product" }));
+```
+
+**Code today**
+
+The same code. Both draw (F).
+
+![Radar spokes under H](img/review-ends-radar-h.png)
+
+**\*Radar, (H).** The first spoke is half a step, 30°, past 12 o'clock.\*
+
+![Radar spokes under F](img/review-ends-radar-f.png)
+
+**\*Radar, (F).** The first spoke is at 12 o'clock.\*
+
+Look at the spokes only. The line bends because it is drawn inside the polar space, which "Radar" below replaces with an outline drawn outside it.
+
+**Radar spokes**
+
+```ts
+// Spokes one share apart. The first spoke is at 12 o'clock under (F), and
+// half a step past it under (H). Under (H), `ends: [0, 1]` puts it at 12.
+chart(skills, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({
+      by: "metric",
+      dir: "x",
+      spacing: Spacing.pitch(fr(1), { at: "start" }),
+    })
+  )
+  .mark(rect({ w: 0, h: "value", stroke: "#bbb" }))
+  .layer(line({ stroke: "#555", strokeWidth: 2 }));
+```
+
+#### Bars on a line
+
+On a line nothing is glued, so the default is 0 and only a stated `ends` adds room. The same parameter gives the three CSS spacings.
+
+| `ends`   | Room at each end                      | CSS `justify-content` |
+| -------- | ------------------------------------- | --------------------- |
+| `0`      | None                                  | `space-between`       |
+| `0.5`    | Half a gap                            | `space-around`        |
+| `1`      | A whole gap                           | `space-evenly`        |
+| `[s, e]` | `s` gaps at the start, `e` at the end | None                  |
+
+![Bars, ends 0](img/review-ends-bars-between.png)
+
+**\*ends: 0.** The default. The first and last bar touch the ends of the axis.\*
+
+![Bars, ends 0.5](img/review-ends-bars-around.png)
+
+**\*ends: 0.5.** Half a gap at each end, like a d3 band scale with **paddingInner(0.5)** and **paddingOuter(0.25)**.\*
+
+![Bars, ends 1](img/review-ends-bars-evenly.png)
+
+**\*ends: 1.** A whole gap at each end, like **d3.scaleBand().padding(0.5)**.\*
+
+![Bars with inset](img/review-ends-bars-today.png)
+
+**\*Today.** Spacing 0 and **inset: percent(25)**. It looks like ends of 0.5, but only the paint moves.\*
+
+**Proposed**
+
+```ts
+// Bars one share apart, with no room at the ends (the default on a line)
+chart(fruit, { w: 320, h: 160 })
+  .flow(spread({ by: "name", dir: "x", spacing: Spacing.box(fr(1)) }))
+  .mark(rect({ h: "count", fill: "#4e79a7" }));
+
+// Half a gap at each end
+spread({ by: "name", dir: "x", spacing: Spacing.box(fr(1), { ends: 0.5 }) });
+
+// A whole gap at each end
+spread({ by: "name", dir: "x", spacing: Spacing.box(fr(1), { ends: 1 }) });
+```
+
+**Code today**
+
+```ts
+// Bars that touch, each drawn in by a quarter of its width. The inset is
+// paint only, so the boxes still touch and the ends stay at 0.
+chart(fruit, { w: 320, h: 160 })
+  .flow(spread({ by: "name", dir: "x", spacing: 0 }))
+  .mark(rect({ h: "count", fill: "#4e79a7", inset: percent(25) }));
+```
+
+![Three boxes in a fixed width with ends](img/review-ends-fixed-width.png)
+
+**\*A fixed width.** The grey box is 360 px. The ends take 24 px each and the gaps 12 px, and the shares fill the rest.\*
+
+![Minimum gaps with ends](img/review-ends-at-least.png)
+
+**\*Spacing.atLeast with ends: 1.** 10 px before the first box. The grey box is 300 px.\*
+
+**Proposed**
+
+```ts
+// A spread 360 px wide: 12 px gaps, two gaps (24 px) at each end, and
+// three boxes that share what is left in the ratio 1 : 2 : 1
+spread(
+  { dir: "x", spacing: Spacing.box(12, { ends: 2 }), w: 360 },
+  [1, 2, 1].map((k) => rect({ w: fr(k), h: 40, fill: "#f28e2b" }))
+);
+```
+
+```ts
+// At least 10 px between, and 10 px more past the first and last box
+spread(
+  { dir: "x", spacing: Spacing.atLeast(10, { ends: 1 }), w: 300 },
+  [40, 70, 55].map((w) => rect({ w, h: 40, fill: "#59a14f" }))
+);
+```
+
+**Code today**
+
+Neither can be written. A spacer rect at each end is the closest, and it is a part of the chain, so it takes a gap of its own.
+
+With `Spacing.atLeast` and a fixed width, the room left past the minimum gaps still goes after the last box, as the slack rule says. The ends only add a minimum at each end. The prototype does not share the leftover room with them.
+
+> **Fork: how `ends` is spelled.** It can be an option of the spacing strategy, or an option of `spread` next to `spacing`. The strategy form measures the ends in the strategy's own unit and from its own anchors. A pitch measures them from the pitched point, as d3's point scale does, and `Constraint.distribute` gets them without a new option. It also matches d3 and Vega-Lite, where outer padding sits next to inner padding on the scale. The `spread` form is shorter with a plain number, since it needs no `Spacing.box`.  
+> Recommended: the option of the strategy.
+
+```ts
+// Recommended: an option of the spacing strategy
+spread({ by: "name", spacing: Spacing.box(fr(1), { ends: 0.5 }) });
+spread({ by: "metric", spacing: Spacing.pitch(fr(1), { ends: 0.5 }) });
+
+// Alternative: an option of spread, next to spacing
+spread({ by: "name", spacing: fr(1), ends: 0.5 });
+```
+
+#### How other systems spell it
+
+#### [d3 band scale](https://d3js.org/d3-scale/band)
+
+`paddingInner` is a fraction of the step, and `paddingOuter` is a multiple of the step at each end. `padding` sets both. The point scale's `padding` is the outer one.
+
+#### [Vega-Lite](https://vega.github.io/vega-lite/docs/scale.html)
+
+`paddingInner` and `paddingOuter`, both fractions of the step. A point scale has half a step at each end by default.
+
+#### [Observable Plot](https://observablehq.com/plot/features/scales)
+
+`paddingInner` and `paddingOuter`, which `padding` sets together. `align` says where leftover room goes. A point scale has half a step at each end.
+
+#### [CSS justify-content](https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content)
+
+The rule for the ends is a value of one property, such as `space-around`. It is set apart from `gap` and from `padding`.
+
+#### [Jetpack Compose](https://developer.android.com/reference/kotlin/androidx/compose/foundation/layout/Arrangement)
+
+One `Arrangement` value holds both the gap and the ends, such as `SpaceAround` or `spacedBy(gap)`.
+
+#### SwiftUI, Figma auto layout
+
+The gap applies between children only. The ends come from padding on the container, a separate setting.
+
+#### [ggplot2](https://ggplot2.tidyverse.org/reference/expansion.html)
+
+`expansion(mult, add)` widens both limits of the scale. A discrete scale adds 0.6 of a step at each end by default.
+
+#### [d3.pie, d3.arc](https://d3js.org/d3-shape/pie)
+
+d3.pie starts at 0 and puts each pad after its slice, which is (F). d3.arc then insets each side by half the pad, so the drawn pie is (H).
+
+#### [d3.chord](https://d3js.org/d3-chord/chord)
+
+Starts at 0 and adds the pad after every group, the last one too. That is (F).
+
+#### [ECharts pie](https://github.com/apache/echarts/blob/master/src/chart/pie/pieLayout.ts)
+
+Moves each slice's start forward and its end back by half the pad. That is (H).
+
+The scale systems put the ends next to the gap, in the same unit. The layout systems either put them in the same value as the gap (Compose, CSS) or in container padding (SwiftUI, Figma). None of them has a separate switch for a closed axis.
+
+#### How ends relate to slack and to inset
+
+The slack rule places parts inside the room that minimum gaps leave. It does nothing when the gaps are exact, while the ends change how long the chain is, and the scale fits that length. The two can meet. The "even" rule for a sankey counts the walls as items, which is `ends: 1` for the leftover room, so a later `Slack.even` could read the weights from `ends`. The inset proposed in \#1406, for a stack or a tile that glues its parts, is a margin of one node in pixels or a percent. It does not follow the gap. The `inset` on `rect` moves paint only.
+
+**Earlier candidates: `closed` on the coord or on the operator**
+
+Last round's two prototypes added a `closed` option and kept (F) as the default. They drew the same images. The split above covers every one of these examples without it.
+
+![Pie with six gaps](img/review-closed-pie-default.png)
+
+**\*Default.** Six gaps, the last between Opera and Chrome. Now the (F) default.\*
+
+![Pie with a seam](img/review-closed-pie-seam.png)
+
+**\*closed: false.** Now **ends: 0**.\*
+
+![Half-turn pie](img/review-closed-half-turn.png)
+
+**\*A half turn.** The same as now.\*
+
+![Chord arcs](img/review-closed-chord.png)
+
+**\*Chord arcs.** Now the (F) default.\*
+
+![Nested pie](img/review-closed-nested.png)
+
+**\*Nested.** Now the (F) default for the outer chain.\*
 
 **The seam, on the coord**
 
@@ -47,63 +387,7 @@ chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
   .mark(rect({ w: "value", fill: "name" }));
 ```
 
-![Half-turn pie](img/review-closed-half-turn.png)
-
-**\*A half turn.** An interval with two ends, so five gaps.\*
-
-![Chord arcs](img/review-closed-chord.png)
-
-**\*Chord arcs.** The chain of five groups closes, so five gaps.\*
-
-![Nested pie](img/review-closed-nested.png)
-
-**\*Nested.** The outer chain closes (three gaps of 0.12). Each inner chain fills only a share of the turn, so it stays open.\*
-
-**The half turn**
-
-```ts
-// Both variants: the same code. A half turn has two ends.
-chart(browsers, {
-  coord: Coord.clock({ centralAngle: Math.PI }),
-  w: 360,
-  h: 320,
-})
-  .flow(spread({ by: "name", dir: "x", spacing: 0.04 }))
-  .mark(rect({ w: "value", fill: "name" }));
-```
-
-**The chord arcs**
-
-```ts
-// Both variants: the same code. The chain of groups closes; the sub-arcs
-// of a group are a stack, so they have no gaps.
-layer({ coord: Coord.clock(), w: 360, h: 320 }, [
-  spread(
-    { dir: "x", spacing: 0.05, y: 120 },
-    trips.map((row, i) =>
-      stack(
-        { dir: "x", w: v(rowTotal(row)) },
-        row.map((m) => rect({ w: v(m), h: 18, fill: v(districts[i]) }))
-      )
-    )
-  ),
-]);
-```
-
-**The nested pie**
-
-```ts
-// Both variants: the same code. The outer chain fills the turn and closes
-// (three gaps of 0.12). Each inner chain fills a share of it and stays open.
-chart(sales, { coord: Coord.clock(), w: 360, h: 320 })
-  .flow(
-    spread({ by: "quarter", dir: "x", spacing: 0.12 }),
-    spread({ by: "product", dir: "x", spacing: 0.03 })
-  )
-  .mark(rect({ w: "value", fill: "quarter" }));
-```
-
-A wrong `closed: true` fails differently in each variant. On the coord there is one message, and it comes when the space is made. On the operator there are three messages for a spread, and they come at render, because only the layout pass knows whether the chain fills a full turn.
+A wrong `closed: true` was an error, once on the coord and in three ways on the operator. A stated `ends` means the same thing on any axis, so it has no wrong case.
 
 **The error, on the coord**
 
@@ -144,18 +428,6 @@ A fourth, for a distribute inside .relate():
 [gofish] Constraint.distribute({ closed: true }): only a chain that lays
 out a whole layer (a spread) can close.
 ```
-
-|                            | On the coord                                                    | On the operator                                                                                       |
-| -------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Where it is decided        | Once, by the space. A chain closes when it fills a closed axis. | By each chain. The default still asks the space whether the angle is a full turn.                     |
-| Public options touched     | `closed` on `Coord.polar` and `Coord.clock`                     | `closed` on `spread` and on `Constraint.distribute`                                                   |
-| A wrong `closed: true`     | One message, when the space is made                             | Three messages for a spread and one for a distribute, at render                                       |
-| Library lines changed      | about +40 and −20                                               | about +68 and −30                                                                                     |
-| What only this form can do | Nothing extra.                                                  | Open one chain and close another under the same full turn. No example has been found that needs this. |
-
-The prototypes also differed on whether a radar line closes. That is left out here, because a radar outline is now drawn outside the coordinate space (see "Radar" below), so no line inside the space needs to ask.
-
-> **Fork.** Put `closed` on the coord, or on the operator. Recommended: on the coord, because the operator's default has to ask the space anyway, and the coord form gives one error at the call. If you say yes, the coord patch moves onto the branch with its tests, the descriptor entry and its Python mirror, and the reference pages for `Coord.polar` and `Coord.clock` gain the option.
 
 #### 2\. Whether `spread` keeps its `slack` option (today)
 
