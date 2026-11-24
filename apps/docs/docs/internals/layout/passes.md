@@ -877,7 +877,10 @@ fixed-size nodes report their size).
   takes room where it draws, and σ is solved with it, while the mark it
   describes stays where its own layout puts it. A layer that places such a
   stand-in claims the hull of its solve, not the fold that starts its
-  children at its origin. A region (a `partition` cell) places a child
+  children at its origin. A child is placed by the solve when a constraint
+  can move it: when it is an operand, or when an operand nested in it is
+  (`constrainedOn`), except as the source of an align by `"span"` or
+  `"size"`, which reads its source where it is. A region (a `partition` cell) places a child
   that fills across its datum span, as an interval does, and a child with
   a size of its own in the middle of it, as layout does; either way the
   cell is the room it takes (`ClaimPlacement.rooms`). A child with no

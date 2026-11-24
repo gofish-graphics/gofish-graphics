@@ -433,6 +433,147 @@ async function main() {
       holds.conflicts.length === 0,
       holds.conflicts
     );
+    // A cycle back to the same node of a group is still a cycle of gaps.
+    const sameNode = throws(
+      () =>
+        solve(
+          problem(
+            ["p", "q", "r"],
+            [["p", "r", 40]],
+            [
+              ["p", "q", 1],
+              ["q", "p", 1],
+            ]
+          )
+        ),
+      /form a cycle: \{p, r\} → \{q\} → \{p, r\}|form a cycle: \{q\} → \{p, r\} → \{q\}/
+    );
+    check(
+      "a cycle out of and back into one node of a group is a cycle",
+      sameNode !== undefined && !sameNode.startsWith("wrong"),
+      sameNode
+    );
+  }
+
+  console.log("\n# an item held between two members of one rigid group");
+  {
+    // p and r exactly 40 apart (p 4 wide, q 10 wide, r 4 wide); q at least
+    // 8 after p's end and 8 before r's start: q starts 12 to 22 past p.
+    const sizes = new Map([
+      ["p", 4],
+      ["q", 10],
+      ["r", 4],
+    ]);
+    const between = (exact: number, slack: Slack.Slack) =>
+      solve(
+        problem(
+          ["p", "q", "r"],
+          [["p", "r", exact]],
+          [
+            ["p", "q", 4 + 8],
+            ["q", "r", 10 + 8],
+          ],
+          slack,
+          { sizes }
+        )
+      );
+    const want: [Slack.Slack, string, number][] = [
+      [Slack.start(), "start", 12],
+      [Slack.center(), "center", 17],
+      [Slack.end(), "end", 22],
+      [Slack.at(0.25), "at(0.25)", 14.5],
+    ];
+    for (const [rule, name, q] of want) {
+      const p = between(40, rule);
+      check(
+        `${name}: q ${q} past p, and r still 40 past p`,
+        near(p.get("q")! - p.get("p")!, q) &&
+          near(p.get("r")! - p.get("p")!, 40),
+        [...p]
+      );
+    }
+    const short = throws(
+      () => between(25, Slack.start()),
+      /need more room than exact constraints leave: the gaps \(gap p→q, gap q→r\) lead out of \{p, r\} and back into it.* 5 px short/
+    );
+    check(
+      "too little room is an error that says how much is missing",
+      short !== undefined && !short.startsWith("wrong"),
+      short
+    );
+    check(
+      "and it is not reported as a cycle",
+      short !== undefined && !short.includes("cycle"),
+      short
+    );
+    const exactFit = between(30, Slack.center());
+    check(
+      "room that fits exactly leaves q one place",
+      near(exactFit.get("q")! - exactFit.get("p")!, 12),
+      [...exactFit]
+    );
+    // Pinned on both sides: p at 100 and r at 140 by pins, the same room.
+    for (const [rule, name, q] of want) {
+      const p = solveAxisProblem(numbers, "x", {
+        ...problem(
+          ["p", "q", "r"],
+          [],
+          [
+            ["p", "q", 4 + 8],
+            ["q", "r", 10 + 8],
+          ],
+          rule,
+          { sizes }
+        ),
+        pins: [
+          { node: "p", value: 100, owner: "pin p" },
+          { node: "r", value: 140, owner: "pin r" },
+        ],
+      });
+      check(
+        `pinned on both sides, ${name}: the pins hold, q at ${100 + q}`,
+        p.positions.get("p") === 100 &&
+          p.positions.get("r") === 140 &&
+          near(p.positions.get("q"), 100 + q) &&
+          p.conflicts.length === 0,
+        [...p.positions]
+      );
+    }
+    // The same in σ through a layer's constraints: p is σ + 4 wide, r
+    // exactly 40 past p's end, q 10 wide, at least 8 from each: q starts 8
+    // to 22 past p's end.
+    const fromEnd = new Map([
+      ["start", 8],
+      ["center", 15],
+      ["end", 22],
+      ["at(0.25)", 11.5],
+    ]);
+    const kids = [box("p", 1, 4), box("q", 0, 10), box("r", 0, 4)];
+    const [rp, rq, rr] = kids.map((k) => ref(k.name));
+    const cs = [
+      Constraint.distribute({ dir: "x", spacing: 40 }, [rp, rr]),
+      Constraint.distribute({ dir: "x", spacing: atLeast(8) }, [rp, rq, rr]),
+    ];
+    for (const [rule, name] of want) {
+      const symbolic = solveIn(values, kids, cs, (v) => v, rule.t);
+      const misses: string[] = [];
+      for (const sigma of [0, 1, 10]) {
+        const numeric = layout(kids, cs, sigma, rule.t);
+        const pEnd = numeric.get("p")! + sigma + 4;
+        if (!near(numeric.get("q")! - pEnd, fromEnd.get(name)!))
+          misses.push(`σ=${sigma} q: ${numeric.get("q")}`);
+        for (const [n, min] of numeric) {
+          const s = symbolic.cells.get(n);
+          if (s === undefined || Math.abs(Pwl.at(s.min, sigma) - min) > 1e-9)
+            misses.push(`σ=${sigma} ${n}: ${min}`);
+        }
+      }
+      check(
+        `${name}: through distribute, in σ and in numbers`,
+        misses.length === 0,
+        misses
+      );
+    }
   }
 
   console.log("\n# each slack rule");
@@ -585,8 +726,9 @@ async function main() {
     const { layer, spread, rect, Constraint: C, Spacing: S } = GoFish as any;
     // x: b at least 10 after a and 10 before c, and c at least 60 after a,
     // all 20 wide: b starts 30 to 50 past a, so it has 20 of slack. y: the
-    // same, along y. (A gap into and out of one rigid group is a cycle, so
-    // the long edge is a minimum gap too.)
+    // same, along y. (The long edge is a minimum gap, so the slack is
+    // bounded by gaps alone; an exact long edge is the RowPinned case,
+    // "an item held between two members of one rigid group" above.)
     const row = (slack: Record<string, Slack.Slack> | undefined) =>
       layer(slack === undefined ? {} : { slack }, [
         rect({ w: 20, h: 20, fill: "red" }).name("a"),

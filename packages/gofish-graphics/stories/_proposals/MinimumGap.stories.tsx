@@ -107,6 +107,39 @@ export const RowAll: StoryObj = {
   },
 };
 
+/**
+ * p and r an exact 160 apart, and q between them, at least 8 from each.
+ * The gaps lead out of p and back into r, which one rigid group holds, so
+ * q's room is what the exact distance leaves: 160 − 40 − 16 = 104 to
+ * spare, which the layer's `slack` on x places. Under start, center and
+ * end, one above another.
+ */
+const pinnedRow = (slack: Slack.Slack) =>
+  layer({ slack: { x: slack } }, [
+    Box({ label: "p", w: 30, fill: "#e5e5e5" }).name("p"),
+    Box({ label: "q", w: 40, fill: "#e63946" }).name("q"),
+    Box({ label: "r", w: 30, fill: "#e5e5e5" }).name("r"),
+  ]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 160 }, [c.p, c.r]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+      c.p,
+      c.q,
+      c.r,
+    ]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+  ]);
+
+export const RowPinned: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    spread(
+      { dir: "y", spacing: 16, alignment: "start" },
+      [Slack.start(), Slack.center(), Slack.end()].map(pinnedRow)
+    ).render(container, { w: 260, h: 120 });
+    return container;
+  },
+};
+
 // ─────────────────────────────────────────────────────────────────────────
 // 2. A dendrogram (d3.cluster): levels by minimum gaps, x by means
 // ─────────────────────────────────────────────────────────────────────────

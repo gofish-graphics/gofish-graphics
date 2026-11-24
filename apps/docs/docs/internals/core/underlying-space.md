@@ -1335,10 +1335,19 @@ gap after another. The exact facts are solved first, into rigid groups
 (the components), and every pinned component joins one group, since a pin is
 an exact gap from the layer's origin. The gaps then separate the groups
 (`separateGroups`): two gaps between one pair of groups compose by their max,
-a gap inside one group only checks it, and a cycle of gaps is an error naming
-its groups. The least solution is the longest path over the groups, each
-group with no gap into it starting at 0. The greatest is the least solution of
-the mirrored problem, inside the least solution's span. So a minimum gap gives
+and a gap inside one group only checks it. A gap names two nodes, so a gap
+out of a group at one member and back into it at another is no cycle of
+positions: what it passes sits between the two members, in the room their
+exact distance leaves. So the groups that gaps lead around and back into are
+one strongly connected set, solved by the longest paths between its groups,
+and the sets are solved in an order where every gap between two sets points
+forward. A path around a set longer than 0 is room the gaps need and the
+exact distances do not leave, an error that says how much is missing
+(`roomHolds`). A cycle of gaps that comes back to the node it left is an
+error naming its groups (`noGapCycle`). The least solution is the longest
+path over the groups, each group of a set with no gap into it starting at 0
+at least. The greatest is the least solution of the mirrored problem, inside
+the least solution's span. So a minimum gap gives
 each group a range of positions, not one position, and a group's slack is its
 greatest place minus its least. The slack rule (`Slack.at(t)`, with `start`,
 `center` and `end` its points 0, 0.5 and 1) puts every group the same fraction

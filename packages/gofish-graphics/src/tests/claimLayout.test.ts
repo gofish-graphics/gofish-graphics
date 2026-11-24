@@ -493,6 +493,43 @@ async function main() {
     );
   }
 
+  console.log(
+    '\n# an align by "span" reads a source nested in a child, and does not move it'
+  );
+  {
+    // The Bluefish baking-recipes shape: an inner layer places two cells,
+    // and the outer layer sizes a border to the second cell through a
+    // nested operand. The span only reads its source, so the inner layer
+    // stays where it is seated, and the border lands on the cell.
+    const inner = layerOf([
+      rect({ w: 30, h: 10, fill: "red" }).name("a"),
+      rect({ w: 50, h: 10, fill: "blue" }).name("b"),
+    ]).relate(({ a, b }: any) => [
+      Constraint.distribute({ dir: "x", spacing: 7 }, [a, b]),
+    ]);
+    const dl = await layerOf([
+      inner,
+      rect({ fill: "none", stroke: "green" }).name("border"),
+    ])
+      .relate(({ b, border }: any) => [
+        Constraint.align({ x: "span" }, [b, border]),
+        Constraint.align({ y: "span" }, [b, border]),
+      ])
+      .toDisplayList({});
+    const rects = items(dl).filter((i) => i.kind === "rect");
+    const blue = rects.find((r) => r.style?.fill === "blue");
+    const border = rects.find((r) => r.style?.fill === "none");
+    check(
+      "the border spans the nested cell",
+      blue !== undefined &&
+        border !== undefined &&
+        close(border.x, blue.x!) &&
+        close(border.w, 50) &&
+        close(blue.x, 37),
+      rects
+    );
+  }
+
   report();
 }
 

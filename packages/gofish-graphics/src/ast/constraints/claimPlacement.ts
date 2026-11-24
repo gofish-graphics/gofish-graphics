@@ -348,10 +348,22 @@ export const constraintsOn = (
   return out;
 };
 
+/** Whether `c` sizes its operands on `axis` from a source placed before the
+ *  solve (an align by `"span"` or `"size"`): it reads its source and moves
+ *  only the operands it sizes. */
+const sizesFromSource = (c: ConstraintSpec, axis: 0 | 1): boolean => {
+  if (c.type !== "align") return false;
+  const spec = c[axisName(axis)];
+  return spec === "span" || spec === "size";
+};
+
 /** The children a constraint places on `axis` (a position, an align, a
  *  distribute or a nest acting on it), by their operands: a direct operand
  *  is the child, and one nested in a child moves that child with it
- *  (`NestedOperand`), so it places the child too. Of the constraints that
+ *  (`NestedOperand`), so it places the child too. A nested operand of an
+ *  align by `"span"` or `"size"` places nothing: it cannot be resized from
+ *  outside its container, so it can only be the source the align reads,
+ *  which must be placed already (`sizesFromSource`). Of the constraints that
  *  pass `test`, if one is given. */
 function constrainedOn(
   axis: 0 | 1,
@@ -363,9 +375,10 @@ function constrainedOn(
   const out = new Set<number>();
   for (const c of constraints) {
     if (!actsOn(c, axis) || !test(c)) continue;
+    const readsNested = sizesFromSource(c, axis);
     for (const r of c.children) {
       const op = operands.get(keyOf(r));
-      if (op !== undefined) out.add(op.child);
+      if (op !== undefined && (op.direct || !readsNested)) out.add(op.child);
     }
   }
   return out;

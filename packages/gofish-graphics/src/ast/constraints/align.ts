@@ -131,7 +131,11 @@ export function lowerAlignPlacement<T>(
         `Constraint.align: "${kind}" on axis "${axis}" (${owner}) needs an ` +
           `already-placed source — none of [${children
             .map((c) => c.ref.name)
-            .join(", ")}] is placed yet.`
+            .join(", ")}] is placed yet. The source is read where it is ` +
+          `before this layer's solve: a child that places itself, or a ` +
+          `node nested in a child that no other constraint here moves. ` +
+          `Place the source in an inner layer, or relate the target to it ` +
+          `with an anchor align instead.`
       );
     }
     const placed = targets.get(source.key)!;

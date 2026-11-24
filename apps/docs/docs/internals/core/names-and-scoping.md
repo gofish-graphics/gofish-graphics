@@ -351,13 +351,17 @@ offset, taken from the container's finished layout (`nestedGap`). For each axis
 the operand takes part in, the solve adds one relation that ties the operand's
 `start` to the container's `start` at that offset.
 
-What happens next depends on whether the container is itself an operand:
+What happens next depends on whether a constraint can move the container:
 
-- **Container not named in any constraint.** It is placed at the layer's origin
-  before the solve, like any unconstrained child. The nested operand is then a
-  fixed point, and the other operands move to it.
-- **Container named too** (`planets` above). The solve moves the container, and
-  the nested operand moves with it.
+- **No constraint moves it.** It is placed at the layer's origin before the
+  solve, like any unconstrained child. The nested operand is then a fixed
+  point, and the other operands move to it. An align by `"span"` or `"size"`
+  never moves a nested operand: it can only be the source the align reads.
+- **A constraint moves it.** The container is named itself (`planets` above),
+  or one of its nested operands is in a position, a distribute, a nest or an
+  align by an anchor. The solve moves the container, and the nested operand
+  moves with it. So a distribute between two operands nested in two children
+  moves both children.
 
 The container carries the write-back; the stand-in's own placement writes do
 nothing. A nested operand cannot be resized from outside, so its size hooks
@@ -529,9 +533,10 @@ matched, and `selectAll(token)` gathers them all from the registry.
 
 ## Open questions
 
-- A nested operand moves its container only when the container is named too.
-  Treating every operand as a direct child plus a constant offset would
-  remove that rule (#925). The same change would let a constraint on a
+- A nested operand of an align by `"span"` or `"size"` does not move its
+  container, since that align reads its source where it is before the solve.
+  Treating every operand as a direct child plus a constant offset, with a span
+  read as a relation instead of a pin, would remove that rule (#925). The same change would let a constraint on a
   labeled bar measure the bar alone and move its ring; today it measures
   the ring (`inPlace`). Both need the claim walk (`placeByClaims`) to treat a
   nested operand as part of its container instead of a fixed point.
