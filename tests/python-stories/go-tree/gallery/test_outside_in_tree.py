@@ -59,7 +59,7 @@ WEDGES = layout(FLARE_VIS)
 
 
 # A wedge is a rect swept through polar space: x and w are the start angle and
-# span (em_x, in radians), y and h the inner radius and band thickness (em_y).
+# span (em_x, in radians), y and h the inner radius and band thickness (pixels).
 # The white stroke draws the seams between neighboring wedges.
 def wedge_mark(theta0, d_theta, depth):
     r_inner, r_outer = BANDS[depth]
@@ -69,7 +69,6 @@ def wedge_mark(theta0, d_theta, depth):
         y=r_inner,
         h=r_outer - r_inner,
         em_x=True,
-        em_y=True,
         fill=DEPTH_COLORS[depth],
         stroke="white",
         stroke_width=0 if depth == 0 else 2,

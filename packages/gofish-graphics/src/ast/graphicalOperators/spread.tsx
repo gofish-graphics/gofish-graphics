@@ -77,7 +77,7 @@ export const Spread = createNodeOperator(
        *  amount, which is `Spacing.box(amount)`. */
       spacing?: Gap | Spacing;
       /** Where the children go along `dir` when minimum gaps leave them
-       *  room: the slack rule of the layer it elaborates to, on `dir`. */
+       *  room: the slack of the chain it elaborates to. */
       slack?: Slack;
       alignment?: Alignment;
       reverse?: boolean;
@@ -165,14 +165,11 @@ export const Spread = createNodeOperator(
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
-    // node: it maps its keyed domain into that size. The layer solves the
-    // chain, so its slack rule is the spread's, on `dir`, named as `dir`
-    // names it (the layer resolves it in the same scope).
+    // node: it maps its keyed domain into that size.
     const node = (await layer(
       {
         key,
         ...fancyDims,
-        ...(slack === undefined ? {} : { slack: { [dirName]: slack } }),
       } as any,
       childList
     )) as GoFishNode;
@@ -206,6 +203,7 @@ export const Spread = createNodeOperator(
           {
             dir: stackAxis,
             spacing,
+            slack,
             glue,
             order: reverse ? "reverse" : "forward",
             baseline:

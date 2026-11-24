@@ -27,22 +27,24 @@ gf.chart(seafood, { coord: gf.Coord.clock() })
 Coord.clock(options?: {
   innerRadius?: number; // donut hole, fraction [0,1) of outer radius. Default 0
   centralAngle?: number; // total sweep in radians. Default 2π
-  baselineAngle?: number; // angle (radians) where θ's 0 sits, from 3 o'clock. Default π/2 (12 o'clock)
-  direction?: 1 | -1; // +1 CCW, -1 CW. Default -1 (clockwise)
   center?: [number, number]; // screen-space center offset. Default [0, 0]
 });
 ```
 
+`Coord.clock(options)` is a preset of [`Coord.polar()`](/js/api/coords/polar):
+`Coord.polar({ baselineAngle: Math.PI / 2, direction: -1, ...options })`. It
+fixes `baselineAngle` and `direction`, so the number 0 on the angular axis sits
+at 12 o'clock and angles increase clockwise. It takes the other options of
+polar. Passing `baselineAngle` or `direction` is a type error, and at run time an
+error that names the `Coord.polar(...)` call to write instead. A clock space is
+a polar space, and it crosses the wire as `{ type: "polar", baselineAngle, direction, ... }`.
+
 ## Parameters
 
-::: gofish-ref clock
+::: gofish-ref Coord.clock
 :::
 
-`Coord.clock()` is the [`Coord.polar()`](/js/api/coords/polar) transform and accepts the same
-options — `innerRadius`, `centralAngle`, `baselineAngle`, `direction`, `center`. Only the
-`baselineAngle` and `direction` defaults differ: 0° at 12 o'clock, clockwise. See
-[polar's Parameters](/js/api/coords/polar#parameters). As in polar, the number 0 on
-the angular axis always sits at `baselineAngle`.
+See [polar's Parameters](/js/api/coords/polar#parameters).
 
 ## Usage
 
@@ -78,7 +80,7 @@ chart(data, { coord: Coord.clock({ innerRadius: 0.6 }) })
 // Rose chart (radial bar chart)
 chart(data, { coord: Coord.clock() })
   .flow(spread({ by: "month", dir: "x", spacing: 0 }))
-  .mark(rect({ w: (Math.PI * 2) / 12, h: "value" }));
+  .mark(rect({ h: "value" }));
 ```
 
 ## See Also

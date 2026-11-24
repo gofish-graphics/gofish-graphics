@@ -669,8 +669,9 @@ const ALIGN_ANCHORS = ["start", "middle", "end", "baseline"] as const;
  *
  * `Coord` and `Color` are not strategy families in this sense: a coordinate
  * transform is a JS object of functions, rebuilt on the JS side from a
- * `type`-tagged config (`COORDS` above), and a color scale is tagged by
- * `_tag` and takes its one argument by position.
+ * `type`-tagged config (`COORDS` below), and a color scale is tagged by
+ * `_tag` and takes its one argument by position. The Coord family's presets
+ * (`COORD_PRESETS`) are declared and checked as these families' are.
  */
 export const STRATEGIES = {
   Effect: {
@@ -1197,7 +1198,7 @@ export const STRATEGIES = {
       },
       // PLACEHOLDER: the name `atLeast` is not signed off.
       atLeast: {
-        doc: "A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer. A minimum gap gives each child a range of positions, not one position; the `slack` of the operator that solves it picks one.",
+        doc: "A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer. A minimum gap gives each child a range of positions, not one position; the `slack` of the spread or distribute that states the gaps picks one.",
         positional: ["gap"],
         params: {
           gap: {
@@ -1210,7 +1211,7 @@ export const STRATEGIES = {
     },
   },
   Slack: {
-    doc: "Where the parts go when minimum gaps (`Spacing.atLeast`) leave them room: the value of `spread`'s `slack` option, along its `dir`, and of `layer`'s, per axis. A minimum gap gives each part a range of positions, not one position. The least solution puts every part as early as its gaps allow, and the greatest puts it as late as they allow within the same span; a part's slack is the difference. The rule picks one point in each part's range, the same way for every part the scope solves on that axis. Where no gap leaves room, every rule gives the same positions.",
+    doc: "Where the parts go when minimum gaps (`Spacing.atLeast`) leave them room: the value of the `slack` option of `spread` and of `Constraint.distribute`, along their `dir`. A minimum gap gives each part a range of positions, not one position. The least solution puts every part as early as its gaps allow, and the greatest puts it as late as they allow within the same span; a part's slack is the difference. The rule picks one point in each part's range, the same way for every part of one system of linked gaps: gaps that share parts share their room, so they share one rule. Where no gap leaves room, every rule gives the same positions.",
     kinds: {
       at: {
         doc: "The point a fraction `t` of the way from the least solution to the greatest: each part at least + t × (greatest − least).",
@@ -1249,31 +1250,56 @@ export const STRATEGIES = {
  *  `"Baseline"`, `"Spacing"` or `"Slack"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
-/** The presets of family `F`, as `STRATEGIES` declares them. */
-type PresetsOf<F extends StrategyFamilyName> = (typeof STRATEGIES)[F] extends {
-  presets: infer Ps;
-}
-  ? Ps
-  : Record<never, never>;
+/** A family that may declare presets: a strategy family, or `"Coord"`,
+ *  whose kinds are the transforms of `COORDS` and whose presets are
+ *  `COORD_PRESETS`. */
+export type PresetFamilyName = StrategyFamilyName | "Coord";
 
-/** The name of a preset of family `F`: `"sina"` or `"jitter"` of `"Overlap"`. */
-export type PresetName<F extends StrategyFamilyName> = keyof PresetsOf<F> &
+/** The presets of family `F`, as `STRATEGIES` (or, for `Coord`,
+ *  `COORD_PRESETS`) declares them. */
+type PresetsOf<F extends PresetFamilyName> = F extends "Coord"
+  ? typeof COORD_PRESETS
+  : F extends StrategyFamilyName
+    ? (typeof STRATEGIES)[F] extends { presets: infer Ps }
+      ? Ps
+      : Record<never, never>
+    : never;
+
+/** The name of a preset of family `F`: `"sina"` or `"jitter"` of
+ *  `"Overlap"`, `"clock"` of `"Coord"`. */
+export type PresetName<F extends PresetFamilyName> = keyof PresetsOf<F> &
   string;
 
 /** The params preset `P` of family `F` fixes: `"smoothing"` for
- *  `Overlap.sina`. */
+ *  `Overlap.sina`, `"baselineAngle" | "direction"` for `Coord.clock`. */
 export type PresetFixed<
-  F extends StrategyFamilyName,
+  F extends PresetFamilyName,
   P extends PresetName<F>,
 > = PresetsOf<F>[P] extends { values: infer V } ? keyof V & string : never;
 
 /** The preset `name` of `family`, or an error naming the family. */
 function presetOf(family: string, name: string): StrategyPreset {
-  const spec = (STRATEGIES as Record<string, StrategyFamily>)[family];
-  const preset = spec?.presets?.[name];
+  const presets: Record<string, StrategyPreset> | undefined =
+    family === "Coord"
+      ? COORD_PRESETS
+      : (STRATEGIES as Record<string, StrategyFamily>)[family]?.presets;
+  const preset = presets?.[name];
   if (preset === undefined)
     throw new Error(`[gofish] ${family} has no preset ${name}.`);
   return preset;
+}
+
+/** The kind a preset of `family` fixes values of: a strategy kind, or, for
+ *  `Coord`, a transform of `COORDS`, whose fields are its params. */
+function presetKind(family: string, kind: string): StrategyKind {
+  if (family !== "Coord")
+    return (STRATEGIES as Record<string, StrategyFamily>)[family].kinds[kind];
+  const d = COORDS[kind];
+  return {
+    doc: d.doc ?? "",
+    params: resolveFields(d),
+    positional: d.positional === undefined ? [] : [d.positional],
+  };
 }
 
 /** The params a preset takes: its kind's params, less the ones it fixes.
@@ -1281,9 +1307,8 @@ function presetOf(family: string, name: string): StrategyPreset {
  *  reference's options table are these. */
 export function presetParams(family: string, name: string): FieldGroup {
   const preset = presetOf(family, name);
-  const spec = (STRATEGIES as Record<string, StrategyFamily>)[family];
   return Object.fromEntries(
-    Object.entries(spec.kinds[preset.kind].params).filter(
+    Object.entries(presetKind(family, preset.kind).params).filter(
       ([field]) => !Object.hasOwn(preset.values, field)
     )
   );
@@ -1296,13 +1321,31 @@ const argText = (v: unknown): string =>
 /**
  * The strategy object preset `name` of `family` makes with the options
  * `opts` (the ones given; leave an undefined one out first): its kind, the
- * values it fixes, then `opts`. An option it fixes is an error that names
- * the kind call with the same values, so the caller can write that point
- * instead: `Overlap.sina({ smoothing: 3 })` names
- * `Overlap.noise({ smoothing: 3 })`.
+ * values it fixes, then `opts` ({@link presetOptions}).
  */
 export function presetValue(
-  family: string,
+  family: StrategyFamilyName,
+  name: string,
+  opts: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    kind: presetOf(family, name).kind,
+    ...presetOptions(family, name, opts),
+  };
+}
+
+/**
+ * The options of its kind that preset `name` of `family` stands for, given
+ * the options `opts` (the ones given; leave an undefined one out first): the
+ * values it fixes, then `opts`. A strategy preset adds its `kind` to them
+ * ({@link presetValue}); a coord preset passes them to its transform's
+ * factory (`Coord.clock(opts)` is `Coord.polar` of them). An option it fixes
+ * is an error that names the kind call with the same values, so the caller
+ * can write that point instead: `Overlap.sina({ smoothing: 3 })` names
+ * `Overlap.noise({ smoothing: 3 })`.
+ */
+export function presetOptions(
+  family: PresetFamilyName,
   name: string,
   opts: Record<string, unknown>
 ): Record<string, unknown> {
@@ -1311,9 +1354,7 @@ export function presetValue(
     Object.hasOwn(preset.values, k)
   );
   if (fixed.length > 0) {
-    const kind = (STRATEGIES as Record<string, StrategyFamily>)[family].kinds[
-      preset.kind
-    ];
+    const kind = presetKind(family, preset.kind);
     const values: Record<string, unknown> = { ...preset.values, ...opts };
     const positional = kind.positional ?? [];
     const named = Object.keys(values).filter((k) => !positional.includes(k));
@@ -1333,7 +1374,7 @@ export function presetValue(
         `${family}.${preset.kind}(${args.join(", ")}).`
     );
   }
-  return { kind: preset.kind, ...preset.values, ...opts };
+  return { ...preset.values, ...opts };
 }
 
 /** The `Binning` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -1928,7 +1969,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       slack: {
         type: t.ref("Slack"),
-        doc: "Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). Omitted, Slack.start(). Where no gap leaves room it changes nothing.",
+        doc: "Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. It is the slack of the distribute the spread lays its children out with, so it follows that constraint's rule for linked gaps. Omitted, Slack.start().",
       },
       axes: { type: t.ref("AxesOptions") },
       ...operatorBoxFields,
@@ -2681,10 +2722,6 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
         type: t.boolean,
         doc: 'True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.',
       },
-      slack: {
-        type: t.record(t.ref("Slack")),
-        doc: "Where the children go when minimum gaps (`Spacing.atLeast`) leave them room, per axis: an axis name (x, y, or a name the enclosing coordinate space declares) to a call in the Slack family, `{ y: Slack.end() }`. The layer solves its constraints on each axis together, so the rule is one per axis. An axis it leaves out takes Slack.start().",
-      },
     },
   }),
 
@@ -2831,50 +2868,41 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 // dispatch; they don't need JSON Schema $defs yet (per the design doc).
 // ---------------------------------------------------------------------------
 
-// The field names are the camelCase wire keys; Python's Coord.polar()/clock() spell
+// The field names are the camelCase wire keys; Python's Coord.polar() spells
 // them in snake_case (inner_radius, ...) like every other generated kwarg (see
-// `pyKwarg`). `polar` and `clock` share these fields and differ only in the
-// `baselineAngle` / `direction` defaults (the angular convention).
-const polarFields = (defaults: {
-  baselineAngle: number;
-  direction: number;
-}): FieldGroup =>
-  group({
-    innerRadius: {
-      type: t.number,
-      default: 0,
-      doc: "Donut hole as a fraction [0,1) of the outer radius.",
-    },
-    centralAngle: {
-      type: t.number,
-      default: 2 * Math.PI,
-      doc: "Total angular sweep in radians.",
-    },
-    baselineAngle: {
-      type: t.number,
-      default: defaults.baselineAngle,
-      doc: "The angle where the angular axis's 0 sits: radians, measured counter-clockwise from 3 o'clock. Data 0 on θ maps here for every θ range and every sweep.",
-    },
-    direction: {
-      type: t.number,
-      default: defaults.direction,
-      doc: "+1 counter-clockwise, -1 clockwise (numeric ±1).",
-    },
-    center: {
-      type: t.tuple(t.number, t.number),
-      default: [0, 0],
-      doc: "Screen-space center offset.",
-    },
-  });
+// `pyKwarg`).
+const polarFields: FieldGroup = {
+  innerRadius: {
+    type: t.number,
+    default: 0,
+    doc: "Donut hole as a fraction [0,1) of the outer radius.",
+  },
+  centralAngle: {
+    type: t.number,
+    default: 2 * Math.PI,
+    doc: "Total angular sweep in radians.",
+  },
+  baselineAngle: {
+    type: t.number,
+    default: 0,
+    doc: "The angle where the angular axis's 0 sits: radians, measured counter-clockwise from 3 o'clock. Data 0 on θ maps here for every θ range and every sweep.",
+  },
+  direction: {
+    type: t.number,
+    default: 1,
+    doc: "+1 counter-clockwise, -1 clockwise (numeric ±1).",
+  },
+  center: {
+    type: t.tuple(t.number, t.number),
+    default: [0, 0],
+    doc: "Screen-space center offset.",
+  },
+};
 
 export const COORDS: Record<string, ConstructDescriptor> = {
   polar: coordTransform("polar", {
     doc: "Maps (θ, r) → screen in the math convention: θ=0 at 3 o'clock, increasing counter-clockwise. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
-    fields: polarFields({ baselineAngle: 0, direction: 1 }),
-  }),
-  clock: coordTransform("clock", {
-    doc: "The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `baselineAngle` and `direction` defaults.",
-    fields: polarFields({ baselineAngle: Math.PI / 2, direction: -1 }),
+    fields: polarFields,
   }),
   wavy: coordTransform("wavy", {
     doc: "A sinusoidal warp of the plane. No options.",
@@ -2900,6 +2928,21 @@ export const COORDS: Record<string, ConstructDescriptor> = {
     },
   }),
 };
+
+/**
+ * The presets of the Coord family, declared as a strategy family's are
+ * ({@link StrategyPreset}): each fixes some options of a transform of
+ * `COORDS`, its `kind`, and takes only the others ({@link presetParams},
+ * {@link presetOptions}). A preset has no wire type of its own: it crosses
+ * the wire as its kind, with the values it fixes.
+ */
+export const COORD_PRESETS = {
+  clock: {
+    kind: "polar",
+    values: { baselineAngle: Math.PI / 2, direction: -1 },
+    doc: "The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It is `Coord.polar()` with baselineAngle π/2 and direction -1. It fixes those two and takes the other options of polar.",
+  },
+} satisfies Record<string, StrategyPreset>;
 
 // ---------------------------------------------------------------------------
 // Constraints: the clauses of a `.relate()` callback (`Constraint.align`, ...)
@@ -2950,7 +2993,11 @@ export const CONSTRAINTS: Record<string, ConstructDescriptor> = {
       spacing: {
         type: SPACING_TYPE,
         default: 8,
-        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
+        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref, or `Spacing.atLeast(gap)`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
+      },
+      slack: {
+        type: t.ref("Slack"),
+        doc: "Where the refs go along `dir` when minimum gaps leave them room, made by a call in the Slack family: Slack.start(), Slack.end(), Slack.center() or Slack.at(t). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. The minimum gaps of the layer that share refs with these share their room, so they share one slack: a distribute that states none takes the one the others state, and two that state different values are an error. Omitted by all, Slack.start().",
       },
       order: {
         type: t.enum("forward", "reverse"),

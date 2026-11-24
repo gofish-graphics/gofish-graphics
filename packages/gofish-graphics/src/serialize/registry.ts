@@ -68,7 +68,6 @@ import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import { fieldPredicate } from "../ast/fieldExpr";
 import { polar } from "../ast/coordinateTransforms/polar";
-import { clock } from "../ast/coordinateTransforms/clock";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { geo } from "../ast/coordinateTransforms/geo";
 import { GoFishRef } from "../ast/_ref";
@@ -301,9 +300,8 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   atop,
   // Coordinate transforms. A transform is a JS object of functions, so the
   // wire carries only its `type` tag and options, and the factory makes it
-  // again from them.
+  // again from them. A preset (`clock`) crosses the wire as its kind.
   polar,
-  clock,
   wavy,
   geo,
 };

@@ -57,6 +57,7 @@ import {
   COMBINATOR_MARKS,
   OPERATORS,
   COORDS,
+  COORD_PRESETS,
   OPTION_TYPES,
   CHART_OPTIONS,
   MARK_BASE_FIELDS,
@@ -1041,8 +1042,10 @@ function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
   for (const p of positional)
     if (!Object.hasOwn(params, p))
       throw new Error(`${family}.${name}: no param ${p}`);
+  // A preset's fixed field is no param of its factory, so it has no `wire`
+  // of its own: its key is its name.
   const keyOf = (field: string) =>
-    wire.keys === "snake" ? pyKwarg(field) : (params[field].wire ?? field);
+    wire.keys === "snake" ? pyKwarg(field) : (params[field]?.wire ?? field);
   // The positional params come first, in their order.
   const fields = [
     ...positional,
@@ -1275,22 +1278,36 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
   });
 }
 
-// The Coord family: gofish/coord.py, one factory per COORDS entry. Its
-// members are functions only, as in JS.
+// The Coord family: gofish/coord.py, one factory per COORDS entry and per
+// preset of COORD_PRESETS. Its members are functions only, as in JS.
 writeFamilyModule({
   family: "Coord",
   doc: "The coordinate transforms of a chart's or a layer's ``coord`` option.",
-  table: "COORDS",
+  table: "COORDS and COORD_PRESETS",
   wire: { tag: "type", keys: "wire", bare: false },
-  factories: Object.entries(COORDS).map(([type, d]) => ({
-    family: "Coord",
-    name: pyKwarg(type),
-    tag: type,
-    params: resolveFields(d),
-    preset: {},
-    doc: d.doc ?? "",
-    positional: d.positional === undefined ? [] : [d.positional],
-  })),
+  factories: [
+    ...Object.entries(COORDS).map(([type, d]) => ({
+      family: "Coord",
+      name: pyKwarg(type),
+      tag: type,
+      params: resolveFields(d),
+      preset: {},
+      doc: d.doc ?? "",
+      positional: d.positional === undefined ? [] : [d.positional],
+    })),
+    // A preset crosses the wire as its kind, with the values it fixes, and
+    // takes only the options it does not fix (`Coord.clock(direction=1)` is
+    // a TypeError from the signature).
+    ...Object.entries(COORD_PRESETS).map(([name, p]) => ({
+      family: "Coord",
+      name: pyKwarg(name),
+      tag: p.kind,
+      params: presetParams("Coord", name),
+      preset: p.values,
+      doc: p.doc,
+      positional: [],
+    })),
+  ],
 });
 
 // Remove the family modules no family wrote in this run (a family renamed or

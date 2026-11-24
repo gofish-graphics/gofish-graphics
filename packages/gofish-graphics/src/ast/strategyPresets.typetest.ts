@@ -6,7 +6,7 @@
  * The run-time half is in `tests/families.test.ts` and
  * `tests/overlap.test.ts`.
  */
-import { Overlap, Shape, Slack } from "../lib";
+import { Coord, Overlap, Shape, Slack } from "../lib";
 
 export function presets() {
   // The options a preset does not fix.
@@ -34,4 +34,12 @@ export function presets() {
   Slack.center({ t: 0.3 });
   // @ts-expect-error end fixes t
   Slack.end({ t: 0.3 });
+
+  // A coord preset (gofish-ir's `COORD_PRESETS`): clock fixes polar's
+  // baselineAngle and direction.
+  Coord.clock({ innerRadius: 0.5, centralAngle: Math.PI, center: [1, 2] });
+  // @ts-expect-error clock fixes baselineAngle
+  Coord.clock({ baselineAngle: 0 });
+  // @ts-expect-error clock fixes direction
+  Coord.clock({ direction: 1 });
 }

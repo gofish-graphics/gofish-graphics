@@ -316,7 +316,7 @@ export const RoseGradient: StoryObj<Args> = {
         spread({ by: "sector", dir: "x", spacing: 0, axes: false }),
         stack({ by: "ring", dir: "y", axes: true }),
       )
-      .mark(rect({ w: (Math.PI * 2) / NUM_SECTORS, h: "value", fill: "ring" }))
+      .mark(rect({ h: "value", fill: "ring" }))
       .render(container);
 
     return container;

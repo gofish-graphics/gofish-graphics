@@ -6,8 +6,9 @@ title: Slack
 
 The `Slack` family holds the rules for where children go when minimum gaps
 ([`Spacing.at_least`](/python/api/spacing)) leave them room. A rule is the
-value of the `slack` option of [`layer`](/python/api/operators/layer), one per
-axis, and of [`spread`](/python/api/operators/spread), along its `dir`.
+value of the `slack` option of
+[`Constraint.distribute`](/python/api/constraints/relate#constraint-distribute)
+and of [`spread`](/python/api/operators/spread), along their `dir`.
 
 A minimum gap gives each child a range of positions, not one position. The
 least solution puts every child as early as its gaps allow. The greatest
@@ -25,13 +26,15 @@ from gofish import Constraint, Slack, Spacing, layer, rect
             rect(w=60, h=24, fill="#a8dadc").name("a"),
             rect(w=40, h=24, fill="#e63946").name("q"),
             rect(w=60, h=24, fill="#a8dadc").name("b"),
-        ],
-        slack={"x": Slack.end()},
+        ]
     )
     .relate(
         lambda c: [
             Constraint.distribute(
-                [c.a, c.q, c.b], dir="x", spacing=Spacing.at_least(10)
+                [c.a, c.q, c.b],
+                dir="x",
+                spacing=Spacing.at_least(10),
+                slack=Slack.end(),
             ),
             Constraint.distribute([c.a, c.b], dir="x", spacing=Spacing.at_least(200)),
             Constraint.align([c.a, c.q, c.b], y="start"),
@@ -49,7 +52,7 @@ Slack.center  # or Slack.center()
 Slack.end  # or Slack.end()
 Slack.at(t)
 
-layer(children, slack={"x": rule, "y": rule})
+Constraint.distribute(refs, dir=..., spacing=Spacing.at_least(gap), slack=rule)
 spread(dir=..., spacing=Spacing.at_least(gap), slack=rule)
 ```
 
@@ -61,11 +64,17 @@ call only. The other members are values as they are, and `Slack.end` and
 `Slack.at(1)`. They fix `t` and take no options, so another fraction is
 `Slack.at(t)`.
 
-A layer solves its constraints on each axis together, so it takes one rule per
-axis, in a dict. Its keys are axis names in the scope of its children: `"x"`,
-`"y"`, or a name the enclosing coordinate space declares. An axis it leaves
-out takes `Slack.start()`. A spread solves its own chain, and its rule applies
-along its `dir`. A rule on an axis with no minimum gaps changes nothing.
+A rule needs `spacing=Spacing.at_least(gap)`. With any other spacing there is
+no room to place, and `slack` is an error.
+
+Minimum gaps that share children are linked, and linked gaps share one room,
+so they share one rule. In the example above, the two distributes share `a`
+and `b`. The first states `Slack.end()`, and the second, which states no rule,
+takes it. Two linked distributes that state different rules are an error that
+names both. Gaps that share no children, even in one layer, each take their
+own rule. Where no linked distribute states a rule, the rule is
+`Slack.start()`. A spread's `slack` is the rule of the distribute it lays its
+children out with.
 
 The family is also a module of its own:
 
@@ -95,7 +104,6 @@ other value is an error.
 ## See also
 
 - [`Spacing`](/python/api/spacing), whose `Spacing.at_least` makes minimum gaps
-- [`layer`](/python/api/operators/layer)
 - [`spread`](/python/api/operators/spread)
 - [`Constraint.distribute`](/python/api/constraints/relate#constraint-distribute)
 - [Underlying space](/internals/core/underlying-space), the essay on how a

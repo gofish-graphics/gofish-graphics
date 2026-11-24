@@ -69,7 +69,7 @@ from gofish.spacing import pitch  # the same function as Spacing.pitch
 final. The exact constraints are solved first, and the minimum gaps then push
 apart what they would put closer. Its `gap` is pixels only. A minimum gap
 gives each child a range of positions, not one position, and the
-[`slack`](/python/api/slack) of the spread or layer that solves it picks one.
+[`slack`](/python/api/slack) of the spread or distribute that states it picks one.
 
 `at` is `"start"`, `"middle"`, `"end"` or `"baseline"`. `"middle"` is center
 to center. `"baseline"` is each child's local 0, which for a ribbon or a text

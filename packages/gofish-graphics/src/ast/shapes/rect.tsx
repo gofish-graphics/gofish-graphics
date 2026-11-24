@@ -4,6 +4,7 @@
 
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
+import { bandRegion } from "../../bandRegion";
 import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
@@ -381,35 +382,27 @@ export const Rect = ({
             ];
           }
 
-          // Nonlinear — line path along the midline.
-          const linePath = path(
-            [
-              [
-                isXEmbedded ? (displayDims[0].min ?? 0) : aestheticMid,
-                isXEmbedded ? aestheticMid : (displayDims[1].min ?? 0),
-              ],
-              [
-                isXEmbedded ? (displayDims[0].max ?? 0) : aestheticMid,
-                isXEmbedded ? aestheticMid : (displayDims[1].max ?? 0),
-              ],
-            ],
-            {}
+          // Nonlinear: a filled band. The midline runs between the edges
+          // on the embedded axis, through the space, and the pixel
+          // thickness is laid off along its normal (`bandRegion`).
+          const ends = [displayDims[0], displayDims[1]].map((d, axis) =>
+            axis === aestheticAxis
+              ? [aestheticMid, aestheticMid]
+              : [d.min ?? 0, d.max ?? 0]
           );
-          const transformed = transformPath(linePath, space, {
-            resample: true,
-          });
+          const band = bandRegion(
+            space,
+            [ends[0][0], ends[1][0]],
+            [ends[0][1], ends[1][1]],
+            () => thickness / 2
+          );
           return [
             {
               kind: "path",
-              d: pathToPixelSVG(transformed, toPixel),
+              d: pathToPixelSVG(band, toPixel),
               datum: node.datum,
               role: roleFor(node.datum),
-              style: lowerStyle({
-                fill: "none",
-                stroke: resolvedStroke,
-                strokeWidth: thickness + 0.5,
-                opacity,
-              }),
+              style: elementStyle,
             },
           ];
         }

@@ -78,6 +78,10 @@ for (const [family, spec] of Object.entries(ir.STRATEGIES)) {
   ])
     optionTypes.add(`${family}.${member}`);
 }
+// And each Coord preset (`::: gofish-ref Coord.clock`), which has no wire
+// type of its own.
+for (const name of Object.keys(ir.COORD_PRESETS))
+  optionTypes.add(`Coord.${name}`);
 
 /** Every `::: gofish-ref a b c` name, per language, with the page it came from. */
 function collectRefs(lang) {

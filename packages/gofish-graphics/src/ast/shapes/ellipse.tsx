@@ -1,5 +1,6 @@
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
+import { bandRegion } from "../../bandRegion";
 import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
@@ -224,34 +225,27 @@ export const Ellipse = ({
             return [ellipseItem(cx, cy, rx, ry)];
           }
 
-          // Nonlinear — warped line path along the midline.
-          const linePath = path(
-            [
-              [
-                isXEmbedded ? (displayDims[0].min ?? 0) : aestheticMid,
-                isXEmbedded ? aestheticMid : (displayDims[1].min ?? 0),
-              ],
-              [
-                isXEmbedded ? (displayDims[0].max ?? 0) : aestheticMid,
-                isXEmbedded ? aestheticMid : (displayDims[1].max ?? 0),
-              ],
-            ],
-            { subdivision: 1000 }
+          // Nonlinear: a filled band whose half thickness at each point of
+          // its midline is the ellipse's (`bandRegion`, as rect.tsx draws).
+          const ends = [displayDims[0], displayDims[1]].map((d, axis) =>
+            axis === aestheticAxis
+              ? [aestheticMid, aestheticMid]
+              : [d.min ?? 0, d.max ?? 0]
           );
-          const transformed = transformPath(linePath, space);
-
+          const band = bandRegion(
+            space,
+            [ends[0][0], ends[1][0]],
+            [ends[0][1], ends[1][1]],
+            (u) =>
+              (thickness / 2) * Math.sqrt(Math.max(0, 1 - (2 * u - 1) ** 2))
+          );
           return [
             {
               kind: "path",
-              d: pathToPixelSVG(transformed, toPixel),
+              d: pathToPixelSVG(band, toPixel),
               datum: node.datum,
               role: roleFor(node.datum),
-              style: lowerStyle({
-                fill: "none",
-                stroke: resolvedStroke,
-                strokeWidth: thickness + 0.5,
-                opacity,
-              }),
+              style: elementStyle,
             },
           ];
         }

@@ -121,11 +121,20 @@ export type CoordinateTransform = {
    */
   aliases?: { x?: string; y?: string };
   /**
-   * Set by the polar family (`polar()`, `clock()`; see `polarPreset`): axis 0
-   * is an angle θ and axis 1 a radius r. Polar geometry (petals, the arc
-   * sampling of a warped box) applies only here.
+   * Set by `polar()` (and so by its preset `clock()`): axis 0 is an angle θ
+   * and axis 1 a radius r. Polar geometry (petals, the arc sampling of a
+   * warped box) applies only here.
    */
   polar?: true;
+  /**
+   * The space's wire form: its `type` in gofish-ir's `COORDS` and the
+   * options it was made with, the config `fromJSON` makes it again from.
+   * `JSON.stringify` writes it in place of the functions and derived fields
+   * above, so a coord in the options of a chart or a layer crosses the wire
+   * as `{ type, ...options }`. Every transform of the `Coord` family has
+   * one; an internal space no `coord` option takes (`linear`) has none.
+   */
+  toJSON?: () => { type: string; [option: string]: unknown };
   /**
    * The traits each axis of the space's domain has ({@link AxisTraits}),
    * the one thing that decides how the coord fits its content to that axis.

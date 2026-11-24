@@ -4,17 +4,20 @@
 
 /**
  * The `Slack` family: where the parts go when minimum gaps
- * (`Spacing.atLeast`) leave them room. It is the value of `spread`'s `slack`
- * option, along its `dir`, and of `layer`'s, per axis
- * (`layer({ slack: { y: Slack.end() } }, ...)`).
+ * (`Spacing.atLeast`) leave them room. It is the value of the `slack` option
+ * of `Constraint.distribute` and of `spread`, along their `dir`
+ * (`Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(8), slack:
+ * Slack.end() }, refs)`).
  *
  * A minimum gap gives each part a range of positions, not one position. The
  * least solution puts every part as early as its gaps allow. The greatest
  * solution puts every part as late as they allow, within the least
  * solution's span. A part's slack is the difference. A rule picks one point
- * in each part's range, and it is one rule per scope and axis: the gaps a
- * layer solves together on an axis share their room, so they share the rule
- * (`separateGroups` in `ast/constraints/differenceGraph.ts`).
+ * in each part's range, and it is one rule per cluster of linked gaps:
+ * gaps that share parts share their room, so they share the rule. A
+ * distribute that states none takes the one its cluster states, and two
+ * that state different rules are an error (`clusterSlack` in
+ * `ast/constraints/differenceGraph.ts`).
  *
  * `lib.ts` binds this module as `Slack` (`Slack.end()`), and
  * `gofish-graphics/slack` exports the same module. There is one rule,
@@ -24,7 +27,8 @@
  * no options and is a value as it is (`Slack.end` is `Slack.end()`, #1133). A rule is a plain object,
  * `{ kind, t }`, and that object is also its wire form. The kind and its
  * param, and the presets, are declared once, in gofish-ir's `STRATEGIES`
- * table, which checks a rule where `at` makes it and where `layer` reads it.
+ * table, which checks a rule where `at` makes it and where a distribute reads
+ * it.
  */
 import { Frontend } from "gofish-ir";
 import { preset } from "../ast/strategyKind";

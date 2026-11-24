@@ -35,6 +35,7 @@ import { flowStepMarkOf } from "../ast/marks/compose";
 import { nodeSelectionOf } from "../ast/nodeSelection";
 import { schemaToWire } from "../ast/schema";
 import { hasNoWireForm } from "../ast/groupExpr";
+import type { CoordinateTransform } from "../ast/coordinateTransforms/coord";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -98,18 +99,30 @@ function wireOpts(
 }
 
 /** Of `opts`, the keys `accepted` declares, as the wire carries them: a
- *  function value is dropped, and a field whose declared type holds nodes
- *  (`enclose`'s `avoiding`) carries their references. */
+ *  function value is dropped, a field whose declared type holds nodes
+ *  (`enclose`'s `avoiding`) carries their references, and a coordinate
+ *  space its config ({@link withCoordConfig}). */
 function wireFields(
   accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
   opts: AnyObject
 ): AnyObject {
   const out: AnyObject = {};
-  for (const [key, value] of Object.entries(opts)) {
+  for (const [key, value] of Object.entries(withCoordConfig(opts))) {
     if (Object.hasOwn(accepted, key) && !hasNoWireForm(value))
       out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
   }
   return out;
+}
+
+/** `opts` with its `coord`, a coordinate space, as the config the wire
+ *  carries, `{ type, ...options }` (`CoordinateTransform.toJSON`), which
+ *  `fromJSON` makes the space again from. A preset (`Coord.clock()`) is its
+ *  kind's config. */
+function withCoordConfig(opts: AnyObject): AnyObject {
+  const coord = opts.coord as CoordinateTransform | undefined;
+  return typeof coord?.toJSON === "function"
+    ? { ...opts, coord: coord.toJSON() }
+    : opts;
 }
 
 /**
@@ -341,10 +354,11 @@ async function chartBuilderToChartIR(
   if (options && Object.keys(options).length > 0) {
     // A schema crosses the wire as its records of traits, as Python writes
     // it (`schemaToWire`).
+    const wire = withCoordConfig(options);
     ir.options = (
-      options.schema === undefined
-        ? options
-        : { ...options, schema: schemaToWire(options.schema) }
+      wire.schema === undefined
+        ? wire
+        : { ...wire, schema: schemaToWire(wire.schema) }
     ) as AnyObject;
   }
   if (nodeZOrder !== undefined) {

@@ -403,10 +403,7 @@ export function placeByClaims(
   // frame without one maps no datum and seats no baseline.
   framed = true,
   // The frame a `position` with `in` reads its datums in ({@link InFrame}).
-  inFrame: (c: PositionConstraint) => InFrame | undefined = () => undefined,
-  // The layer's slack rule on the axis (`Slack.at(t)`'s `t`): where its
-  // minimum gaps put what they leave room for.
-  slack = 0
+  inFrame: (c: PositionConstraint) => InFrame | undefined = () => undefined
 ): ClaimPlacement {
   // A cell places a child, by its index, that neither its data places in
   // the layer's frame nor placed itself (`constraintsOn`).
@@ -782,8 +779,7 @@ export function placeByClaims(
     axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     rigid,
     axis === 0 ? [origin, undefined] : [undefined, origin],
-    axis === 0 ? [apart, new Set()] : [new Set(), apart],
-    axis === 0 ? [slack, 0] : [0, slack]
+    axis === 0 ? [apart, new Set()] : [new Set(), apart]
   )[axis];
   // Two constraints that place one child at two places on the axis are an
   // error, which layout finds where it evaluates the plan: the solve keeps

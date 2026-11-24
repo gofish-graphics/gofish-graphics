@@ -302,7 +302,10 @@ it is written as the kind: `Shape.blob({ convexity: 0.9, neck: 1 })`, not
 `Shape.hull({ convexity: 0.9 })`. Passing a fixed option is a type error in
 TypeScript and an error at the call in both languages. The `STRATEGIES` table
 declares the fixed values once, and the JS option types, the run-time check,
-the Python signatures and the reference tables all come from it.
+the Python signatures and the reference tables all come from it. A coordinate
+transform's preset follows the same rule: `Coord.clock` is `Coord.polar` with
+`baselineAngle: π/2` and `direction: -1`, declared in `COORD_PRESETS`, and it
+crosses the wire as polar.
 
 **Say "visualization" unless it is a chart.** GoFish draws charts, diagrams,
 simulations and teaching figures on one substrate. Prose and examples say

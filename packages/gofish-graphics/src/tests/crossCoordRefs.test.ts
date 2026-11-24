@@ -253,9 +253,14 @@ async function main() {
     const mids = items(dl)
       .filter((it) => it.kind === "path" && it.style?.stroke === "black")
       .map((it) => {
+        // The spoke is drawn as a closed band: its middle is its box's.
         const ps = pointsOf(it.d);
-        const [a, b] = [ps[0], ps[ps.length - 1]];
-        return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as Pt;
+        const xs = ps.map(([x]) => x);
+        const ys = ps.map(([, y]) => y);
+        return [
+          (Math.min(...xs) + Math.max(...xs)) / 2,
+          (Math.min(...ys) + Math.max(...ys)) / 2,
+        ] as Pt;
       });
     const [path] = pathsIn(dl, "red");
     check(
@@ -297,7 +302,7 @@ async function main() {
     }
     check(
       `an outer ${what} against a mark inside a coordinate space is an error`,
-      /places "speed", a mark inside a clock coordinate space/.test(message),
+      /places "speed", a mark inside a polar coordinate space/.test(message),
       message || "no error"
     );
   }

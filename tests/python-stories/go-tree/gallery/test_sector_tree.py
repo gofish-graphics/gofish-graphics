@@ -38,14 +38,12 @@ def node(d):
         return rect(
             w=datum(1),
             h=RING_THICKNESS,
-            em_y=True,
             fill=by_depth(SECTOR_BLUES)(d),
             stroke="#2f78b8",
             stroke_width=0.75,
         )
     return rect(
         h=RING_THICKNESS,
-        em_y=True,
         fill=by_depth(SECTOR_BLUES)(d),
         stroke="#2f78b8",
         stroke_width=0.75,

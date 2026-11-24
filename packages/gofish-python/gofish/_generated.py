@@ -693,7 +693,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
-        slack: Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). Omitted, Slack.start(). Where no gap leaves room it changes nothing.
+        slack: Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. It is the slack of the distribute the spread lays its children out with, so it follows that constraint's rule for linked gaps. Omitted, Slack.start().
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -987,7 +987,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
-        slack: Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). Omitted, Slack.start(). Where no gap leaves room it changes nothing.
+        slack: Where the children go along `dir` when minimum gaps (`Spacing.atLeast`) leave them room, made by a call in the Slack family: Slack.start() (each child as early as its gaps allow), Slack.end() (as late as they allow within the same span), Slack.center() (halfway) or Slack.at(t) (a fraction t of the way). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. It is the slack of the distribute the spread lays its children out with, so it follows that constraint's rule for linked gaps. Omitted, Slack.start().
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1246,7 +1246,7 @@ def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optiona
             opts[_k] = _v
     return opts
 
-def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, padding: Optional[float] = None, transform: Optional[dict] = None, box: Optional[bool] = None, slack: Optional[dict] = None) -> Dict[str, Any]:
+def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, effect: Optional[dict | str] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, padding: Optional[float] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
@@ -1268,7 +1268,6 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         padding: Pixels the content of this layer's `coord` keeps from the edge of its box (a polar space's outer radius is half the shorter side less this). Ignored on a layer with no `coord`. Default 30.
         transform: Non-affine-foldable scale applied to the composed children.
         box: True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.
-        slack: Where the children go when minimum gaps (`Spacing.atLeast`) leave them room, per axis: an axis name (x, y, or a name the enclosing coordinate space declares) to a call in the Slack family, `{ y: Slack.end() }`. The layer solves its constraints on each axis together, so the rule is one per axis. An axis it leaves out takes Slack.start().
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -1290,7 +1289,6 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         ("padding", padding),
         ("transform", _to_wire(("object", {"scale": ("scale", ("object", {"x": ("x", None), "y": ("y", None)}))}), transform, "transform")),
         ("box", box),
-        ("slack", _to_wire(("record", ("ref", "Slack")), slack, "slack")),
     ]:
         if _v is not None:
             opts[_k] = _v
@@ -1314,12 +1312,13 @@ def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | 
             opts[_k] = _v
     return opts
 
-def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthValue | dict] = None, order: Optional[str] = None, glue: Optional[bool] = None) -> Dict[str, Any]:
+def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthValue | dict] = None, slack: Optional[dict] = None, order: Optional[str] = None, glue: Optional[bool] = None) -> Dict[str, Any]:
     """Lay the refs out one after another along `dir`.
 
     Args:
         dir: The axis to lay the refs out along.
-        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref, or `Spacing.atLeast(gap)`, a minimum gap. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
+        slack: Where the refs go along `dir` when minimum gaps leave them room, made by a call in the Slack family: Slack.start(), Slack.end(), Slack.center() or Slack.at(t). It needs `spacing: Spacing.atLeast(gap)`; with any other spacing it is an error. The minimum gaps of the layer that share refs with these share their room, so they share one slack: a distribute that states none takes the one the others state, and two that state different values are an error. Omitted by all, Slack.start().
         order: The order the refs are laid out in. Default "forward".
         glue: Stack semantics: the refs are data amounts, added along `dir` in one data space, each placed where the one before it ends. Every ref needs a data size along `dir`. Default false.
     """
@@ -1327,6 +1326,7 @@ def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthVal
     for _k, _v in [
         ("dir", dir),
         ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
+        ("slack", _to_wire(("ref", "Slack"), slack, "slack")),
         ("order", order),
         ("glue", glue),
     ]:

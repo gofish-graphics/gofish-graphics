@@ -1,5 +1,7 @@
 """Tests for AST to IR conversion."""
 
+import math
+
 import pytest
 from gofish import (
     chart,
@@ -671,24 +673,31 @@ class TestNewMarks:
 
 
 class TestClockCoord:
-    """Test clock() coordinate transform."""
+    """`Coord.clock()` is a preset of `Coord.polar()`: it crosses the wire
+    as polar with the two values it fixes."""
+
+    CLOCK = {"type": "polar", "baselineAngle": math.pi / 2, "direction": -1}
 
     def test_clock_returns_dict(self):
-        """Test clock() returns the correct sentinel dict."""
-        c = Coord.clock()
-        assert c == {"type": "clock"}
+        assert Coord.clock() == self.CLOCK
+        assert Coord.clock() == Coord.polar(baseline_angle=math.pi / 2, direction=-1)
+        assert Coord.clock(inner_radius=0.5) == {**self.CLOCK, "innerRadius": 0.5}
+
+    def test_clock_rejects_the_options_it_fixes(self):
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            Coord.clock(baseline_angle=0)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            Coord.clock(direction=1)
 
     def test_clock_in_chart_options_ir(self):
-        """Test clock() serializes correctly through chart options."""
         c = chart([{"x": 1}], coord=Coord.clock()).mark(rect(h="x"))
         node = c.to_ir()["root"]
-        assert node["options"]["coord"] == {"type": "clock"}
+        assert node["options"]["coord"] == self.CLOCK
 
     def test_clock_in_layer_options_ir(self):
-        """Test clock() in layer options IR."""
         child = chart([{"x": 1}]).mark(rect(h="x"))
         node = layer([child], coord=Coord.clock()).to_ir()["root"]
-        assert node["options"]["coord"] == {"type": "clock"}
+        assert node["options"]["coord"] == self.CLOCK
 
 
 class TestLayer:
@@ -700,12 +709,12 @@ class TestLayer:
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).mark(line())
-        m = layer([c1, c2], coord="clock")
+        m = layer([c1, c2], coord=Coord.polar())
         assert isinstance(m, RelatableMark)
         node = m.to_ir()["root"]
         assert node["type"] == "layer"
         assert node["__combinator"] is True
-        assert node["options"] == {"coord": "clock"}
+        assert node["options"] == {"coord": {"type": "polar"}}
 
     def test_layer_child_specs(self):
         """Each chart child is its ChartIR, and names its table."""

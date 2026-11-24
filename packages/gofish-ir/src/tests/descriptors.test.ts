@@ -609,6 +609,7 @@ const SCHEMA_CONSTRAINT_KEYS = {
   distribute: {
     dir: true,
     spacing: true,
+    slack: true,
     order: true,
     glue: true,
   } satisfies Record<keyof ConstraintOptions<"distribute">, true>,

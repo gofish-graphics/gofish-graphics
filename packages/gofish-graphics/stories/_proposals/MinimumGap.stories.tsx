@@ -17,7 +17,7 @@ import {
 
 // The two placement primitives of the user-space layouts proposal, through
 // the public API: a minimum gap (`Spacing.atLeast`, its slack placed by the
-// `slack` rule of the layer that solves it) and a mean of positions (`mean([...])`, an operand of
+// `slack` its distribute states) and a mean of positions (`mean([...])`, an operand of
 // `Constraint.align`). The `Spacing.atLeast` spelling is a PLACEHOLDER, not
 // signed off. No story computes a
 // position: every place comes from the solve. Not gallery-tagged.
@@ -50,11 +50,12 @@ const Box = createMark(
  * Top row: two pairs, each glued by an exact gap of 2, and at least 16
  * apart. Bottom row: p starts where A starts and r ends where D ends
  * (exact), and q floats between them, at least 8 from each. The top row
- * sets the span, so q has room to spare, and the layer's `slack` on x says
- * where it goes.
+ * sets the span, so q has room to spare, and the `slack` of q's distribute
+ * says where it goes. The gap between B and C is linked to q's gaps (p and
+ * r are tied to A and D), so it takes the same slack.
  */
 const rowOfRects = (slack: Slack.Slack) =>
-  layer({ slack: { x: slack } }, [
+  layer([
     Box({ label: "A", w: 60, fill: "#a8dadc" }).name("A"),
     Box({ label: "B", w: 40, fill: "#a8dadc" }).name("B"),
     Box({ label: "C", w: 50, fill: "#f1c27d" }).name("C"),
@@ -71,11 +72,10 @@ const rowOfRects = (slack: Slack.Slack) =>
     ]),
     Constraint.align({ x: "start" }, [c.A, c.p]),
     Constraint.align({ x: "end" }, [c.D, c.r]),
-    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
-      c.p,
-      c.q,
-      c.r,
-    ]),
+    Constraint.distribute(
+      { dir: "x", spacing: Spacing.atLeast(8), slack },
+      [c.p, c.q, c.r]
+    ),
     Constraint.align({ y: "start" }, [c.A, c.B, c.C, c.D]),
     Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
     Constraint.distribute({ dir: "y", spacing: 12 }, [c.A, c.p]),
@@ -111,21 +111,20 @@ export const RowAll: StoryObj = {
  * p and r an exact 160 apart, and q between them, at least 8 from each.
  * The gaps lead out of p and back into r, which one rigid group holds, so
  * q's room is what the exact distance leaves: 160 − 40 − 16 = 104 to
- * spare, which the layer's `slack` on x places. Under start, center and
- * end, one above another.
+ * spare, which the `slack` of q's distribute places. Under start, center
+ * and end, one above another.
  */
 const pinnedRow = (slack: Slack.Slack) =>
-  layer({ slack: { x: slack } }, [
+  layer([
     Box({ label: "p", w: 30, fill: "#e5e5e5" }).name("p"),
     Box({ label: "q", w: 40, fill: "#e63946" }).name("q"),
     Box({ label: "r", w: 30, fill: "#e5e5e5" }).name("r"),
   ]).relate((c) => [
     Constraint.distribute({ dir: "x", spacing: 160 }, [c.p, c.r]),
-    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
-      c.p,
-      c.q,
-      c.r,
-    ]),
+    Constraint.distribute(
+      { dir: "x", spacing: Spacing.atLeast(8), slack },
+      [c.p, c.q, c.r]
+    ),
     Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
   ]);
 
@@ -192,9 +191,9 @@ const treeLinks = (ns: Node[]) =>
 
 /**
  * The leaves one pitch apart; each parent's x the mean of its children's;
- * each child at least one level below its parent, with the layer's slack
- * on y at the end, so every leaf lands on the last level (d3.cluster's
- * levels).
+ * each child at least one level below its parent, with the slack of those
+ * gaps at the end, so every leaf lands on the last level (d3.cluster's
+ * levels). The gaps link the whole tree, so they share one slack.
  */
 export const Dendrogram: StoryObj = {
   render: () => {
@@ -202,7 +201,7 @@ export const Dendrogram: StoryObj = {
     const ns = nodes(budget);
     const leaves = ns.filter((n) => !n.t.children);
     const inner = ns.filter((n) => n.t.children);
-    layer({ slack: { y: Slack.end() } }, [
+    layer([
       spread(
         { dir: "x", spacing: Spacing.pitch(DX, { at: "middle" }) },
         leaves.map((n) => dot(n.path, "#457b9d"))
@@ -220,7 +219,11 @@ export const Dendrogram: StoryObj = {
           .filter((n) => n.parent)
           .map((n) =>
             Constraint.distribute(
-              { dir: "y", spacing: Spacing.atLeast(DY - 2 * R) },
+              {
+                dir: "y",
+                spacing: Spacing.atLeast(DY - 2 * R),
+                slack: Slack.end(),
+              },
               [c[n.parent!], c[n.path]]
             )
           ),

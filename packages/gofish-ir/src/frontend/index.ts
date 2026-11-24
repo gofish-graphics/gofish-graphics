@@ -37,6 +37,7 @@ export {
   LEAF_MARKS,
   COMBINATOR_MARKS,
   COORDS,
+  COORD_PRESETS,
   OPTION_TYPES,
   STRATEGIES,
   BINNING_KINDS,
@@ -68,6 +69,7 @@ export {
   splitDottedName,
   optionsRequired,
   presetParams,
+  presetOptions,
   presetValue,
   type ChannelInner,
   type FieldType,
@@ -80,6 +82,7 @@ export {
   type StrategyFamilyName,
   type StrategyKind,
   type StrategyPreset,
+  type PresetFamilyName,
   type PresetName,
   type PresetFixed,
 } from "./descriptors.js";

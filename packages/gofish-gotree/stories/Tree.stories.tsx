@@ -451,15 +451,11 @@ const nestedPieNode = (d: any) =>
     ? rect({
         w: NPT_LEAF_W,
         h: 36,
-        emX: true,
-        emY: true,
         fill: polarGreens[polarGreens.length - 1],
         stroke: "white",
         strokeWidth: 4,
       })
     : rect({
-        emX: true,
-        emY: true,
         fill: polarGreens[
           Math.min(polarGreens.length - 1 - d.height, polarGreens.length - 1)
         ],

@@ -25,23 +25,25 @@ Coord.clock(
     *,
     inner_radius: float | None = None,
     central_angle: float | None = None,
-    baseline_angle: float | None = None,
-    direction: int | None = None,
     center: tuple[float, float] | None = None,
 ) -> Coord
 ```
 
+`Coord.clock(**options)` is a preset of
+[`Coord.polar()`](/python/api/coords/polar):
+`Coord.polar(baseline_angle=math.pi / 2, direction=-1, **options)`. It fixes
+`baseline_angle` and `direction`, so the number 0 on the angular axis sits at
+12 o'clock and angles increase clockwise. It takes the other options of polar.
+Passing `baseline_angle` or `direction` is a `TypeError`. A clock space is a
+polar space, and it crosses the wire as
+`{"type": "polar", "baselineAngle": ..., "direction": -1, ...}`.
+
 ## Parameters
 
-::: gofish-ref clock
+::: gofish-ref Coord.clock
 :::
 
-`Coord.clock()` is the [`Coord.polar()`](/python/api/coords/polar) transform and accepts the same
-options — `inner_radius`, `central_angle`, `baseline_angle`, `direction`, `center`.
-Only the `baseline_angle` and `direction` defaults differ: 0° at 12 o'clock,
-clockwise. See
-[polar's Parameters](/python/api/coords/polar#parameters). As in polar, the number 0
-on the angular axis always sits at `baseline_angle`.
+See [polar's Parameters](/python/api/coords/polar#parameters).
 
 ## Usage
 
@@ -80,7 +82,7 @@ chart(data, coord=Coord.clock(inner_radius=0.6)) \
 # Rose chart (radial bar chart)
 chart(data, coord=Coord.clock()) \
     .flow(spread(by="month", dir="x", spacing=0)) \
-    .mark(rect(w=(math.pi * 2) / 12, h="value"))
+    .mark(rect(h="value"))
 ```
 
 ## See Also

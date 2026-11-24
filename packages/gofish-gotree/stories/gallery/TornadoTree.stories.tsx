@@ -22,7 +22,7 @@ import { combine, byDepth, mount } from "./_shared";
 // internal nodes get a rect with NO h (unsized on r, the nest axis) and a
 // fixed θ-width (emX). nest({y}) grows the parent's radial band to inner.h +
 // 2*pad and centers the subtree inside it. Leaves are fully sized on both axes.
-// All sizes are in domain units (emX → θ radians, emY → r units).
+// All sizes are in domain units (emX → θ radians; h → r units).
 //
 // NOTES — polar gaps (no hacks; flagged):
 //  - NEST ON r IS THE HARD CASE. Under polar, radial containment ("parent's
@@ -48,7 +48,7 @@ const meta: Meta = { title: "GoTree / Gallery / TornadoTree" };
 export default meta;
 
 const TH = 0.13; // fixed angular width per node (radians, via emX) — thin slivers
-const LEAF_H = 59; // leaf radial thickness (r units, via emY)
+const LEAF_H = 59; // leaf radial thickness (r units)
 
 const node = (d: any) =>
   d.height === 0
@@ -56,7 +56,6 @@ const node = (d: any) =>
         w: TH,
         h: LEAF_H,
         emX: true,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,
@@ -65,7 +64,6 @@ const node = (d: any) =>
         // internal node: NO h → grows on r via nest (radial containment).
         w: TH,
         emX: true,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,

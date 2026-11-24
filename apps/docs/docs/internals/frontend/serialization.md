@@ -404,12 +404,14 @@ centralAngle, baselineAngle, direction, center }`. `fromJSON.ts` rebuilds it
 with `rebuild("coord", type, opts)`, the same call that rebuilds an operator
 or a mark (§ Modularity), from the spec without its `type`. An options-object
 factory takes the options whole (`Coord.polar(opts)`), so a parameterized
-polar/clock (donut hole, partial fan, start angle) round-trips without
+polar (donut hole, partial fan, start angle) round-trips without
 per-option plumbing, and the descriptor's `positional` field goes first
-(`Coord.geo(opts.projection, rest)`). An unknown `type` throws. `polar` and
-`clock` share one field group and differ only in its `baselineAngle` /
-`direction` defaults, so the `type` tag is what keeps the angular convention
-across the wire when those options are left out.
+(`Coord.geo(opts.projection, rest)`). An unknown `type` throws. A JS
+transform writes this spec itself (`CoordinateTransform.toJSON`, the
+options it was made with), which `toJSON.ts` puts in the chart's or the
+layer's options. `Coord.clock()` is a preset of polar (`COORD_PRESETS`), so
+it has no `type` of its own: it crosses the wire as
+`{ type: "polar", baselineAngle: π/2, direction: -1, ... }`.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
@@ -1156,7 +1158,7 @@ descriptor's `positional` field is taken out of the options and passed first
 "projection"`). A dual-form construct such as
 `spread` or `line` therefore has one entry for both forms, and each compositing
 wire type is its factory's name (`intersect` to `intersect`, and so on).
-The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
+The coord transforms (`polar`, `wavy`, `geo`) are entries of the same
 table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
 A constraint is called as a combinator mark is, `factory(opts, refs)` with

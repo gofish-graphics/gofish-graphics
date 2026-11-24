@@ -37,7 +37,8 @@ Coord.polar(options?: {
 
 All optional; the defaults give a centered, full-circle disc starting at 3
 o'clock and going counter-clockwise. [`Coord.clock()`](/js/api/coords/clock) is
-the same transform with 0 at 12 o'clock, going clockwise.
+a preset of polar that fixes `baselineAngle: Math.PI / 2` and `direction: -1`,
+0 at 12 o'clock, going clockwise.
 
 The number 0 on the angular axis always sits at `baselineAngle`, whatever
 the θ range and `centralAngle`. A range that starts at 0, like a pie's, starts at

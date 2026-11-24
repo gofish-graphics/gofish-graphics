@@ -297,15 +297,11 @@ def nested_pie_node(d):
         return rect(
             w=NPT_LEAF_W,
             h=36,
-            em_x=True,
-            em_y=True,
             fill=POLAR_GREENS[-1],
             stroke="white",
             stroke_width=4,
         )
     return rect(
-        em_x=True,
-        em_y=True,
         fill=POLAR_GREENS[len(POLAR_GREENS) - 1 - d["height"]],
         stroke="white",
         stroke_width=4,

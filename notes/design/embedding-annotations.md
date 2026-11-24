@@ -36,28 +36,37 @@ embeds if _either_ applies (they are OR'd):
 Measure discriminates **Route B only** (the mark's own size); it says nothing about
 Route A. The two are orthogonal.
 
-**Route A as implemented (11-23, `sharedEdges.ts`).** "Edge-metric" is refined to
-**a shared edge**: an edge embeds when a relation makes it the same position as a
-neighbor's edge, since two shared edges must stay one position after the transform. A
-chain with a box gap of 0 (a stack, or `spread({ spacing: 0 })`) shares each part's
-start with the previous part's end. A chain with a gap pins an edge to a gap, not to
-another edge, so it shares none: a pixel-width bar spread apart, or alone, stays a line
-with its width as ink. Shared edges pass down to a child that lies on them: `align`
-`start`/`end` (both for `span`), the first/last part of a chain with a gap 0 or more,
-and a ring's content, only where the relation reaches every child and the node has no
-size of its own on the axis (so its edge is its children's hull). That is how a
-sunburst leaf, aligned at the start of its siblings' stack, shares the edge that stack
-shares with the parent ring. Two more rules (11-23): an only child lies on both edges
-of a node with no size of its own (gotree's `layer([c])` wrappers), and marks of one
-literal size with no position of their own, put at one anchor by an `align` (`middle`
-and `baseline` too), take one interval, the hull, so each lies on both edges. With
-these the rose, the hierarchical sector chart and the node-link sunburst's radius no
-longer hand-set the flag. Not handled: a center relation whose children fill the node
-only because their sizes happen to add up (the node-link sunburst's θ), a pixel band
-set apart by a gap (icicle, tyre, sector and sunburst rings, violin and tornado θ), a
-hand-placed wedge with literal x/y (multilevel silhouette, outside-in), a nested
-operand, and a glued stack with negative parts (its tail is its end). Those keep
-`emX`/`emY`.
+**Route A as implemented (11-24, `relatedExtents.ts`).** The maintainer's rule: a
+relation that places marks relative to each other in the space embeds them along the
+axis it relates them on, because the relation has to still hold after the transform.
+It does not depend on sizes, units, or whether a gap is zero. It embeds a mark's extent
+only when it relates both of the mark's edges on the axis:
+
+- A chain (`spread`, `stack`, `Constraint.distribute`) with a box spacing of any gap
+  (pixels, a percent, an `fr` weight) or `Spacing.atLeast` relates each part's start
+  and end to its neighbors, so every part embeds along the chain.
+- An `align` by `span`, or an `align` at `start` together with one at `end`, relates
+  both edges of each operand.
+- A pitch spacing and an `align` at one anchor (`start`, `end`, `middle`, `baseline`)
+  pin one point of each child. They place it but do not embed its extent, so a circle
+  centered on a wedge stays a circle and pitch-spaced pixel bars stay ink. The
+  maintainer confirmed this split on 11-24: "only the ones that relate both edges embed
+  that dimension. the ones that use pitch spacing are different."
+- A relation among fewer than two children relates nothing.
+
+The pass hands each node one boolean per axis. A node passes its own value down to an
+only child when it has no size of its own on that axis (the child is its hull, as in
+gotree's `layer([c])` wrappers), and to the content of a ring (`_transparent`). Nothing
+else passes down: the children of a stack aligned at one anchor on the cross axis are
+not related there, even when the stack itself is a part of a chain. The earlier rules
+that read sizes (marks of one literal size aligned at one anchor) and the zero-gap
+shared-edge rule are gone; the zero-gap case is one case of a chain.
+
+A mark with one axis embedded in a space that is not linear is drawn as a filled band
+(`src/bandRegion.ts`): the transformed midline, offset by half its pixel thickness on
+both sides along the transform's normal, closed by straight caps along the normal. In
+polar with the angle embedded and a pixel radius this is an annular sector, so a ring
+whose radius is ink draws the same picture as one whose radius is embedded.
 
 > **point / line / area = the number of axes whose edges are coordinate-space positions
 > (via Route A or Route B).**
@@ -92,7 +101,7 @@ A mark's render switches on which of its two dims are `embedded` (rect.tsx:300, 
 
 `embedded` is set (by the `resolveEmbedding` pass; this list predates it):
 
-0. **Route A** — a shared edge (see "Route A as implemented" above).
+0. **Route A** — a relation fixes both edges (see "Route A as implemented" above).
 1. **Explicit** — `emX`/`emY` on a `rect` (`dims.ts:81,88` → `embedded`).
 2. **By nest-growth** — an _unsized_ dim (no `w` / no `h`) on an `emX`/`emY` rect that
    `nest` grows to contain its subtree. This is the "embedded angular/radial

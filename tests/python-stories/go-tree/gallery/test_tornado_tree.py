@@ -5,7 +5,7 @@ from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
 TH = 0.13  # fixed angular width per node (radians, via em_x): thin slivers
-LEAF_H = 59  # leaf radial thickness (r units, via em_y)
+LEAF_H = 59  # leaf radial thickness (r units)
 
 
 # Internal nodes leave r unsized so the r nest grows them over their subtree.
@@ -15,7 +15,6 @@ def node(d):
             w=TH,
             h=LEAF_H,
             em_x=True,
-            em_y=True,
             fill=by_depth()(d),
             stroke="white",
             stroke_width=1,
@@ -23,7 +22,6 @@ def node(d):
     return rect(
         w=TH,
         em_x=True,
-        em_y=True,
         fill=by_depth()(d),
         stroke="white",
         stroke_width=1,

@@ -2,8 +2,9 @@
  * Minimum gaps and means of positions in the placement solve. A minimum gap
  * (`Spacing.atLeast`) is solved after the exact facts: they make rigid
  * groups, and the gaps separate the groups by the longest path over them,
- * with the slack placed by the scope's slack rule (`Slack.at(t)`, one per
- * axis problem: a layer's `slack`, or a spread's along its `dir`). A mean (`mean([...])`, an operand of
+ * with the slack placed by the slack of each system of linked gaps
+ * (`Slack.at(t)`, which a distribute or a spread states, and which the
+ * distributes of one system share). A mean (`mean([...])`, an operand of
  * `Constraint.align`) is an exact relation when its operands are in one
  * group, and is placed after its operands otherwise. The least, greatest and centered
  * solutions, and points between them, are checked against
@@ -119,13 +120,14 @@ function problem(
     pins: [],
     participantFacts: [],
     participants: new Set(nodes),
+    // Every gap states the one slack, so they agree.
     minGaps: gaps.map(([from, to, offset]) => ({
       from,
       to,
       offset,
       owner: `gap ${from}→${to}`,
+      slack: slack.t,
     })),
-    slack: slack.t,
     ...extra,
   };
 }
@@ -195,8 +197,7 @@ const solveIn = <T>(
   A: Arith<T>,
   children: Box[],
   constraints: ConstraintSpec[],
-  read: (v: Pwl.Value) => T,
-  slack = 0
+  read: (v: Pwl.Value) => T
 ) =>
   solvePlacementCells(
     A,
@@ -215,27 +216,35 @@ const solveIn = <T>(
     undefined,
     undefined,
     undefined,
-    undefined,
-    [slack, 0]
+    undefined
   )[0];
 
 /** Each child's `min` solved in numbers, at σ. */
 const layout = (
   children: Box[],
   constraints: ConstraintSpec[],
-  sigma = 1,
-  slack = 0
+  sigma = 1
 ): Map<string, number> => {
   const at = (v: Pwl.Value) => Pwl.at(v, sigma);
   const solved = solveIn(
     { ...numbers, fromValue: at },
     children,
     constraints,
-    at,
-    slack
+    at
   );
   return new Map([...solved.cells].map(([k, c]) => [k, c.min]));
 };
+
+/** `constraints` with each distribute of minimum gaps stating `slack`. */
+const slacked = (
+  constraints: ConstraintSpec[],
+  slack: Slack.Slack
+): ConstraintSpec[] =>
+  constraints.map((c) =>
+    c.type === "distribute" && c.spacing.kind === "atLeast"
+      ? { ...c, slack }
+      : c
+  );
 
 const near = (a: number | undefined, b: number) =>
   a !== undefined && Math.abs(a - b) < 1e-9;
@@ -555,10 +564,11 @@ async function main() {
       Constraint.distribute({ dir: "x", spacing: atLeast(8) }, [rp, rq, rr]),
     ];
     for (const [rule, name] of want) {
-      const symbolic = solveIn(values, kids, cs, (v) => v, rule.t);
+      const ruled = slacked(cs, rule);
+      const symbolic = solveIn(values, kids, ruled, (v) => v);
       const misses: string[] = [];
       for (const sigma of [0, 1, 10]) {
-        const numeric = layout(kids, cs, sigma, rule.t);
+        const numeric = layout(kids, ruled, sigma);
         const pEnd = numeric.get("p")! + sigma + 4;
         if (!near(numeric.get("q")! - pEnd, fromEnd.get(name)!))
           misses.push(`σ=${sigma} q: ${numeric.get("q")}`);
@@ -699,10 +709,11 @@ async function main() {
       Constraint.distribute({ dir: "x", spacing: atLeast(1) }, [a, x, c]),
     ];
     for (const [policy, rule] of RULES) {
-      const symbolic = solveIn(values, kids, constraints, (v) => v, rule.t);
+      const ruled = slacked(constraints, rule);
+      const symbolic = solveIn(values, kids, ruled, (v) => v);
       const misses: string[] = [];
       for (const sigma of [0, 1, 10]) {
-        const numeric = layout(kids, constraints, sigma, rule.t);
+        const numeric = layout(kids, ruled, sigma);
         for (const [name, min] of numeric) {
           const s = symbolic.cells.get(name);
           if (s === undefined || Math.abs(Pwl.at(s.min, sigma) - min) > 1e-9)
@@ -716,65 +727,147 @@ async function main() {
       );
     }
     // At σ = 10, x has slack: a ends at 20, c starts at 20 + 4 + 34 + 4.
-    const center = layout(kids, constraints, 10, Slack.center().t);
+    const center = layout(kids, slacked(constraints, Slack.center()), 10);
     // x's least start is 21, its greatest 62 − 1 − 2 = 59: halfway is 40.
     check("x is centered in its slack", near(center.get("x"), 40), [...center]);
   }
 
-  console.log("\n# the slack rule through layer and spread");
+  console.log("\n# slack on distribute and spread, one per linked system");
   {
     const { layer, spread, rect, Constraint: C, Spacing: S } = GoFish as any;
-    // x: b at least 10 after a and 10 before c, and c at least 60 after a,
-    // all 20 wide: b starts 30 to 50 past a, so it has 20 of slack. y: the
-    // same, along y. (The long edge is a minimum gap, so the slack is
-    // bounded by gaps alone; an exact long edge is the RowPinned case,
-    // "an item held between two members of one rigid group" above.)
-    const row = (slack: Record<string, Slack.Slack> | undefined) =>
-      layer(slack === undefined ? {} : { slack }, [
-        rect({ w: 20, h: 20, fill: "red" }).name("a"),
-        rect({ w: 20, h: 20, fill: "green" }).name("b"),
-        rect({ w: 20, h: 20, fill: "blue" }).name("c"),
-        rect({ w: 20, h: 20, fill: "orange" }).name("p"),
-        rect({ w: 20, h: 20, fill: "purple" }).name("q"),
-        rect({ w: 20, h: 20, fill: "black" }).name("r"),
-      ]).relate((c: any) => [
-        C.distribute({ dir: "x", spacing: S.atLeast(10) }, [c.a, c.b, c.c]),
-        C.distribute({ dir: "x", spacing: S.atLeast(60) }, [c.a, c.c]),
-        C.distribute({ dir: "y", spacing: S.atLeast(10) }, [c.p, c.q, c.r]),
-        C.distribute({ dir: "y", spacing: S.atLeast(60) }, [c.p, c.r]),
-        C.align({ y: "start" }, [c.a, c.b, c.c]),
-        C.align({ x: "start" }, [c.p, c.q, c.r]),
-        C.distribute({ dir: "y", spacing: 10 }, [c.a, c.p]),
-      ]);
+    // b at least 10 after a and 10 before c, and c at least 60 after a, all
+    // 20 wide: b starts 30 to 50 past a, so it has 20 of slack. The two
+    // distributes share a and c, so their gaps are one linked system. (The
+    // long edge is a minimum gap, so the slack is bounded by gaps alone; an
+    // exact long edge is the RowPinned case, "an item held between two
+    // members of one rigid group" above.) d, e, f are the same along x,
+    // with no node in common with a, b, c: a second system, unlinked.
+    const rects = (names: string[], fills: string[]) =>
+      names.map((n, i) => rect({ w: 20, h: 20, fill: fills[i] }).name(n));
+    const row = (
+      [chain, long]: [unknown, unknown],
+      [chain2, long2]: [unknown, unknown] = [undefined, undefined]
+    ) =>
+      layer(
+        {},
+        rects(
+          ["a", "b", "c", "d", "e", "f"],
+          ["red", "green", "blue", "orange", "purple", "black"]
+        )
+      ).relate((c: any) => {
+        const minGaps = (
+          refs: unknown[],
+          gap: number,
+          slack: unknown
+        ) =>
+          C.distribute(
+            {
+              dir: "x",
+              spacing: S.atLeast(gap),
+              ...(slack === undefined ? {} : { slack }),
+            },
+            refs
+          );
+        return [
+          minGaps([c.a, c.b, c.c], 10, chain),
+          minGaps([c.a, c.c], 60, long),
+          minGaps([c.d, c.e, c.f], 10, chain2),
+          minGaps([c.d, c.f], 60, long2),
+          C.align({ y: "start" }, [c.a, c.b, c.c]),
+          C.align({ y: "start" }, [c.d, c.e, c.f]),
+          C.distribute({ dir: "y", spacing: 10 }, [c.a, c.d]),
+        ];
+      });
     // The fraction of its slack a middle item takes: its offset from the
-    // first past the least (30), over the room (20). Sizes, not signs, so a
-    // y that reads either way gives the same.
+    // first past the least (30), over the room (20).
     const fraction = (
       boxes: Map<string, { x: number; y: number }>,
-      axis: "x" | "y",
       [lo, mid]: string[]
-    ) => (Math.abs(boxes.get(mid)![axis] - boxes.get(lo)![axis]) - 30) / 20;
-    const perAxis = await rectsOf(row({ x: Slack.end(), y: Slack.at(0.25) }));
+    ) => (boxes.get(mid)!.x - boxes.get(lo)!.x - 30) / 20;
+    const abc = ["red", "green"];
+    const def = ["orange", "purple"];
+
+    const agree = await rectsOf(row([Slack.end(), Slack.end()]));
     check(
-      "a layer's slack per axis: x at the end, y a quarter of the way",
-      near(fraction(perAxis, "x", ["red", "green"]), 1) &&
-        near(fraction(perAxis, "y", ["orange", "purple"]), 0.25),
-      [...perAxis]
+      "two linked distributes that state the same slack: it holds",
+      near(fraction(agree, abc), 1),
+      [...agree]
     );
-    const plain = await rectsOf(row(undefined));
-    const started = await rectsOf(row({ x: Slack.start(), y: Slack.start() }));
+    for (const [which, slacks] of [
+      ["the chain", [Slack.end(), undefined]],
+      ["the long edge", [undefined, Slack.end()]],
+    ] as const) {
+      const inherit = await rectsOf(row(slacks as [unknown, unknown]));
+      check(
+        `one distribute states the slack (${which}) and the linked one takes it`,
+        near(fraction(inherit, abc), 1),
+        [...inherit]
+      );
+    }
+    const clash = await errorOf(() =>
+      rectsOf(row([Slack.end(), Slack.center()]))
+    );
     check(
-      "no slack is Slack.start() on both axes",
-      near(fraction(plain, "x", ["red", "green"]), 0) &&
-        near(fraction(plain, "y", ["orange", "purple"]), 0) &&
+      "two linked distributes that state different slacks: an error naming both",
+      clash !== undefined &&
+        /distribute\[0\] states slack Slack\.at\(1\) but distribute\[1\] states Slack\.at\(0\.5\)/.test(
+          clash
+        ) &&
+        clash.includes("linked"),
+      clash
+    );
+    const apart = await rectsOf(
+      row([Slack.end(), undefined], [undefined, Slack.at(0.25)])
+    );
+    check(
+      "two unlinked systems in one layer each keep their own slack",
+      near(fraction(apart, abc), 1) && near(fraction(apart, def), 0.25),
+      [...apart]
+    );
+    const plain = await rectsOf(row([undefined, undefined]));
+    const started = await rectsOf(row([Slack.start(), Slack.start()]));
+    check(
+      "a system where no distribute states slack takes Slack.start()",
+      near(fraction(plain, abc), 0) &&
+        near(fraction(plain, def), 0) &&
         JSON.stringify([...plain]) === JSON.stringify([...started]),
       [...plain]
     );
 
-    // A spread solves its own chain, in the layer it lowers to, and its
-    // slack is that layer's on its dir. A chain alone has no room (every
-    // gap is at its least), so every rule draws the same row; the rule is
-    // read, and checked, all the same.
+    // Slack only places what minimum gaps leave room for, so on any other
+    // spacing it is an error, made where the distribute is made.
+    for (const spacing of [5, S.box(5), S.pitch(30)]) {
+      const exactSlack = await errorOf(() =>
+        C.distribute({ dir: "x", spacing, slack: Slack.end() }, [
+          ref("a"),
+          ref("b"),
+        ])
+      );
+      check(
+        `slack on Spacing.${typeof spacing === "number" ? "box (a bare amount)" : spacing.kind} is an error`,
+        exactSlack !== undefined &&
+          exactSlack.includes(
+            "slack applies to minimum gaps: use Spacing.atLeast"
+          ),
+        exactSlack
+      );
+    }
+    const spreadExact = await errorOf(() =>
+      rectsOf(
+        spread({ dir: "x", slack: Slack.end() }, rects(["a", "b"], ["red", "green"]))
+      )
+    );
+    check(
+      "a spread's slack with its default spacing is the same error",
+      spreadExact !== undefined &&
+        spreadExact.includes("slack applies to minimum gaps"),
+      spreadExact
+    );
+
+    // A spread's slack is the slack of the distribute it lays its children
+    // out with: the same row as that distribute in a layer. A chain alone
+    // has no room (every gap is at its least), so every slack draws the
+    // same row; the slack is read, and checked, all the same.
     const spreadRow = (slack: unknown, dir = "x") =>
       spread(
         {
@@ -782,27 +875,34 @@ async function main() {
           spacing: S.atLeast(10),
           ...(slack === undefined ? {} : { slack }),
         },
-        [
-          rect({ w: 20, h: 20, fill: "red" }),
-          rect({ w: 30, h: 20, fill: "green" }),
-          rect({ w: 20, h: 20, fill: "blue" }),
+        rects(["a", "b", "c"], ["red", "green", "blue"])
+      );
+    const distributeRow = (slack: unknown) =>
+      layer({}, rects(["a", "b", "c"], ["red", "green", "blue"])).relate(
+        (c: any) => [
+          C.align({ y: "baseline" }, [c.a, c.b, c.c]),
+          C.distribute(
+            { dir: "x", spacing: S.atLeast(10), slack },
+            [c.a, c.b, c.c]
+          ),
         ]
       );
+    const offsets = (m: Map<string, { x: number }>) =>
+      [...m].map(([k, b]) => [k, b.x - m.get("red")!.x]);
     const spreadEnd = await rectsOf(spreadRow(Slack.end()));
+    const distributeEnd = await rectsOf(distributeRow(Slack.end()));
     const spreadStart = await rectsOf(spreadRow(undefined));
+    check(
+      "spread({ slack }) places as Constraint.distribute({ slack }) does",
+      JSON.stringify(offsets(spreadEnd)) ===
+        JSON.stringify(offsets(distributeEnd)),
+      { spread: [...spreadEnd], distribute: [...distributeEnd] }
+    );
     check(
       "a spread's chain alone has no room: Slack.end() draws Slack.start()'s row",
       JSON.stringify([...spreadEnd]) === JSON.stringify([...spreadStart]) &&
         near(spreadEnd.get("green")!.x - spreadEnd.get("red")!.x, 30),
       { end: [...spreadEnd], start: [...spreadStart] }
-    );
-    const spreadBad = await errorOf(() =>
-      rectsOf(spreadRow({ kind: "at", t: 2 }, "y"))
-    );
-    check(
-      "a spread's slack reaches the layer on its dir, which checks it",
-      spreadBad !== undefined && /slack\.y/.test(spreadBad),
-      spreadBad
     );
     const polar = await errorOf(() =>
       rectsOf(
@@ -812,31 +912,13 @@ async function main() {
       )
     );
     check(
-      "a spread's dir named by its coordinate space names its slack's axis",
+      "a spread along a coordinate space's own axis name takes slack",
       polar === undefined,
       polar
     );
 
-    // A scope with a slack rule and no minimum gaps: nothing has slack.
-    const exact = (slack: Record<string, unknown> | undefined) =>
-      layer(slack === undefined ? {} : { slack }, [
-        rect({ w: 20, h: 20, fill: "red" }).name("a"),
-        rect({ w: 30, h: 20, fill: "green" }).name("b"),
-      ]).relate((c: any) => [
-        C.distribute({ dir: "x", spacing: 5 }, [c.a, c.b]),
-      ]);
-    const exactEnd = await rectsOf(
-      exact({ x: Slack.end(), y: Slack.center() })
-    );
-    const exactNone = await rectsOf(exact(undefined));
-    check(
-      "a slack rule on a scope with no minimum gaps changes nothing",
-      JSON.stringify([...exactEnd]) === JSON.stringify([...exactNone]),
-      [...exactEnd]
-    );
-
     // `t` is a fraction in [0, 1]: `Slack.at` checks it where it is made,
-    // and a layer checks a rule it is handed (from the wire, say).
+    // and a distribute checks a slack it is handed (from the wire, say).
     for (const t of [-0.1, 1.5, NaN]) {
       const made = await errorOf(() => Slack.at(t));
       check(
@@ -845,22 +927,17 @@ async function main() {
         made
       );
       const handed = await errorOf(() =>
-        rectsOf(exact({ x: { kind: "at", t } }))
+        C.distribute(
+          { dir: "x", spacing: S.atLeast(5), slack: { kind: "at", t } },
+          [ref("a"), ref("b")]
+        )
       );
       check(
-        `a layer handed t = ${t} is an error naming slack.x`,
-        handed !== undefined && handed.includes("slack.x"),
+        `a distribute handed t = ${t} is an error naming slack`,
+        handed !== undefined && handed.includes("slack"),
         handed
       );
     }
-    const unknownAxis = await errorOf(() =>
-      rectsOf(exact({ theta: Slack.end() }))
-    );
-    check(
-      "a slack key that names no axis of the scope is an error",
-      unknownAxis !== undefined && /theta/.test(unknownAxis),
-      unknownAxis
-    );
   }
 
   console.log("\n# the mean of positions");

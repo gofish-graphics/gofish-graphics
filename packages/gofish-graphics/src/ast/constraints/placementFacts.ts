@@ -62,6 +62,10 @@ export type AnchorMinGapFact<T = number> = {
   to: AnchorRef;
   gap: T;
   owner: string;
+  /** The slack its owner states (`Slack.at(t)`'s `t`): where the linked
+   *  gaps put the groups they leave room for. Undefined when the owner
+   *  states none, which takes the value the linked gaps state, or 0. */
+  slack?: number;
   /** Set on an edge of a spread's chain, as on {@link AnchorRelationFact}. */
   chain?: boolean;
 };
@@ -181,7 +185,9 @@ export type PlacementRelationRequest<T = number> = {
 };
 
 /** Request a minimum gap: see {@link AnchorMinGapFact}. */
-export type PlacementMinGapRequest<T = number> = PlacementRelationRequest<T>;
+export type PlacementMinGapRequest<T = number> = PlacementRelationRequest<T> & {
+  slack?: number;
+};
 
 /** Request a mean of positions: see {@link AnchorMeanFact}. */
 export type PlacementMeanRequest = {
@@ -242,6 +248,8 @@ export type PlacementMinGap<T = number> = {
   to: NodeId;
   offset: T;
   owner: string;
+  /** See {@link AnchorMinGapFact.slack}. */
+  slack?: number;
   chain?: boolean;
 };
 

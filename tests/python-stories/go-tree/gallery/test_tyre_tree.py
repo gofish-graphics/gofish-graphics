@@ -29,14 +29,12 @@ def node(d):
         return rect(
             w=datum(1),
             h=(d["height"] + 1) * BAND,
-            em_y=True,
             fill=by_depth(TYRE_BLUES)(d),
             stroke="white",
             stroke_width=2,
         )
     return rect(
         h=(d["height"] + 1) * BAND,
-        em_y=True,
         fill=by_depth(TYRE_BLUES)(d),
         stroke="white",
         stroke_width=2,

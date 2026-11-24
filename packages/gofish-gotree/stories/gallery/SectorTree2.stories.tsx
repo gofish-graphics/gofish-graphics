@@ -29,7 +29,7 @@ import { initializeContainer } from "../helper";
 // EMBEDDED-DIMENSION WEDGE. A sector wedge SWEEPS through θ, so the node's
 // θ-dimension is EMBEDDED in the polar transform: the rect WIDTH is measured in
 // θ-units (a data weight, or unsized) so it sweeps an arc, not a flat pixel span;
-// its r-dimension (height, emY:true) is the ring thickness. Hard "embedded vs
+// its r-dimension (height, pixels) is the ring thickness. Hard "embedded vs
 // non-embedded" case:
 //   - LEAVES carry an explicit θ-width = leafTheta (their angular share).
 //   - INTERNAL nodes get NO width — nest grows the parent's θ-width to its
@@ -86,7 +86,7 @@ const deepBalancedTree = (() => {
 
 const bandHeight = 42; // radial thickness of one ring
 
-// Wedge node: width in θ-units sweeps an arc; height in r-units (emY) is
+// Wedge node: width in θ-units sweeps an arc; height in pixels is
 // the ring thickness. Leaves carry the explicit θ-share; internal nodes leave
 // width to nest (grows to children's combined arc). Color by depth (blue ramp,
 // dark root → light leaves), matching the reference. Static thickness-2 stroke.
@@ -95,14 +95,12 @@ const node = (d: any) =>
     ? rect({
         w: datum(1),
         h: bandHeight,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 2,
       })
     : rect({
         h: bandHeight,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 2,

@@ -201,6 +201,85 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
     }
   }
 }
+// The Coord family's presets (`COORD_PRESETS`) follow the same rule: a
+// preset of a transform of `COORDS` takes only that transform's other
+// options, and is that transform on the wire and in layout.
+console.log("\n# a coord preset takes only the options it does not fix");
+{
+  const { Coord, Serialize, chart, rect } = GoFish as Record<string, any>;
+  const pie = (coord: unknown) =>
+    chart(
+      [
+        { k: "a", v: 3 },
+        { k: "b", v: 5 },
+      ],
+      { coord, w: 200, h: 200 }
+    )
+      .flow(GoFish.stack({ by: "k", dir: "x" }))
+      .mark(rect({ w: "v", fill: "k" }));
+  for (const [name, preset] of Object.entries(Frontend.COORD_PRESETS)) {
+    const kindParams = Frontend.resolveFields(Frontend.COORDS[preset.kind]);
+    const open = Frontend.presetParams("Coord", name);
+    check(
+      `Coord.${name}'s options are Coord.${preset.kind}'s others`,
+      JSON.stringify(Object.keys(open)) ===
+        JSON.stringify(
+          Object.keys(kindParams).filter((k) => !(k in preset.values))
+        ),
+      JSON.stringify(Object.keys(open))
+    );
+    for (const [field, value] of Object.entries(preset.values)) {
+      let message = "";
+      try {
+        Coord[name]({ [field]: value });
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      check(
+        `Coord.${name}({ ${field} }) is an error naming Coord.${preset.kind}`,
+        message.includes(`Coord.${name}({ ${field} })`) &&
+          message.includes(`Coord.${preset.kind}({ `),
+        message
+      );
+    }
+    // The preset is its kind with the values it fixes: the same IR and the
+    // same drawing, with and without an open option.
+    for (const opts of [{}, { innerRadius: 0.4 }]) {
+      const viaPreset = pie(Coord[name](opts));
+      const viaKind = pie(Coord[preset.kind]({ ...preset.values, ...opts }));
+      const [a, b] = await Promise.all(
+        [viaPreset, viaKind].map(async (c) =>
+          JSON.stringify(await Serialize.toJSON(c))
+        )
+      );
+      check(
+        `Coord.${name}(${JSON.stringify(opts)}) has the IR of Coord.${preset.kind} with its values`,
+        a === b && a.includes(`"type":"${preset.kind}"`),
+        `${a}\n${b}`
+      );
+      // Each node's id counts the nodes made before it, so it is left out.
+      const [da, db] = await Promise.all(
+        [viaPreset, viaKind].map(async (c) =>
+          JSON.stringify(await c.toDisplayList({ w: 200, h: 200 }), (k, v) =>
+            k === "id" ? undefined : v
+          )
+        )
+      );
+      check(
+        `Coord.${name}(${JSON.stringify(opts)}) lays out as Coord.${preset.kind} with its values`,
+        da === db
+      );
+    }
+  }
+  // The rebuilt coord is the same transform: a round trip keeps the values.
+  const doc = await Serialize.toJSON(pie(Coord.clock()));
+  const back = await Serialize.toJSON(Serialize.buildIR(doc));
+  check(
+    "Coord.clock() round-trips through the wire as polar with its values",
+    JSON.stringify(back) === JSON.stringify(doc),
+    JSON.stringify(back)
+  );
+}
 {
   const { Calendar, Curve } = GoFish as Record<string, any>;
   check(

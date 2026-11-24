@@ -16,6 +16,7 @@ export type Coord = CoordinateTransform;
 export { polar } from "../ast/coordinateTransforms/polar";
 export type { PolarOptions } from "../ast/coordinateTransforms/polar";
 export { clock } from "../ast/coordinateTransforms/clock";
+export type { ClockOptions } from "../ast/coordinateTransforms/clock";
 export { wavy } from "../ast/coordinateTransforms/wavy";
 export { geo } from "../ast/coordinateTransforms/geo";
 export type { Projection, GeoOptions } from "../ast/coordinateTransforms/geo";

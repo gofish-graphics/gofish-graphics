@@ -6,8 +6,9 @@ title: Slack
 
 The `Slack` family holds the rules for where children go when minimum gaps
 ([`Spacing.atLeast`](/js/api/spacing)) leave them room. A rule is the value of
-the `slack` option of [`layer`](/js/api/operators/layer), one per axis, and of
-[`spread`](/js/api/operators/spread), along its `dir`.
+the `slack` option of
+[`Constraint.distribute`](/js/api/constraints/relate#constraint-distribute)
+and of [`spread`](/js/api/operators/spread), along their `dir`.
 
 A minimum gap gives each child a range of positions, not one position. The
 least solution puts every child as early as its gaps allow. The greatest
@@ -19,17 +20,16 @@ every child.
 ::: gofish
 
 ```js
-gf.layer({ slack: { x: gf.Slack.end() } }, [
+gf.layer([
   gf.rect({ w: 60, h: 24, fill: "#a8dadc" }).name("a"),
   gf.rect({ w: 40, h: 24, fill: "#e63946" }).name("q"),
   gf.rect({ w: 60, h: 24, fill: "#a8dadc" }).name("b"),
 ])
   .relate((c) => [
-    gf.Constraint.distribute({ dir: "x", spacing: gf.Spacing.atLeast(10) }, [
-      c.a,
-      c.q,
-      c.b,
-    ]),
+    gf.Constraint.distribute(
+      { dir: "x", spacing: gf.Spacing.atLeast(10), slack: gf.Slack.end() },
+      [c.a, c.q, c.b]
+    ),
     gf.Constraint.distribute({ dir: "x", spacing: gf.Spacing.atLeast(200) }, [
       c.a,
       c.b,
@@ -49,7 +49,10 @@ Slack.center; // or Slack.center()
 Slack.end; // or Slack.end()
 Slack.at(t);
 
-layer({ slack: { x?: Slack, y?: Slack } }, children);
+Constraint.distribute(
+  { dir, spacing: Spacing.atLeast(gap), slack: Slack },
+  refs
+);
 spread({ dir, spacing: Spacing.atLeast(gap), slack: Slack });
 ```
 
@@ -61,11 +64,17 @@ rule is a plain object, `{ kind: "at", t }`, of type `Slack.Slack`.
 options, so another fraction is `Slack.at(t)`. The same object is the rule's
 wire form.
 
-A layer solves its constraints on each axis together, so it takes one rule per
-axis. Its keys are axis names in the scope of its children: `x`, `y`, or a
-name the enclosing coordinate space declares. An axis it leaves out takes
-`Slack.start()`. A spread solves its own chain, and its rule applies along its
-`dir`. A rule on an axis with no minimum gaps changes nothing.
+A rule needs `spacing: Spacing.atLeast(gap)`. With any other spacing there is
+no room to place, and `slack` is an error.
+
+Minimum gaps that share children are linked, and linked gaps share one room,
+so they share one rule. In the example above, the two distributes share `a`
+and `b`. The first states `Slack.end()`, and the second, which states no rule,
+takes it. Two linked distributes that state different rules are an error that
+names both. Gaps that share no children, even in one layer, each take their
+own rule. Where no linked distribute states a rule, the rule is
+`Slack.start()`. A spread's `slack` is the rule of the distribute it lays its
+children out with.
 
 The family is also a module of its own:
 
@@ -95,7 +104,6 @@ other value is an error.
 ## See also
 
 - [`Spacing`](/js/api/spacing), whose `Spacing.atLeast` makes minimum gaps
-- [`layer`](/js/api/operators/layer)
 - [`spread`](/js/api/operators/spread)
 - [`Constraint.distribute`](/js/api/constraints/relate#constraint-distribute)
 - [Underlying space](/internals/core/underlying-space), the essay on how a

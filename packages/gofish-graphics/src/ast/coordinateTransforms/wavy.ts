@@ -11,5 +11,6 @@ export const wavy = (): CoordinateTransform => {
       { min: 0, max: 100, size: 100 },
       { min: 0, max: 100, size: 100 },
     ],
+    toJSON: () => ({ type: "wavy" }),
   };
 };

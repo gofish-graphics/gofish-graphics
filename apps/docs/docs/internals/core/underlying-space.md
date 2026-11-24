@@ -1356,11 +1356,15 @@ the least solution's span. So a minimum gap gives
 each group a range of positions, not one position, and a group's slack is its
 greatest place minus its least. The slack rule (`Slack.at(t)`, with `start`,
 `center` and `end` its points 0, 0.5 and 1) puts every group the same fraction
-`t` of the way through its range. The rule is one per layer and axis, not one
-per gap, since the gaps a layer solves on an axis share their room: the layer
-reads it from its `slack` option (keys are axis names in the scope of its
-children, resolved with them), a spread from its own `slack` on its `dir`, and
-it reaches `separateGroups` as the axis problem's `slack`. A cluster with a
+`t` of the way through its range. The rule is one per cluster, the groups
+the gaps link, not one per gap, since linked gaps share their room. A
+distribute states it in its `slack` option (a spread passes its own `slack`
+to the distribute it lowers to), and each of its minimum gaps carries that
+`t` (`PlacementMinGap.slack`) into `separateGroups`, which gathers what the
+gaps of each cluster state by the constraint that owns them
+(`clusterSlack`): the one value they state, an error naming two owners that
+state different values, or 0 where none states one. Two clusters in one
+layer each take their own. A cluster with a
 pinned group then moves as one so the pins hold. It needs only add, max and negate, so it runs in formulas
 like the rest of the solve. A **mean** (`anchor-mean`) puts one anchor at the
 weighted mean of others. It comes from an align with a `mean([...])` operand

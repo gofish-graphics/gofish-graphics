@@ -232,6 +232,8 @@ PRESET_FIXED = [
     lambda: Slack.start(t=0.3),
     lambda: Slack.center(t=0.3),
     lambda: Slack.end(t=0.3),
+    lambda: Coord.clock(baseline_angle=0),
+    lambda: Coord.clock(direction=1),
 ]
 
 
@@ -475,6 +477,23 @@ def test_distribute_spacing_is_spreads():
     assert spacing_of(8) == 8
     with pytest.raises(TypeError, match=r"spacing\['kind'\] got an unexpected value 'gap'"):
         spacing_of({"kind": "gap", "gap": 8})
+
+
+def test_slack_is_a_distribute_option_not_a_layers():
+    """Slack is stated on the distribute (or spread) of minimum gaps, on the
+    wire as its options' ``slack``; ``layer`` takes none."""
+    from gofish import layer, rect
+
+    c = Constraint.distribute(
+        [], dir="x", spacing=Spacing.at_least(8), slack=Slack.end()
+    )
+    assert c.options == {
+        "dir": "x",
+        "spacing": {"kind": "atLeast", "gap": 8},
+        "slack": {"kind": "at", "t": 1},
+    }
+    with pytest.raises(TypeError, match="unexpected keyword argument 'slack'"):
+        layer([rect(w=10, h=10)], slack={"x": Slack.end()})
 
 
 @pytest.mark.parametrize("name", ["align", "position", "nest"])

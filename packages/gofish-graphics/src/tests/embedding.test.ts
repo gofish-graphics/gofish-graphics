@@ -24,6 +24,11 @@ import { fresh } from "./testHelpers";
 import { Spread } from "../ast/graphicalOperators/spread";
 import { resolveReferences } from "../ast/_ref";
 import { layer } from "../ast/graphicalOperators/layer";
+import { Constraint } from "../ast/constraints";
+import { SlotOperand } from "../ast/constraints/shared";
+import { fr } from "../ast/length";
+import { atLeast, pitch } from "../families/spacing";
+import { bandRegion } from "../bandRegion";
 
 /** A data value read from column `name`, i.e. an amount of that quantity. */
 const q = (v: number, name: string) => new DatumValueImpl(v, { name });
@@ -180,10 +185,11 @@ console.log("# embedding: Route B in context");
     "emX/emY must override the measure gate"
   );
 
-  console.log("# embedding: Route A (shared edges) in context");
-  // Pixel rings laid end to end along the radius: each ring's radial edge is
-  // a neighbor's, so the radius embeds (an annular sector that touches its
-  // neighbor), though the ring's height is pixels.
+  console.log("# embedding: Route A (related extents) in context");
+  // A relation that fixes both edges of a mark on an axis embeds that axis,
+  // whatever the unit of the mark's size: the relation must still hold
+  // after the transform. One that pins one point of a mark places it there
+  // and leaves its extent to its own size.
   const ring = (h = 40) => Rect({ w: q(1, "amount"), h });
   const leafEmbeds = async (rootIn: any, path: number[]) => {
     const root = await rootIn;
@@ -195,93 +201,120 @@ console.log("# embedding: Route B in context");
     for (const i of path) n = n.children[i];
     return JSON.stringify([n.args.dims[0].embedded, n.args.dims[1].embedded]);
   };
+  const both = JSON.stringify([true, true]);
+  const radiusInk = JSON.stringify([true, false]);
   const polarOf = (child: any) => coord({ transform: polar() }, [child]);
-  for (const i of [0, 1]) {
-    ok(
-      `polar pixel rings edge to edge: ring ${i} embeds on both axes`,
-      (await leafEmbeds(
-        polarOf(Spread({ dir: "y", spacing: 0 }, [ring(), ring()])),
-        [0, i]
-      )) === JSON.stringify([true, true])
-    );
+
+  // A chain relates each part's end to the next part's start, so every part
+  // embeds along the chain, for any box gap and for a minimum gap.
+  for (const [label, spacing] of [
+    ["a zero gap", 0],
+    ["a positive gap", 4],
+    ["an fr gap", fr(1)],
+    ["a minimum gap", atLeast(4)],
+  ] as const) {
+    for (const i of [0, 1]) {
+      ok(
+        `polar pixel rings chained with ${label}: ring ${i} embeds the radius`,
+        (await leafEmbeds(
+          polarOf(Spread({ dir: "y", spacing }, [ring(), ring()])),
+          [0, i]
+        )) === both
+      );
+    }
   }
+  // A pitch pins the same point of each part, not its edges.
   ok(
-    "polar pixel rings apart: the radius stays ink",
+    "polar pixel rings set apart by a pitch: the radius stays ink",
     (await leafEmbeds(
-      polarOf(Spread({ dir: "y", spacing: 4 }, [ring(), ring()])),
+      polarOf(Spread({ dir: "y", spacing: pitch(50) }, [ring(), ring()])),
       [0, 0]
-    )) === JSON.stringify([true, false])
+    )) === radiusInk
   );
-  // A bar of pixel width touches nothing: it keeps its width as ink.
+
+  // A bar of pixel width placed by no relation keeps its width as ink.
   const bar = () => Rect({ w: 16, h: q(5, "amount") });
   ok(
     "polar lone pixel-width bar: x stays ink (a line)",
     (await leafEmbeds(polarOf(bar()), [0])) === JSON.stringify([false, true])
   );
   ok(
-    "polar pixel-width bars apart: x stays ink",
+    "polar pixel-width bars spread apart: x embeds (wedges)",
     (await leafEmbeds(
       polarOf(Spread({ dir: "x", spacing: 0.1 }, [bar(), bar()])),
       [0, 1]
-    )) === JSON.stringify([false, true])
+    )) === both
   );
-  ok(
-    "polar pixel-width bars edge to edge: x embeds (wedges)",
-    (await leafEmbeds(
-      polarOf(Spread({ dir: "x", spacing: 0 }, [bar(), bar()])),
-      [0, 1]
-    )) === JSON.stringify([true, true])
-  );
-  // The sunburst's shape: a ring, then its children's rings stacked along
-  // the angle and aligned at their start on the radius. A child's inner
-  // edge lies on the stack's inner edge, which touches the parent ring, so
-  // it is shared too. Aligned at the end (or the middle), the child's inner
-  // edge touches nothing.
-  const sunburst = (alignment: string) =>
-    polarOf(
-      Spread({ dir: "y", spacing: 0, alignment: "middle" }, [
-        ring(),
-        Spread({ dir: "x", glue: true, alignment } as any, [ring(), ring(30)]),
-      ])
+
+  // An align by one anchor pins one point of each operand; `start` and
+  // `end` together, or `span`, relate both edges.
+  const aligned = async (constraints: (a: any, b: any) => any[]) => {
+    const node: any = await (layer as any)([ring(), ring(30)]);
+    await node.INTERNAL_relate(
+      constraints(new SlotOperand(node, 0), new SlotOperand(node, 1))
     );
-  for (const i of [0, 1]) {
+    return polarOf(node);
+  };
+  for (const anchor of ["start", "end", "middle", "baseline"] as const) {
     ok(
-      `sunburst child ring ${i} aligned at the start: the radius embeds`,
-      (await leafEmbeds(sunburst("start"), [0, 1, i])) ===
-        JSON.stringify([true, true])
+      `rings aligned at ${anchor} on the radius: the radius stays ink`,
+      (await leafEmbeds(
+        aligned((a, b) => [Constraint.align({ y: anchor }, [a, b])]),
+        [0, 1]
+      )) === radiusInk
     );
   }
   ok(
-    "sunburst child ring aligned at the end: the radius stays ink",
-    (await leafEmbeds(sunburst("end"), [0, 1, 1])) ===
-      JSON.stringify([true, false])
-  );
-  ok(
-    "sunburst child ring aligned at the middle: the radius stays ink",
-    (await leafEmbeds(sunburst("middle"), [0, 1, 1])) ===
-      JSON.stringify([true, false])
-  );
-  // A chain inside a node with a size of its own: the node's edge is set by
-  // its size, not by its first part, so nothing passes down.
-  ok(
-    "a sized chain passes no edge down",
+    "rings aligned at start and at end on the radius: the radius embeds",
     (await leafEmbeds(
-      polarOf(
-        Spread({ dir: "y", spacing: 0 }, [
-          ring(),
-          Spread({ dir: "y", spacing: 4, h: 200 } as any, [ring(), ring()]),
-        ])
-      ),
-      [0, 1, 0]
-    )) === JSON.stringify([true, false])
+      aligned((a, b) => [
+        Constraint.align({ y: "start" }, [a, b]),
+        Constraint.align({ y: "end" }, [a, b]),
+      ]),
+      [0, 1]
+    )) === both
+  );
+  ok(
+    "rings aligned by span on the radius: the radius embeds",
+    (await leafEmbeds(
+      aligned((a, b) => [Constraint.align({ y: "span" }, [a, b])]),
+      [0, 1]
+    )) === both
   );
 
-  // An only child is its hull: a wrapper with no size of its own (gotree
-  // wraps each node this way) has the child's edges, so a ring inside one
-  // still touches its neighbor. A wrapper with a size of its own does not.
+  // A point glyph centered on a wedge is placed at a point: it stays ink on
+  // both axes, though the wedge beside it is a part of a chain.
+  ok(
+    "a circle centered on a chained wedge stays a point",
+    (await leafEmbeds(
+      polarOf(
+        Spread({ dir: "x", spacing: 0 }, [
+          ring(),
+          await (async () => {
+            const node: any = await (layer as any)([
+              ring(),
+              Ellipse({ w: 8, h: 8 }),
+            ]);
+            await node.INTERNAL_relate([
+              Constraint.align({ x: "middle", y: "middle" }, [
+                new SlotOperand(node, 0),
+                new SlotOperand(node, 1),
+              ]),
+            ]);
+            return node;
+          })(),
+        ])
+      ),
+      [0, 1, 1]
+    )) === JSON.stringify([false, false])
+  );
+
+  // An only child of a wrapper with no size of its own is the wrapper's
+  // extent, so a relation on the wrapper fixes the child's. A wrapper with
+  // a size of its own, or with two children, passes nothing down.
   for (const i of [0, 1]) {
     ok(
-      `a ring wrapped alone, edge to edge: ring ${i} embeds on both axes`,
+      `a ring wrapped alone, chained: ring ${i} embeds the radius`,
       (await leafEmbeds(
         polarOf(
           Spread({ dir: "y", spacing: 0 }, [
@@ -290,7 +323,7 @@ console.log("# embedding: Route B in context");
           ])
         ),
         i === 0 ? [0, 0, 0] : [0, 1, 0]
-      )) === JSON.stringify([true, true])
+      )) === both
     );
   }
   ok(
@@ -303,53 +336,63 @@ console.log("# embedding: Route B in context");
         ])
       ),
       [0, 1, 0]
-    )) === JSON.stringify([true, false])
+    )) === radiusInk
   );
-  // Rings of one pixel size aligned at the middle take one interval, the
-  // hull's, so each lies on both of its edges and touches the parent ring.
-  for (const i of [0, 1]) {
-    ok(
-      `sunburst child rings of one size aligned at the middle: ring ${i} embeds`,
-      (await leafEmbeds(
-        polarOf(
-          Spread({ dir: "y", spacing: 0, alignment: "middle" }, [
-            ring(),
-            Spread({ dir: "x", glue: true, alignment: "middle" } as any, [
-              ring(),
-              ring(),
-            ]),
-          ])
-        ),
-        [0, 1, i]
-      )) === JSON.stringify([true, true])
-    );
-  }
-  // The rose: each month a stack of pixel-width bars aligned at their
-  // baseline, months edge to edge. Bars of one width take the hull's
-  // interval, so the first month's bars touch the second month too.
-  const rose = (w2: number) =>
-    polarOf(
-      Spread({ dir: "x", spacing: 0 }, [
-        Spread({ dir: "y", glue: true, alignment: "baseline" } as any, [
-          bar(),
-          Rect({ w: w2, h: q(3, "amount") }),
-        ]),
-        Spread({ dir: "y", glue: true, alignment: "baseline" } as any, [
-          bar(),
-          bar(),
-        ]),
-      ])
-    );
-  for (const i of [0, 1]) {
-    ok(
-      `rose bars of one width: the first month's bar ${i} embeds x`,
-      (await leafEmbeds(rose(16), [0, 0, i])) === JSON.stringify([true, true])
-    );
-  }
+  // The sunburst's shape: a ring, then its children's rings stacked along
+  // the angle and aligned at their start on the radius. The stack is a part
+  // of the radial chain, but the rings in it are only aligned at one point
+  // on the radius, so their radius stays ink.
   ok(
-    "rose bars of two widths: the first month's bar stays a line",
-    (await leafEmbeds(rose(10), [0, 0, 0])) === JSON.stringify([false, true])
+    "sunburst child rings aligned at the start: the radius stays ink",
+    (await leafEmbeds(
+      polarOf(
+        Spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+          ring(),
+          Spread({ dir: "x", glue: true, alignment: "start" } as any, [
+            ring(),
+            ring(30),
+          ]),
+        ])
+      ),
+      [0, 1, 0]
+    )) === radiusInk
   );
+
+  console.log("# embedding: the band a one-axis rect draws in polar");
+  {
+    // A rect with its angle embedded and a pixel thickness along the radius
+    // is an annular sector: its ends lie on the rays at its two angles and
+    // its sides on the radii r ± thickness / 2.
+    const space = polar();
+    const [t0, t1, r, half] = [0.3, 1.4, 80, 9];
+    const region = bandRegion(space, [t0, r], [t1, r], () => half);
+    const dist = (p: [number, number], q2: [number, number]) =>
+      Math.hypot(p[0] - q2[0], p[1] - q2[1]);
+    const at = (t: number, rr: number) => space.transform([t, rr]);
+    const caps = region.filter((s) => s.type === "line") as any[];
+    ok("the band is closed by two straight caps", caps.length === 2);
+    const onRay = (p: [number, number], t: number) =>
+      dist(p, at(t, r - half)) < 1e-3 || dist(p, at(t, r + half)) < 1e-3;
+    const capOk = caps.every((c: any) => {
+      const [p, q2] = c.points as [number, number][];
+      const t = onRay(p, t0) ? t0 : t1;
+      return onRay(p, t) && onRay(q2, t) && dist(p, q2) > 2 * half - 1e-3;
+    });
+    ok(
+      "its caps lie on the rays at the embedded edges, from r - t/2 to r + t/2",
+      capOk,
+      JSON.stringify(caps.map((c: any) => c.points))
+    );
+    const center = space.transform([0, 0]);
+    const starts = region.map((s) => (s.type === "line" ? s.points[0] : s.start));
+    ok(
+      "its sides lie on the radii r ± t/2",
+      starts.every((p) => {
+        const d = dist(p, center);
+        return Math.abs(d - (r - half)) < 1e-3 || Math.abs(d - (r + half)) < 1e-3;
+      })
+    );
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

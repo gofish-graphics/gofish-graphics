@@ -74,9 +74,8 @@ const pie = (coord: any): StoryObj => ({
 export const PiePolar = pie(Coord.polar());
 /** Data 0 at 12 o'clock, clockwise. */
 export const PieClock = pie(Coord.clock());
-/** Data 0 at 3 o'clock, clockwise. */
-export const PieClockFromThree = pie(Coord.clock({ baselineAngle: 0 }));
-/** The same as PieClockFromThree, spelled on `polar`. */
+/** Data 0 at 3 o'clock, clockwise. `Coord.clock` fixes its start, so this
+ *  is spelled on `polar`. */
 export const PiePolarClockwise = pie(
   Coord.polar({ baselineAngle: 0, direction: -1 })
 );

@@ -62,11 +62,6 @@ export type AxisProblem<T = number> = {
   /** The size of each node a minimum gap names: the greatest solution of
    *  the gaps keeps every group inside the least solution's span. */
   sizes?: Map<NodeId, T>;
-  /** Where the minimum gaps put the groups where they leave room (the
-   *  slack rule, `Slack.at(t)`): a fraction from 0, the least solution, to
-   *  1, the greatest. One per axis problem, since the gaps a scope solves
-   *  on an axis share their room. Default 0. */
-  slack?: number;
 };
 
 type RelationEdge<T> = {
@@ -278,9 +273,12 @@ const PINNED = -1;
  * inside the least solution's span: each group of a set no gap leads out of
  * ends where the least solution ends at most. A
  * minimum gap gives each group a range of positions, from its least place
- * to its greatest, and the problem's slack rule (`problem.slack`, a
- * fraction `t`) puts it at `(1 − t) · least + t · greatest`: the least
- * solution at 0, the greatest at 1, their mean at 0.5. A cluster that
+ * to its greatest, and the cluster's slack (a fraction `t`) puts it at
+ * `(1 − t) · least + t · greatest`: the least solution at 0, the greatest
+ * at 1, their mean at 0.5. The slack belongs to the cluster, since its
+ * gaps share their room: the constraints whose gaps link it may state it
+ * (`PlacementMinGap.slack`), two that state different values are an error,
+ * and a cluster where none states it takes 0 ({@link clusterSlack}). A cluster that
  * holds the pinned group is then moved as one so that the
  * pins hold: the pins place the cluster, and never conflict with its gaps.
  * This is `solveSeparations` of the
@@ -405,9 +403,23 @@ function separateGroups<T>(
     describe
   );
 
-  const t = problem.slack ?? 0;
+  // The slack each constraint states, per cluster. A gap inside one group
+  // links nothing, so it states nothing.
+  const stated = new Map<number, Map<string, number>>();
+  for (const gap of problem.minGaps ?? []) {
+    if (gap.slack === undefined) continue;
+    if (!componentOf.has(gap.from) || !componentOf.has(gap.to)) continue;
+    const from = groupOf(gap.from);
+    if (from === groupOf(gap.to)) continue;
+    const root = find(from);
+    const byOwner = stated.get(root) ?? new Map<string, number>();
+    byOwner.set(gap.owner, gap.slack);
+    stated.set(root, byOwner);
+  }
+
   const offsets = new Map<number, T>();
-  for (const groups of clusters.values()) {
+  for (const [root, groups] of clusters) {
+    const t = clusterSlack(axis, stated.get(root), describe(groups[0]));
     // Each group's extent in its own frame.
     const lo = new Map<number, T>();
     const hi = new Map<number, T>();
@@ -540,6 +552,31 @@ function separateGroups<T>(
     if (!placed.has(c)) add(nodes, (node) => relative.get(node)!);
   });
   return next;
+}
+
+/**
+ * The slack of one cluster of linked minimum gaps (`Slack.at(t)`'s `t`),
+ * from what its constraints state (`stated`, owner to `t`): the value they
+ * agree on, or 0 when none states one. A constraint that states none takes
+ * the cluster's value. Two that state different values are a loud error
+ * naming both, since one cluster has one room to share.
+ */
+function clusterSlack(
+  axis: Axis,
+  stated: Map<string, number> | undefined,
+  somewhere: string
+): number {
+  if (stated === undefined) return 0;
+  const [[owner, t], ...rest] = stated;
+  const other = rest.find(([, u]) => u !== t);
+  if (other !== undefined)
+    throw new Error(
+      `[gofish] Minimum gaps on ${axis}: ${owner} states slack ` +
+        `Slack.at(${t}) but ${other[0]} states Slack.at(${other[1]}), and ` +
+        `their gaps are linked (through ${somewhere}), so they share one ` +
+        `room. State the slack on one of them, or the same slack on both.`
+    );
+  return t;
 }
 
 /**

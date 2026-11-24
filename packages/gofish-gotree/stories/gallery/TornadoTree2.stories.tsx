@@ -33,7 +33,6 @@ const node = (d: any) =>
         w: LEAF_THETA,
         h: LEAF_R,
         emX: true,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,
@@ -43,7 +42,6 @@ const node = (d: any) =>
         // radially to enclose its subtree.
         w: LEAF_THETA,
         emX: true,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,

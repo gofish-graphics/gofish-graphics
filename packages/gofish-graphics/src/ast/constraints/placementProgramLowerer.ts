@@ -195,6 +195,7 @@ export class PlacementProgramLowerer<T> implements PlacementFactEmitter<T> {
       to: { node: request.to.key, anchor: request.to.anchor },
       gap: request.gap,
       owner: request.owner,
+      slack: request.slack,
       chain: request.chain,
     });
   }

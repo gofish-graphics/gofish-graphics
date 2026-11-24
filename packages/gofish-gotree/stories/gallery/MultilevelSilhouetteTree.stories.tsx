@@ -49,8 +49,8 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //     angular budget and the fans sit in the gaps between wedge clusters.
 //   • Radial bands (Y.Root=juxtapose → one ring per depth): disc r∈[0,DISC_R],
 //     medium wedges r∈[WEDGE_R0,WEDGE_R1], pale children r∈[PALE_R0,PALE_R1].
-//   • A wedge is a rect swept through polar (x=θ0, w=Δθ, emX; y=rInner, h=band,
-//     emY) → an annular sector (same embedded-wedge technique as Sunburst /
+//   • A wedge is a rect swept through polar (x=θ0, w=Δθ, emX; y=rInner, h=band
+//     in pixels) → an annular sector (same embedded-wedge technique as Sunburst /
 //     OutsideInTree). Raw radians/pixels bypass the scale machinery.
 //   • The root disc is a full-2π ring, which would degenerate to a sliver as one
 //     rect (start angle ≡ end angle resamples to zero width), so it is split
@@ -219,7 +219,6 @@ const wedgeMark = (
     y: rInner,
     h: rOuter - rInner,
     emX: true,
-    emY: true,
     fill: w.fill,
     stroke: w.stroke,
     strokeWidth,

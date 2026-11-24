@@ -24,20 +24,18 @@ BAND_HEIGHT = 42  # radial thickness of one ring
 # Wedge node: leaves carry a unit angular weight (`w`, the theta extent) that
 # the coord sums and fits to the budget; internal nodes leave theta unsized so
 # nest grows them to their children's combined arc. Both sweep an arc on theta,
-# and em_y makes r the ring thickness.
+# and r (pixels) is the ring thickness.
 def node(d):
     if d["height"] == 0:
         return rect(
             w=datum(1),
             h=BAND_HEIGHT,
-            em_y=True,
             fill=by_depth()(d),
             stroke="white",
             stroke_width=1.5,
         )
     return rect(
         h=BAND_HEIGHT,
-        em_y=True,
         fill=by_depth()(d),
         stroke="white",
         stroke_width=1.5,

@@ -124,7 +124,7 @@ export const Rose: StoryObj<Args> = {
         derive((d) => d.map((d) => ({ ...d, Death: Math.sqrt(d.Death) })))
       )
       .mark(
-        rect({ w: (Math.PI * 2) / 12, h: "Death", fill: "Type" })
+        rect({ h: "Death", fill: "Type" })
       )
       .render(container);
 

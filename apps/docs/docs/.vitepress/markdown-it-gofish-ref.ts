@@ -23,7 +23,8 @@
  * options as one table. Or it may name one member of a strategy family
  * (`STRATEGIES`), as `Family.member`: `::: gofish-ref Shape.blob` renders that
  * kind's params, and a preset (`Shape.hull`) renders the params of its kind
- * it does not fix (`presetParams`). A construct of a table in
+ * it does not fix (`presetParams`), as does a Coord preset
+ * (`::: gofish-ref Coord.clock`, from `COORD_PRESETS`). A construct of a table in
  * `DESCRIPTOR_NAMESPACES` is named as it is called, `<Namespace>.<type>`:
  * `::: gofish-ref Constraint.position` renders the constraint's options,
  * never the `position` combinator's.
@@ -53,6 +54,7 @@ import {
   DESCRIPTOR_NAMESPACES,
   splitDottedName,
   COORDS,
+  COORD_PRESETS,
   LEAF_MARKS,
   OPERATORS,
   OPTION_TYPES,
@@ -302,12 +304,16 @@ function renderDescriptor(
 }
 
 /** The params of a strategy family member named `Family.member` (a kind, or
- *  a preset, which takes the params of its kind it does not fix), or
- *  undefined for any other name. */
+ *  a preset, which takes the params of its kind it does not fix), or of a
+ *  Coord preset (`Coord.clock`), or undefined for any other name. */
 function strategyParams(name: string): FieldGroup | undefined {
   const parts = splitDottedName(name);
   if (parts === undefined) return undefined;
   const { namespace: family, member } = parts;
+  if (family === "Coord")
+    return Object.hasOwn(COORD_PRESETS, member)
+      ? presetParams(family, member)
+      : undefined;
   const spec = (STRATEGIES as Record<string, any>)[family];
   if (spec === undefined) return undefined;
   const kind = spec.kinds[member];

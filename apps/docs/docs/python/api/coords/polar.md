@@ -35,7 +35,8 @@ Coord.polar(
 
 All optional; the defaults give a centered, full-circle disc starting at 3
 o'clock and going counter-clockwise. [`Coord.clock()`](/python/api/coords/clock)
-is the same transform with 0 at 12 o'clock, going clockwise.
+is a preset of polar that fixes `baseline_angle=math.pi / 2` and
+`direction=-1`, 0 at 12 o'clock, going clockwise.
 
 The number 0 on the angular axis always sits at `baseline_angle`, whatever
 the θ range and `central_angle`. A range that starts at 0, like a pie's, starts at

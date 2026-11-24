@@ -48,7 +48,6 @@ const node = (d: any) =>
         w: LEAF_THETA,
         h: d.data.value * VALUE_R, // leaf radial thickness ∝ value
         emX: true,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,
@@ -57,7 +56,6 @@ const node = (d: any) =>
         // internal: unsized on r (h) → nest grows it to embed the subtree.
         w: LEAF_THETA,
         emX: true,
-        emY: true,
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,

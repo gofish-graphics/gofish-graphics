@@ -12,7 +12,8 @@ covers:
   - packages/gofish-graphics/src/ast/solver/formula.ts
   - packages/gofish-graphics/src/ast/layoutWarnings.ts
   - packages/gofish-graphics/src/ast/_node.ts
-  - packages/gofish-graphics/src/ast/sharedEdges.ts
+  - packages/gofish-graphics/src/ast/relatedExtents.ts
+  - packages/gofish-graphics/src/bandRegion.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
@@ -473,26 +474,35 @@ warped and a length of the space always is (see
 The revocation is coord-scoped, so Cartesian behavior matches the former
 construction-time inference.
 
-Route A, relational: one of its edges on the axis is shared with a neighbor's,
-whatever the unit of its size. Two shared edges must stay one position after
-the transform, so they are positions of the space. The pass carries each
-node's shared edges (`start`/`end` per axis) down the tree, and
-`sharedEdgesOfChildren` (`sharedEdges.ts`) reads them off a node's
-constraints. A chain (`distribute`, a spread or a stack) with a box gap of 0
-shares each part's start with the previous part's end. A node whose own edge
-is shared passes it to a child that lies on it: an `align` at `start` or `end`
-(both for `span`), the first or last part of a chain with a gap 0 or more, and
-the content of a ring. An only child lies on both edges of its parent, since
-it is the hull. So do marks of one literal size and no position of their own
-put at one anchor by an `align`, `middle` and `baseline` included, since they
-take one interval, which is then the hull. It passes nothing when the
-relation misses a child or the node has a size of its own on the axis, since
-then its edge is not its children's hull. Otherwise a center relation
-(`middle`, `baseline`, a pitch) pins a point, not an edge, and a chain with a
-gap pins no edge to another, so neither shares one. So pixel rings stacked along a polar radius are drawn as annular
-sectors that touch, while a pixel-width bar that touches nothing keeps its
-width as ink. In a linear space the three drawings of a rect are the same box,
-so Route A changes nothing there.
+Route A, relational: a relation fixes both of its edges on the axis,
+whatever the unit of its size. A relation that places marks relative to each
+other must still hold after the transform, so the edges it relates are
+positions of the space, and the extent between them is a length of the space.
+The pass hands each node one boolean per axis, whether a relation fixes its
+extent there, and `relatedExtentsOfChildren` (`relatedExtents.ts`) reads the
+children's off a node's constraints. A chain (`distribute`, a spread or a
+stack) with a box spacing of any gap, pixels, a percent or an `fr` weight, or
+with `Spacing.atLeast`, relates each part's start and end to its neighbors, so
+every part embeds along the chain. An `align` by `span` relates both edges of
+each operand, and so do an `align` at `start` and one at `end` together. A
+pitch spacing and an `align` at one anchor (`start`, `end`, `middle` or
+`baseline`) pin one point of each child: they place it and leave its extent to
+its own size, so a circle centered on a wedge stays a circle. Only a relation
+among two or more children counts. A node passes its own value down to its
+only child when it has no size of its own on the axis, since the child is then
+its hull, and to the content of a ring. So pixel bars spread around a polar
+angle are drawn as wedges, with or without a gap between them, while a lone
+pixel-width bar keeps its width as ink. In a linear space the drawings of a
+rect are the same box, so Route A changes nothing there.
+
+A mark with exactly one axis embedded in a space that is not linear is drawn
+as a filled band (`bandRegion`, `src/bandRegion.ts`). Its midline runs between
+its two edges on the embedded axis and goes through the transform. Its pixel
+thickness is laid off on both sides of the midline along the transform's
+normal, and two straight caps along the normal close it. In polar with the
+angle embedded this is an annular sector whose ends lie on the rays at its two
+angles. An ellipse draws the same band with an elliptical thickness. The fill
+fills the band and the stroke outlines it.
 
 ### Pass 9: Layout Calculation
 

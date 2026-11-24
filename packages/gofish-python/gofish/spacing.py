@@ -72,7 +72,7 @@ def pitch(distance: float | LengthValue, /, *, at: Optional[str] = None) -> Dict
 
 
 def at_least(gap: float, /) -> Dict[str, Any]:
-    """A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer. A minimum gap gives each child a range of positions, not one position; the `slack` of the operator that solves it picks one.
+    """A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer. A minimum gap gives each child a range of positions, not one position; the `slack` of the spread or distribute that states the gaps picks one.
 
     Args:
         gap: The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much.

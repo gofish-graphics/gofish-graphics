@@ -190,7 +190,7 @@ def story_rose_gradient():
             spread(by="sector", dir="x", spacing=0, axes=False),
             stack(by="ring", dir="y", axes=True),
         )
-        .mark(rect(w=(math.pi * 2) / _NUM_SECTORS, h="value", fill="ring")),
+        .mark(rect(h="value", fill="ring")),
         {},
     )
 

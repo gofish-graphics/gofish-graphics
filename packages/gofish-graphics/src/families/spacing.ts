@@ -82,8 +82,8 @@ export function pitch(
  * separate what they place.
  *
  * A minimum gap gives each child a range of positions, not one position.
- * The `slack` of the operator that solves the gaps (`spread`'s, or
- * `layer`'s on the axis) picks one: see the `Slack` family.
+ * The `slack` of the spread or distribute that states the gaps picks one:
+ * see the `Slack` family.
  *
  * PLACEHOLDER: the name is not signed off.
  *

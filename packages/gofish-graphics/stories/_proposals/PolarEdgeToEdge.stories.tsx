@@ -2,12 +2,12 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { Coord, layer, rect, spread, stack, v } from "../../src/lib";
 
-// Repros for marks placed edge to edge in a polar space: rings with a pixel
-// height laid end to end along the radius, wedges laid end to end along the
-// angle. A mark whose edge touches a neighbor's edge has its edges at
-// positions of the space, so it is drawn as a filled region whose edges
-// bend with the space, and neighbors stay touching. A mark with a pixel
-// size that touches nothing keeps that size as ink. Not gallery-tagged.
+// Repros for marks related to each other in a polar space: rings with a
+// pixel height laid end to end along the radius, wedges laid end to end or
+// apart along the angle. A chain relates both edges of each part, so the
+// parts' edges are positions of the space and each is drawn as a region
+// whose edges bend with the space. A mark with a pixel size that no
+// relation places keeps that size as ink. Not gallery-tagged.
 const meta: Meta = {
   title: "Proposals/Polar Edge To Edge",
 };
@@ -117,22 +117,22 @@ export const FullCircle: StoryObj = {
   },
 };
 
-/** Bars of pixel width, apart along the angle: each keeps its width as ink
- *  (a straight band, not a wedge). */
+/** Bars spread apart along the angle: the spread relates both edges of
+ *  each, so each is a wedge, and its plain-number width is an angle. */
 export const PixelBarsApart: StoryObj = {
   render: () => {
     const container = initializeContainer();
     layer({ coord: Coord.clock(), w: W, h: H }, [
       spread(
-        { dir: "x", spacing: 1, alignment: "start" },
-        [5, 8, 3, 6].map((h) => rect({ w: 16, h: v(h), fill: "steelblue" }))
+        { dir: "x", spacing: 0.2, alignment: "start" },
+        [5, 8, 3, 6].map((h) => rect({ w: 1.2, h: v(h), fill: "steelblue" }))
       ),
     ]).render(container, { axes: false });
     return container;
   },
 };
 
-/** A lone bar of pixel width: it touches nothing, so it stays a band. */
+/** A lone bar of pixel width: no relation places it, so it stays a band. */
 export const PixelBarAlone: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -144,8 +144,7 @@ export const PixelBarAlone: StoryObj = {
 };
 
 /** Wedges of a fixed angle laid end to end (the Nightingale rose's month
- *  wedges): a plain number along the angle is radians, and touching
- *  neighbors make each a wedge. */
+ *  wedges): the spread relates both edges of each, so each is a wedge. */
 export const FixedAngleWedges: StoryObj = {
   render: () => {
     const container = initializeContainer();

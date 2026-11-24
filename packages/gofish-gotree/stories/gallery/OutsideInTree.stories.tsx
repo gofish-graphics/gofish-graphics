@@ -42,9 +42,9 @@ import { flareVis, type FlareNode } from "./_flareVis";
 // So a small story-local pass computes each node's angular span (bottom-up from
 // leaf counts: leaf = 1 slot, parent span = Σ children, 37 leaf slots total) and
 // its radial band (by depth, rings INVERTED), then emits rect wedges directly
-// into a layer({ coord: polar() }). Each wedge is the "both dimensions embedded"
-// rect case: emX makes the width sweep an arc (θ-units) and emY makes the height
-// a radial band (r-units), so a rect in polar space IS an annular sector (the
+// into a layer({ coord: polar() }). Each wedge is the "θ embedded"
+// rect case: emX makes the width sweep an arc (θ-units) and the pixel height is
+// a radial band, so a rect in polar space IS an annular sector (the
 // same embedded-wedge technique as the Sunburst / HierarchicalSectorChart
 // templates, but with explicit θ/r instead of the σ-solve).
 //
@@ -127,7 +127,7 @@ const wedges = layout(flareVis);
 
 // A wedge is a rect swept through polar space: x = start angle, w = angular
 // span (emX → measured in radians), y = inner radius, h = band thickness
-// (emY → radial extent). Both dims embedded ⇒ the rect lowers to an annular
+// (pixels along the radius). θ embedded, r a pixel band ⇒ the rect lowers to an annular
 // sector. White stroke draws the thin seams between adjacent wedges.
 //
 // A near-2π wedge (the root annulus) would DEGENERATE: with start angle ≡ end
@@ -142,7 +142,6 @@ const wedgeMark = (theta0: number, dTheta: number, depth: number) => {
     y: rInner,
     h: rOuter - rInner,
     emX: true,
-    emY: true,
     fill: DEPTH_COLORS[depth],
     stroke: "white",
     strokeWidth: depth === 0 ? 0 : 2,

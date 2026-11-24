@@ -95,7 +95,8 @@ function resampleLineSegment(
   transform: (p: Point) => Point,
   options: ResamplingOptions,
   depth: number,
-  result: Point[]
+  result: Point[],
+  sources?: Point[]
 ): void {
   const p0 = transform(seg.points[0]);
   const p1 = transform(seg.points[1]);
@@ -140,13 +141,28 @@ function resampleLineSegment(
       const rightSeg: LineSegment = segment(sMid, seg.points[1]);
 
       // Recursively process first half
-      resampleLineSegment(leftSeg, transform, options, depth - 1, result);
+      resampleLineSegment(
+        leftSeg,
+        transform,
+        options,
+        depth - 1,
+        result,
+        sources
+      );
 
       // Add midpoint
       result.push(pMid);
+      sources?.push(sMid);
 
       // Recursively process second half
-      resampleLineSegment(rightSeg, transform, options, depth - 1, result);
+      resampleLineSegment(
+        rightSeg,
+        transform,
+        options,
+        depth - 1,
+        result,
+        sources
+      );
     }
   }
 }
@@ -212,6 +228,32 @@ function resampleBezierCurve(
       resampleBezierCurve(rightCurve, transform, options, depth - 1, result);
     }
   }
+}
+
+/**
+ * The points of the space at which the segment from `a` to `b` is sampled
+ * when it is transformed (`adaptiveResamplePath`), ends included, in order.
+ * A caller that needs more than the transformed points, such as the normal
+ * of the image at each sample (`bandRegion`), reads them here.
+ */
+export function resampleSegmentSources(
+  a: Point,
+  b: Point,
+  space: CoordinateTransform,
+  options?: Partial<ResamplingOptions>
+): Point[] {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const sources: Point[] = [a];
+  resampleLineSegment(
+    segment(a, b),
+    (p) => space.transform(p),
+    opts,
+    opts.maxDepth,
+    [],
+    sources
+  );
+  sources.push(b);
+  return sources;
 }
 
 /**

@@ -1250,6 +1250,9 @@ export type ConstraintIR =
       options: {
         dir: "x" | "y";
         spacing?: SpacingOptionIR;
+        /** Where the refs go when minimum gaps leave them room (`Slack`);
+         *  needs `Spacing.atLeast`. */
+        slack?: SlackIR;
         order?: "forward" | "reverse";
         glue?: boolean;
       };

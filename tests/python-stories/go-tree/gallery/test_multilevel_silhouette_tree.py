@@ -138,7 +138,6 @@ def wedge_mark(w, r_inner, r_outer, stroke_width):
         y=r_inner,
         h=r_outer - r_inner,
         em_x=True,
-        em_y=True,
         fill=w["fill"],
         stroke=w["stroke"],
         stroke_width=stroke_width,

@@ -65,6 +65,8 @@ import type { Gap, GapOf } from "./gap";
 import { isLength } from "../length";
 import { Frontend } from "gofish-ir";
 import type { Spacing } from "../../families/spacing";
+import type { Slack } from "../../families/slack";
+import { kindValue } from "../strategyKind";
 
 export interface DistributeOptions {
   dir: Axis;
@@ -76,13 +78,20 @@ export interface DistributeOptions {
    *    (`"middle"` is center to center).
    *  - `Spacing.atLeast(gap)`: `start[i+1] ≥ end[i] + gap`, a minimum gap,
    *    which the solve meets after the exact constraints (PLACEHOLDER
-   *    name). Where the gaps leave room, the `slack` of the layer that
-   *    holds the chain places the children.
+   *    name). Where the gaps leave room, {@link slack} places the
+   *    children.
    *
    *  A bare amount is `Spacing.box(amount)`: pixels, a percent of the room
    *  of the layer that holds the chain, or an `fr` weight in its scope
    *  (#1176 step 6). Default 8. */
   spacing?: Gap | Spacing;
+  /** Where the children go in the room minimum gaps leave them, a
+   *  {@link Slack} rule (`Slack.at(t)`). It needs `Spacing.atLeast`, the
+   *  only spacing that leaves room. The minimum gaps that share nodes with
+   *  this chain's share its room and its rule: one that states none takes
+   *  this one, and two that state different rules are an error. Default
+   *  `Slack.start()`, when no linked chain states one. */
+  slack?: Slack;
   order?: "forward" | "reverse";
   /** Stack semantics: glue children together (sizes sum into a POSITION at the
    *  layer) instead of slicing a budget. Forces `spacing` to 0. Mirrors
@@ -151,6 +160,8 @@ export interface DistributeConstraint {
    *  length the layer that holds the chain lays out in its room
    *  (`GoFishNode.gapOf`). */
   spacing: Spacing;
+  /** The slack the chain states, checked ({@link DistributeOptions.slack}). */
+  slack?: Slack;
   order: "forward" | "reverse";
   glue: boolean;
   children: ConstraintRef[];
@@ -176,6 +187,7 @@ export const createDistributeConstraint = (
     type: "distribute",
     dir: options.dir,
     spacing: options.glue ? GLUED : spacing,
+    slack: checkedSlack(options.slack, options.glue ? GLUED : spacing),
     order: options.order ?? "forward",
     glue: options.glue ?? false,
     children,
@@ -203,6 +215,25 @@ export function spacingOf(spacing: Gap | Spacing): Spacing {
     );
   Frontend.checkStrategy("Spacing", strategy, "spacing");
   return strategy as Spacing;
+}
+
+/** A chain's slack, checked against the `Slack` family. Only minimum gaps
+ *  leave room, so slack with any other spacing is an error rather than a
+ *  rule that does nothing. */
+function checkedSlack(
+  slack: Slack | undefined,
+  spacing: Spacing
+): Slack | undefined {
+  if (slack === undefined) return undefined;
+  const value = kindValue(slack);
+  Frontend.checkStrategy("Slack", value, "slack");
+  if (spacing.kind !== "atLeast")
+    throw new Error(
+      `[gofish] slack applies to minimum gaps: use Spacing.atLeast. This ` +
+        `chain's spacing is Spacing.${spacing.kind}, which places every ` +
+        `child exactly and leaves no room to place.`
+    );
+  return value;
 }
 
 /** The amount a spacing lays out between neighbors: a box's gap, or a
@@ -409,7 +440,8 @@ export function lowerDistributePlacement<T>(
     };
     // A minimum gap is a fact of its own, which the solve separates the
     // rigid groups by (`separateGroups` in differenceGraph.ts).
-    if (constraint.spacing.kind === "atLeast") emitter.atLeast(edge);
+    if (constraint.spacing.kind === "atLeast")
+      emitter.atLeast({ ...edge, slack: constraint.slack?.t });
     else emitter.relate(edge);
   }
   // A spread that states its 0 carries its {@link StackBaseline}, which the

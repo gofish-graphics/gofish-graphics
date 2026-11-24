@@ -109,6 +109,9 @@ export const geo = (
 
   const space: CoordinateTransform = {
     type: "geo",
+    // A projection given as a function has no wire form: `JSON.stringify`
+    // drops it, and the config is then missing its required `projection`.
+    toJSON: () => ({ type: "geo", projection, ...opts }),
     aliases: { x: "lon", y: "lat" },
     dataWindow: [lonWindow, latWindow],
     // Used only before `fit` has run (e.g. a bare `transform` call in a test):

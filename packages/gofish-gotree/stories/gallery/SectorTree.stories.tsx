@@ -20,7 +20,7 @@ import { combine, byDepth, mount } from "./_shared";
 // ── MAPPING. Under polar(): x = θ (radians 0..2π), y = r (radius). ───────────
 // A sector wedge SWEEPS through θ, so the θ-dimension is EMBEDDED in the node's
 // width (a data weight, or unsized); the radial thickness is its height
-// (emY:true, measured in r-units). Same embedded-wedge technique as the
+// (pixels along r). Same embedded-wedge technique as the
 // Sunburst / IciclePlot(polar) templates.
 //   - sibling = (distribute θ, align r): siblings pack angularly into their
 //     parent's arc (X.Subtree flatten → distribute) and share one radial ring
@@ -47,7 +47,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  - RootHeight: rdepth — radius-driven-by-depth is not a knob; concentric rings
 //    are realized via distribute-r (see MAPPING divergence above).
 //  - Thickness: static / StaticThickness 2 — there is no per-node static-pixel
-//    radial-thickness knob under polar (thickness is the emY band height in
+//    radial-thickness knob under polar (thickness is the pixel band height in
 //    r-units). I approximate thin rings with a small band height + a radial gap.
 //  - InnerRadius / Direction / StartAngle / CentralAngle: now expressible via
 //    polar({ innerRadius, direction, baselineAngle, centralAngle }) since #620 —
@@ -94,20 +94,18 @@ const RING_GAP = 35; // radial gap between consecutive rings
 
 // Wedge node (θ auto-fit, #618): leaves carry a unit angular weight; internal
 // nodes leave θ unsized so nest-θ grows each to its children's combined arc. The
-// coord fits the summed leaf weights to the circle. h (emY) is the thin ring.
+// coord fits the summed leaf weights to the circle. h (pixels) is the thin ring.
 const node = (d: any) =>
   d.height === 0
     ? rect({
         w: datum(1),
         h: RING_THICKNESS,
-        emY: true,
         fill: byDepth(sectorBlues)(d),
         stroke: "#2f78b8",
         strokeWidth: 0.75,
       })
     : rect({
         h: RING_THICKNESS,
-        emY: true,
         fill: byDepth(sectorBlues)(d),
         stroke: "#2f78b8",
         strokeWidth: 0.75,

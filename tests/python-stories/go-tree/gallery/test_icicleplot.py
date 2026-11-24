@@ -16,14 +16,12 @@ def node(d):
         return rect(
             w=datum(1),
             h=BAND_HEIGHT,
-            em_y=True,
             fill=by_depth(ICICLE_BLUES)(d),
             stroke="white",
             stroke_width=2,
         )
     return rect(
         h=BAND_HEIGHT,
-        em_y=True,
         fill=by_depth(ICICLE_BLUES)(d),
         stroke="white",
         stroke_width=2,

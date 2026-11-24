@@ -301,9 +301,7 @@ export function buildPlan(
   { operands, keyOf }: ResolvedOperands,
   nested: (key: string) => Placement | undefined,
   ring: boolean,
-  scale: number,
-  // The layer's slack rule on `axis` (`Slack.at(t)`'s `t`).
-  slack: number
+  scale: number
 ): LayerPlan {
   // A child placed where its refs land is placed by what it draws: its
   // forms are where it is placed, all of them box.
@@ -365,8 +363,7 @@ export function buildPlan(
       if (!frames.has(target.uid))
         frames.set(target.uid, frameIn(target, node, axis));
       return frames.get(target.uid);
-    },
-    slack
+    }
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const whole: [Pwl.Value[], Pwl.Value[]] = [[], []];

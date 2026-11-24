@@ -187,7 +187,9 @@ async function main() {
             spacing: Spacing.pitch(fr(1), { at: "start" }),
           })
         )
-        .mark(rect({ w: 0.5 }))
+        // A pitch pins one point of each slice, so a slice with a literal
+        // width would keep it as ink; an unsized slice is a wedge itself.
+        .mark(rect({}))
     );
     // Four steps of one share make the whole turn, the fourth from the
     // last slice back to the first.

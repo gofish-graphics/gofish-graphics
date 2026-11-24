@@ -15,7 +15,6 @@ def node(d):
             w=LEAF_THETA,
             h=LEAF_R,
             em_x=True,
-            em_y=True,
             fill=by_depth()(d),
             stroke="white",
             stroke_width=1,
@@ -23,7 +22,6 @@ def node(d):
     return rect(
         w=LEAF_THETA,
         em_x=True,
-        em_y=True,
         fill=by_depth()(d),
         stroke="white",
         stroke_width=1,

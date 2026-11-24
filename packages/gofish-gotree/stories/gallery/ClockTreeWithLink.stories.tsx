@@ -26,7 +26,7 @@ import { combine, byDepth, mount } from "./_shared";
 //
 // EMBEDDED θ-DIMENSION. Each rectangle node SWEEPS through θ, so its width is
 // a data weight in θ-units and sweeps an arc; its height is the
-// ring's radial thickness (emY:true). With N nodes total and each node's
+// ring's radial thickness (pixels). With N nodes total and each node's
 // θ-width = 2π/N, edge-mode distribute sums the widths up the tree so the ring
 // tiles the full 2π exactly (N · leafTheta = 2π).
 //
@@ -77,12 +77,11 @@ const bandHeight = 60; // radial thickness of the ring band
 // Rectangle node: `w` (the θ extent) is a unit angular WEIGHT (every node an equal slot);
 // the coord sums the weights and fits them to the angular budget, so the ring
 // closes exactly with no hand-set 2π/N. As a data weight θ sweeps an arc, and
-// emY makes r the ring thickness. Colored by depth (dark root → light leaves).
+// h (pixels) is the ring thickness. Colored by depth (dark root → light leaves).
 const node = (d: any) =>
   rect({
     w: datum(1),
     h: bandHeight,
-    emY: true,
     fill: byDepth()(d),
     stroke: "white",
     strokeWidth: 1.5,
