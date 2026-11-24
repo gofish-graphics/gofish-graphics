@@ -220,7 +220,11 @@ export const connect = createNodeOperator(
       strokeWidth?: number;
       strokeDasharray?: string;
       opacity?: number;
-      mode?: "edge" | "center";
+      // What it draws through its operands: "center" a path through their
+      // centers (`line`), "edge" a band between their facing edges
+      // (`ribbon`), "ring" the closed ring through their centers, with
+      // straight edges (`polygon` over marks).
+      mode?: "edge" | "center" | "ring";
       blendMode?: BlendMode;
       // Per-endpoint anchor on each child's bbox. Accepts a per-axis tuple
       // `[fx, fy]` of numbers (`min + f * size`) or alignment keywords
@@ -258,13 +262,14 @@ export const connect = createNodeOperator(
     // A curve that is not a Curve-family object fails here, where the
     // connector is made.
     curveName(curve, "line/ribbon({ curve })");
-    // What it draws: a closed band per run for a ribbon (edge mode), and an
-    // open path per run for a line (center mode, or a connector between two
-    // anchors).
+    // What it draws: a closed band per run for a ribbon (edge mode), a
+    // closed ring for a polygon (ring mode), and an open path per run for a
+    // line (center mode, or a connector between two anchors).
     const closed =
-      mode !== "center" &&
-      resolvedSource === undefined &&
-      resolvedTarget === undefined;
+      mode === "ring" ||
+      (mode === "edge" &&
+        resolvedSource === undefined &&
+        resolvedTarget === undefined);
     // How it paints its paths, from its fill color (its first child's when
     // it sets none) and its stroke color: a ribbon is filled, a line never,
     // and either is stroked with its stroke, or its fill when it sets none.
@@ -342,15 +347,18 @@ export const connect = createNodeOperator(
             );
           }
           if (threadsTime && (mode !== "center" || hasAnchors)) {
+            const what = { center: "line", edge: "ribbon", ring: "polygon" };
             throw new Error(
-              `[gofish] ${mode === "center" ? "line" : "ribbon"}(): this ` +
+              `[gofish] ${what[mode]}(): this ` +
                 `connector threads the keyframes of a time.sequence, so it ` +
                 `is drawn only over the stretch of time the sequence shows, ` +
                 `cut at the exact point in data time. That cut is built for ` +
                 `a line through the keyframes' centers; ` +
                 (mode === "center"
                   ? "a line pinned to `source`/`target` anchors"
-                  : "a ribbon's band") +
+                  : mode === "ring"
+                    ? "a polygon's ring"
+                    : "a ribbon's band") +
                 ` is not built yet.`
             );
           }
@@ -403,6 +411,30 @@ export const connect = createNodeOperator(
             ])
           );
           const childPlaceables = points.map((i) => placed[i]);
+
+          // Ring mode: the closed ring through the operands' centers, in
+          // order, with straight edges, the last back to the first. One
+          // operand has no edge, so, as a line through one point, it draws
+          // nothing; two draw a ring that goes there and back.
+          if (mode === "ring") {
+            const centers = childPlaceables.map((c) => centerPoint(c.dims));
+            const ring: Path =
+              centers.length < 2
+                ? []
+                : centers.map((p, i) => ({
+                    type: "line" as const,
+                    points: [p, centers[(i + 1) % centers.length]],
+                  }));
+            return {
+              intrinsicDims: boxDims(pathBounds(ring)),
+              transform: { translate: [0, 0] },
+              renderData: {
+                paths: ring.length > 0 ? [ring] : [],
+                defaultColor,
+              },
+            };
+          }
+
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
 
           // Whether the connected points share a homogeneous *continuous*

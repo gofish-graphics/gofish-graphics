@@ -32,10 +32,18 @@ gf.chart([{}])
 ## Signature
 
 ```ts
+// Shape form
 polygon({ points, fill?, stroke?, strokeWidth?, opacity = 1 })
+
+// Connector form
+polygon({ fill?, stroke?, strokeWidth?, opacity = 1 })
+polygon({ fill?, stroke?, strokeWidth?, opacity = 1 }, children)
 ```
 
-`points` is either a literal ring or a field name.
+`points` is either a literal ring or a field name. Without `points`, the
+polygon is the ring through the marks it is applied to (see
+[Through marks](#through-marks)). `points` together with `children` is an
+error.
 
 ## Parameters
 
@@ -123,6 +131,33 @@ chart(counties, { color: Color.gradient(["#fff5eb", "#7f2704"]) }).mark(
   polygon({ points: "ring", fill: "rate" })
 );
 ```
+
+## Through marks
+
+Without `points`, `polygon` draws the closed ring through the centers of marks
+another flow placed, in order, with straight edges, the last back to the
+first. It reads them as [`line`](./line) does: over the refs of
+[`selectAll()`](/js/api/selection/ref), or over explicit children. After
+[`group`](/js/api/operators/group) it draws one ring per group. Over one mark
+it draws nothing, and over two it draws the segment there and back.
+
+A polygon outside a coordinate space reads the marks where the space draws
+them, so the ring through points in a polar space has straight edges. This is
+a radar chart:
+
+```ts
+layer({ w: 320, h: 320 }, [
+  layer({ coord: Coord.clock() }, [
+    chart(scores)
+      .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+      .mark(circle({ r: 4, fill: "#1d3557" }).name("pts")),
+  ]),
+  chart(selectAll("pts")).mark(polygon({ fill: "#1d3557", opacity: 0.25 })),
+]);
+```
+
+Inside the coordinate space, the edges are drawn through the space, as a
+line's are, so in a polar space they curve.
 
 ## Notes
 

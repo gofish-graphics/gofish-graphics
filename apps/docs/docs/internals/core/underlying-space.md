@@ -811,7 +811,12 @@ upward on either axis: to its parent it is a pixel box. It keeps its own type
 for its own scope, solves that scope in `layout`, and draws its own axes and
 their titles in `lower` (see
 [Flattening the Scenegraph](/internals/layout/coord-flattening)). An UNDEFINED
-child carries no opinion in every fold, alignments included.
+child carries no opinion in every fold, alignments included. A `ref` from
+outside the space to a mark inside it is a pixel box too: it reads the mark
+where the space draws it (`GoFishNode.interiorTransform`), so it reports
+UNDEFINED and claims nothing. A layer's constraint cannot place a mark inside
+a space it is not inside, since no translate puts it there, so that is an
+error.
 
 ## The contract
 

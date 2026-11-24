@@ -87,6 +87,35 @@ function edgeBox(
 }
 
 /**
+ * The bounding box of the image of the box's boundary under `transform`: its
+ * four edges, each measured exactly ({@link edgeBox}). A box collapsed on an
+ * axis is a segment, and one collapsed on both is a point. For the affine
+ * and polar warps this is the box of the whole image unless the box holds a
+ * point where the transform folds (the polar center), which
+ * {@link computeTransformedBoundingBox} adds.
+ */
+export function boundaryImageBox(
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+  transform: (p: [number, number]) => [number, number]
+): BoundingBox {
+  const edges = [
+    edgeBox(transform, [minX, minY], [maxX, minY]),
+    edgeBox(transform, [minX, maxY], [maxX, maxY]),
+    edgeBox(transform, [minX, minY], [minX, maxY]),
+    edgeBox(transform, [maxX, minY], [maxX, maxY]),
+  ];
+  return {
+    minX: Math.min(...edges.map((b) => b.minX)),
+    maxX: Math.max(...edges.map((b) => b.maxX)),
+    minY: Math.min(...edges.map((b) => b.minY)),
+    maxY: Math.max(...edges.map((b) => b.maxY)),
+  };
+}
+
+/**
  * Computes the transformed bounding box of a given bounding box using a
  * coordinate transform: the bounding box, in screen space, of the image of
  * the box.
@@ -139,10 +168,7 @@ export function computeTransformedBoundingBox(
         );
   } else {
     const transform = coordTransform.transform;
-    add(edgeBox(transform, [minX, minY], [maxX, minY]));
-    add(edgeBox(transform, [minX, maxY], [maxX, maxY]));
-    add(edgeBox(transform, [minX, minY], [minX, maxY]));
-    add(edgeBox(transform, [maxX, minY], [maxX, maxY]));
+    add(boundaryImageBox(minX, maxX, minY, maxY, transform));
     if (coordTransform.polar) addPoint(transform([(minX + maxX) / 2, 0]));
   }
 

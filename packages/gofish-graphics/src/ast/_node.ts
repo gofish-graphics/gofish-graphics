@@ -1085,6 +1085,15 @@ export class GoFishNode {
    * coord.
    */
   public _space?: SpaceDeclaration;
+  /**
+   * How this node draws its children's frame into its own frame, when that
+   * is more than a translate: a `coord` maps its interior through its
+   * coordinate transform (in pixels) and its content offset. Undefined for
+   * every node that only translates its children. A `ref` from outside the
+   * node to a mark inside it reads the mark through this map, so it sees
+   * the mark where it is drawn. Callable once the node is laid out.
+   */
+  public interiorTransform?: () => CoordinateTransform;
   constructor(
     {
       key,

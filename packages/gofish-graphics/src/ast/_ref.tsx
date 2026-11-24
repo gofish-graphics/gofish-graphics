@@ -19,10 +19,11 @@ import type { AxisScale } from "./domain";
 import { GoFishNode } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
-import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
+import { ORDINAL, UNDEFINED, UnderlyingSpace } from "./underlyingSpace";
 import type { Extent } from "./extent";
 import type { Placeable, RenderSession } from "./_node";
-import type { Geometry } from "./geometry";
+import { boxOfDims, boxOutline, type Geometry } from "./geometry";
+import { boundaryImageBox } from "./coordinateTransforms/coordUtils";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
@@ -74,10 +75,14 @@ export class GoFishRef {
   // a sample instance and must see it regardless of field-init config.
   public readonly multiplicity?: "one" | "all";
 
-  private intrinsicDims?: Dimensions;
+  /** The target's local box, copied by `layout` (see `intrinsicDims`). */
+  private targetDims?: Dimensions;
   /** The common ancestor of this ref and its target, set by `layout`: the
    *  ref stands where its target is, read through it (see `transform`). */
   private lca?: GoFishAST;
+  /** The coordinate space the ref reads its target across, when there is
+   *  one, set by `layout` (see {@link crossing}). */
+  private across?: GoFishNode;
   /** Per axis, a translate an authoritative pin (`pinAnchor`) set, which
    *  replaces the one read off the target. */
   private pinned: [number | undefined, number | undefined] = [
@@ -107,7 +112,40 @@ export class GoFishRef {
         sum += n.projectedTranslate(dir) ?? 0;
       return sum;
     };
-    return this.pinned[dir] ?? walk(this.selectedNode) - walk(this.parent);
+    // Across a coordinate space the ref's local box is the target's drawn
+    // box in the space's own frame (`intrinsicDims`), so the walk starts at
+    // the space.
+    return (
+      this.pinned[dir] ??
+      walk(this.across ?? this.selectedNode) - walk(this.parent)
+    );
+  }
+
+  /**
+   * The ref's local box. A ref stands where its target is drawn. In the
+   * usual case its target and its parent sit in frames that differ by
+   * translates only, and the ref's box is its target's local box, moved by
+   * its translate (`transform`).
+   *
+   * When the target is inside a coordinate space the ref is not inside (a
+   * `coord` lies between the target and their common ancestor), the ref
+   * reads the target where the space draws it ({@link drawnBox}): the
+   * target's box in the space's interior, mapped through the space's
+   * `interiorTransform` into the space's own frame, and the ref's translate
+   * is read from the space up. The mapped box follows how the space draws a
+   * mark (`embedded`, see `GoFishNode.resolveEmbedding`): on an axis that
+   * is not embedded the mark is ink of a fixed pixel size at a mapped
+   * point, and on an axis that is, it is an extent of the space and warps.
+   * So a point mark (no embedded axis: a circle in polar) gives its mapped
+   * center with its own pixel size, and a mark with an extent gives the
+   * bounding box of its warped box. Its `start`/`middle`/`end` anchors are
+   * that box's: the middle of a point mark is its mapped center, and the
+   * middle of a warped bar is the middle of its drawn box, which is not in
+   * general the image of the bar's own middle.
+   */
+  private get intrinsicDims(): Dimensions | undefined {
+    if (this.across === undefined || !this.selectedNode) return this.targetDims;
+    return drawnBox(this.selectedNode, this.across);
   }
   public readonly selection?: string | Token | (Token | string | number)[];
   /** The node this ref was made from, when it was made from one (a handle):
@@ -183,7 +221,61 @@ export class GoFishRef {
   /** A ref holds its target's box, so it has its target's y frame (see
    *  `axisDirection.ts`). */
   public get yFrame(): YFrame {
+    // Across a coordinate space the ref's box is in pixels of the frame the
+    // ref sits in, not the space's (see `intrinsicDims`).
+    if (this.crossing() !== undefined)
+      return this.parent?.yFrame ?? CANVAS_FRAME;
     return this.targetNode?.yFrame ?? CANVAS_FRAME;
+  }
+
+  /**
+   * The coordinate space this ref reads its target across (see
+   * `intrinsicDims`): the node with an `interiorTransform` between the
+   * target and their common ancestor, or undefined when there is none. A
+   * reader outside two nested spaces, and a reader inside a space its
+   * target is not inside, are errors: the first would need the outer
+   * space's map of a nested space's interior, which the outer space does
+   * not warp when it draws it, and the second the inverse of the reader's
+   * space.
+   */
+  private crossing(): GoFishNode | undefined {
+    const target = this.selectedNode;
+    if (!target) return undefined;
+    const lca = findLeastCommonAncestor(this, target);
+    let across: GoFishNode | undefined;
+    // A space's own box is in its parent's frame: the walk starts above the
+    // target.
+    for (let n = target.parent; n && n !== lca; n = n.parent) {
+      if (!(n instanceof GoFishNode) || n.interiorTransform === undefined)
+        continue;
+      if (across !== undefined)
+        throw new Error(
+          `[gofish] ${this.describe()} reads a mark inside two nested ` +
+            `coordinate spaces from outside both. A mark outside a space ` +
+            `reads a mark inside it where the space draws it, through one ` +
+            `space only. Read it from inside the outer space.`
+        );
+      across = n;
+    }
+    for (let n = this.parent; n && n !== lca; n = n.parent) {
+      if (n.interiorTransform !== undefined)
+        throw new Error(
+          `[gofish] ${this.describe()} is inside a ` +
+            `${n._space?.type ?? n.type} coordinate space that the mark it ` +
+            `reads is not inside. A mark inside a space cannot read a mark ` +
+            `outside it: that needs the inverse of the space's transform. ` +
+            `Move the reader outside the space, or the mark inside it.`
+        );
+    }
+    return across;
+  }
+
+  /** How this ref reads in a message. */
+  private describe(): string {
+    if (this.selection !== undefined)
+      return `ref(${JSON.stringify(String(this.selection))})`;
+    const name = this.selectedNode?._name;
+    return typeof name === "string" ? `a ref to "${name}"` : "a ref";
   }
 
   /** Chainable: name this ref so a relate clause can reference it (mirrors
@@ -331,19 +423,28 @@ export class GoFishRef {
     return aliasTarget(found, round, this);
   }
 
+  /** A ref embeds its target. Across a coordinate space it does not: the
+   *  ref's box is the target's drawn box in pixels, not an extent of the
+   *  target's space. */
   public embed(direction: FancyDirection): void {
+    if (this.crossing() !== undefined) return;
     this.selectedNode?.embed(direction);
   }
 
+  /** A ref has its target's space. Across a coordinate space it has what
+   *  the space reports to its parent: none, as a pixel box. */
   public resolveUnderlyingSpace(): Size<UnderlyingSpace> {
+    if (this.crossing() !== undefined) return [UNDEFINED, UNDEFINED];
     return (
       this.selectedNode?.resolveUnderlyingSpace() ?? [ORDINAL([]), ORDINAL([])]
     );
   }
 
   /** A ref claims what its target claims. An unresolved ref is ordinal on
-   *  both axes, so it claims nothing. */
+   *  both axes, so it claims nothing, and so does a ref across a coordinate
+   *  space, as the space claims nothing of its interior's data. */
   public resolveExtent(): Size<Extent | undefined> {
+    if (this.crossing() !== undefined) return [undefined, undefined];
     return this.selectedNode?.resolveExtent() ?? [undefined, undefined];
   }
 
@@ -356,9 +457,10 @@ export class GoFishRef {
     // The ref's own translate is never part of the walks, so laying the
     // ref out again reads the same place (#928).
     this.lca = findLeastCommonAncestor(this, this.selectedNode);
+    this.across = this.crossing();
     this.pinned = [undefined, undefined];
 
-    this.intrinsicDims = this.selectedNode.intrinsicDims;
+    this.targetDims = this.selectedNode.intrinsicDims;
 
     // The copy above is in pixels; the parent reads it in its own axis order.
     return orientView(this as Placeable, yDirection(this.parent));
@@ -377,6 +479,17 @@ export class GoFishRef {
   public geometry(): Geometry {
     if (!this.selectedNode)
       throw new Error("[gofish] geometry() called on an unresolved ref");
+    // Across a coordinate space, a point mark is drawn unwarped at its
+    // mapped center, so its shape is its own; a mark with an extent is
+    // read as its drawn box (`intrinsicDims`).
+    if (this.across !== undefined && !drawnAsPoint(this.selectedNode)) {
+      const box = boxOfDims(this.intrinsicDims!, "ref");
+      const direction = this.yFrame.direction;
+      return {
+        box,
+        outline: () => [{ ...boxOutline(box, direction), bounds: true }],
+      };
+    }
     return this.selectedNode.geometry();
   }
 
@@ -406,7 +519,8 @@ export class GoFishRef {
     // Until the anchor's local point is determined, only the local min is
     // recordable (mirrors GoFishNode.place).
     if (!anchorDetermined(intrinsic, anchor)) {
-      if (anchor === "min") this.intrinsicDims![dir].min = value;
+      if (anchor === "min" && this.across === undefined)
+        this.targetDims![dir].min = value;
       return;
     }
     // A laid-out ref is where its target is (`transform`), and `place()` is
@@ -946,3 +1060,65 @@ export const findLeastCommonAncestor = (
   }
   return path1[i + 1];
 };
+
+/** Whether `node` draws as ink of a fixed pixel size at one point of a
+ *  coordinate space on `axis`: its own `embedded` flag is false there (see
+ *  `GoFishNode.resolveEmbedding`). A node with no flag of its own (a group)
+ *  is an extent of the space. */
+const pointOn = (node: GoFishNode, axis: 0 | 1): boolean =>
+  node.args?.dims?.[axis]?.embedded === false;
+
+/** Whether `node` draws as a point of a coordinate space on both axes. */
+const drawnAsPoint = (node: GoFishNode): boolean =>
+  pointOn(node, 0) && pointOn(node, 1);
+
+/**
+ * Where `space` draws `target`, a node inside it, as a box in the space's
+ * own frame (see `GoFishRef.intrinsicDims`). The target's box in the
+ * space's interior is its local box moved by the translates from it up to
+ * the space. On each axis it does not embed, the box collapses to its
+ * middle and its size is pixels of ink around the mapped point. The rest is
+ * mapped through the space's `interiorTransform`, and the image's bounding
+ * box is widened by the ink: by half its own size on each axis for a point
+ * mark, and all round by half the thickness of a warped line.
+ */
+function drawnBox(target: GoFishNode, space: GoFishNode): Dimensions {
+  const local = target.intrinsicDims;
+  if (!local)
+    throw new Error(
+      `[gofish] a mark outside a coordinate space read a mark inside it ` +
+        `before the mark was laid out`
+    );
+  const offset: [number, number] = [0, 0];
+  for (let n: GoFishAST | undefined = target; n && n !== space; n = n.parent)
+    for (const axis of [0, 1] as const)
+      offset[axis] += n.projectedTranslate(axis) ?? 0;
+  const ends = ([0, 1] as const).map((axis) => {
+    const { min = 0, size = 0 } = local[axis];
+    const lo = offset[axis] + min;
+    if (!pointOn(target, axis)) return { lo, hi: lo + size, ink: 0 };
+    const mid = lo + size / 2;
+    return { lo: mid, hi: mid, ink: size };
+  });
+  const image = boundaryImageBox(
+    ends[0].lo,
+    ends[0].hi,
+    ends[1].lo,
+    ends[1].hi,
+    space.interiorTransform!().transform
+  );
+  const thickness = Math.max(ends[0].ink, ends[1].ink) / 2;
+  const pad: [number, number] = drawnAsPoint(target)
+    ? [ends[0].ink / 2, ends[1].ink / 2]
+    : [thickness, thickness];
+  const axisDims = (lo: number, hi: number, p: number) => ({
+    min: lo - p,
+    size: hi - lo + 2 * p,
+    center: (lo + hi) / 2,
+    max: hi + p,
+  });
+  return [
+    axisDims(image.minX, image.maxX, pad[0]),
+    axisDims(image.minY, image.maxY, pad[1]),
+  ];
+}

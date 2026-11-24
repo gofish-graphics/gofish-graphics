@@ -3241,7 +3241,7 @@ for the API.
       }
     },
     "PolygonMark": {
-      "description": "A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
+      "description": "A closed polygon. Given `points`, the shape form: a ring of local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field; no dims channels, the bbox is computed from `points`. Without them, the connector form: the closed ring through the centers of the marks another flow placed, in order, with straight edges, the last back to the first, over a ref array (`chart(selectAll(name)).mark(polygon())`, one ring per group after `group`) or over explicit children. It reads the marks as `line` does: outside a coordinate space it runs through where the space draws them, and inside one its edges are drawn through the space. Over one mark it draws nothing, and over two the segment there and back.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -3282,12 +3282,11 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap)."
+          "description": "Vertex list, at least 3 points: either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap). Omitted, the ring runs through the marks the polygon is applied to. Given together with children, it is an error."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Fill color, or a field name for a color scale.",
-          "default": "black"
+          "description": "Fill color, or a field name for a color scale. Omitted, black in the shape form, and in the connector form the color of the marks it runs through."
         },
         "stroke": {
           "$ref": "#/$defs/ChannelValue",

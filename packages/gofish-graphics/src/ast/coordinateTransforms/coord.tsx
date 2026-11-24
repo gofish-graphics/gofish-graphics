@@ -1062,6 +1062,29 @@ export const coord = createNodeOperator(
       type: coordTransform.type,
       closed: [closesOn(coordTransform, 0), closesOn(coordTransform, 1)],
     };
+    // How it draws its interior into its own frame, as `lower` does: through
+    // the transform layout resolved, in pixels, then shifted by the content
+    // offset. A mark outside the space reads a mark inside it through this
+    // (`GoFishRef`).
+    coordNode.interiorTransform = () => {
+      const offset = coordNode.renderData?.contentOffset as
+        | [number, number]
+        | undefined;
+      if (offset === undefined)
+        throw new Error(
+          `[gofish] a mark outside a "${coordTransform.type}" coordinate ` +
+            `space read a mark inside it before the space was laid out. ` +
+            `Lay the space out first: put it before the reader in its layer.`
+        );
+      const pixel = inPixels(transformRef.current);
+      return {
+        ...pixel,
+        transform: (p) => {
+          const [x, y] = pixel.transform(p);
+          return [offset[0] + x, offset[1] + y];
+        },
+      };
+    };
     // The coord's own box lives in its parent's space, so its `dims` option
     // resolves against the parent's names (the hook's `outer` scope).
     own.bind(coordNode);

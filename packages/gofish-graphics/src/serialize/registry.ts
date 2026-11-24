@@ -269,11 +269,12 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   petal,
   text,
   image,
-  polygon,
   blank,
   region,
   // Relational marks: a leaf in a chart's `.mark(...)`, a combinator over
-  // explicit children.
+  // explicit children. `polygon` is a leaf with `points`, and relational
+  // without them.
+  polygon,
   line,
   ribbon,
   enclose,

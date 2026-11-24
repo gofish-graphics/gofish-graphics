@@ -446,6 +446,17 @@ only correct in some spaces reads it there: `scatter`'s `overlap` keeps
 children apart in the layout frame, which is the screen only in a linear space,
 so it throws under any other transform (#1002).
 
+A `coord` also tells the rest of the tree how it draws its interior
+(`GoFishNode.interiorTransform`): its coordinate transform in pixels, moved by
+its `contentOffset`, callable once it is laid out. Every other node only
+translates its children, so it leaves the field undefined. A `ref` from
+outside the space to a mark inside it reads the mark through this map, so it
+sees the mark where it is drawn (see
+[Name Resolution & Scoping](/internals/core/names-and-scoping)). The ref maps
+the mark's box with `boundaryImageBox` (`coordUtils.ts`): the union of the
+warped box's four edges, each found as `computeTransformedBoundingBox` finds
+them, but without the polar center that box adds for a whole space.
+
 A coord's own `w`/`h` may be a length (#1176 step 6): it is laid out in its
 parent's room like any node's size, and a coord with a length size reports no
 claim of its own (`resolveExtent` returns undefined), so its parent's room

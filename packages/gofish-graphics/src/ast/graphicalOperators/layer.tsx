@@ -1456,6 +1456,7 @@ export const layer = createNodeOperatorSequential(
               // The operand sits at a fixed pixel offset inside its container
               // (`nestedGap`), in this layer's axis order.
               const containerPx = rawPlaceable(childPlaceables[op.child]);
+              refuseAcrossSpace(op.name, op.node, node.children[op.child]);
               const gapPx = nestedGap(op.node, node.children[op.child]);
               const operand = new NestedOperand(
                 op.name,
@@ -1842,3 +1843,29 @@ export const layer = createNodeOperatorSequential(
     return applyFilter(node, filter);
   }
 );
+
+/** A constraint places a nested operand by holding it at a fixed offset in
+ *  the child that contains it, the sum of the translates between them
+ *  (`nestedGap`). A coordinate space between them draws its interior
+ *  through its transform, not a translate (`interiorTransform`), so there
+ *  is no such offset: placing against a mark inside a space from outside
+ *  it is an error, not a silent misplacement. */
+function refuseAcrossSpace(
+  name: string,
+  operand: GoFishAST,
+  container: GoFishAST
+): void {
+  for (let a = operand.parent; a; a = a.parent) {
+    if (a instanceof GoFishNode && a.interiorTransform !== undefined)
+      throw new Error(
+        `[gofish] a constraint in a layer places "${name}", a mark inside a ` +
+          `${a._space?.type ?? a.type} coordinate space the layer is not ` +
+          `inside. A constraint places marks by translates, and the space ` +
+          `draws its interior through its transform, so no translate puts ` +
+          `the mark at a place outside it. Constrain the mark from inside ` +
+          `the space, or read where it is drawn with a ref (a line or a ` +
+          `polygon over it).`
+      );
+    if (a === container) return;
+  }
+}

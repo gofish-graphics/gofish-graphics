@@ -380,6 +380,51 @@ constrained child in its solve) moves the ref with it. Like a node's, its
 unconstrained child does not move it off its target; only an authoritative
 pin (`pinAnchor`) does.
 
+A nested operand's offset is a sum of translates, so a coordinate space between
+the operand and its container breaks it: a `coord` draws its interior through
+its transform, not a translate. A constraint over a mark inside a coordinate
+space the layer is not inside is an error (`refuseAcrossSpace` in
+`layer.tsx`), not a silent misplacement.
+
+### A ref across a coordinate space
+
+A ref reads its target across a coordinate space when a node with an
+`interiorTransform` (a `coord`) lies between the target and their common
+ancestor. A radar chart is the case: the points sit in a polar space, and the
+ring through them is drawn in a layer outside it, with straight edges.
+
+```js
+layer({ w: 320, h: 320 }, [
+  layer({ coord: Coord.clock() }, [
+    chart(scores)
+      .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+      .mark(circle({ r: 4 }).name("pts")),
+  ]),
+  chart(selectAll("pts")).mark(polygon({ fill: "#1d3557", opacity: 0.25 })),
+]);
+```
+
+The rule is that the outside reader sees the mark where it is drawn. The ref's
+local box is the target's box in the space's interior, mapped through
+`interiorTransform` into the space's own frame (`drawnBox` in `_ref.tsx`), and
+its translate walk starts at the space instead of at the target. The mapped box
+follows how the space draws the mark (`embedded`): on an axis that is not
+embedded the mark is ink of a fixed pixel size at a mapped point, and on an
+axis that is, it is an extent that warps. So a circle in polar gives its
+mapped center with its own radius, and a bar gives the bounding box of its
+warped shape. The middle of that box is not in general the image of the bar's
+own middle. A ref across a space claims no data and embeds nothing, as the
+space itself claims nothing of its interior.
+
+Two cases are errors, not answers. A reader outside two nested spaces would
+need the outer space's map of the inner space's interior, which the outer
+space does not warp when it draws it. A reader inside a space whose target is
+outside it would need the inverse of the space's transform.
+
+A reader inside the same space as its target is unchanged: no `coord` lies on
+the walk, it reads the space's own coordinates, and its path is drawn through
+the space.
+
 ## Drawing clauses and their order
 
 A clause that is not a constraint draws: an operator or mark such as `arrow`,

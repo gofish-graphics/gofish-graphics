@@ -32,7 +32,8 @@ polygon(*, points=None, fill=None, stroke=None, stroke_width=None, opacity=None,
 ```
 
 Keyword-only (matches every existing call site, which already passes
-`points=...` by keyword).
+`points=...` by keyword). Without `points`, the polygon is the ring through
+the marks it is applied to (see [Through marks](#through-marks)).
 
 ## Parameters
 
@@ -109,6 +110,40 @@ chart(rows, color=Color.gradient(["#fff5eb", "#7f2704"])).mark(
 
 Here `points="ring"` names a field holding one ring per row, so the mark draws
 one polygon per row, each colored by its own `n`.
+
+## Through marks
+
+Without `points`, `polygon` draws the closed ring through the centers of marks
+another flow placed, in order, with straight edges, the last back to the
+first. It reads them as [`line`](/python/api/marks/line) does, over the refs of
+[`select_all`](/python/api/selection/ref). After
+[`group`](/python/api/operators/group) it draws one ring per group. Over one
+mark it draws nothing, and over two it draws the segment there and back.
+
+A polygon outside a coordinate space reads the marks where the space draws
+them, so the ring through points in a polar space has straight edges. This is
+a radar chart:
+
+```python
+layer(
+    [
+        layer(
+            [
+                chart(scores)
+                .flow(scatter(by="metric", x="metric", y="value"))
+                .mark(circle(r=4, fill="#1d3557").name("pts")),
+            ],
+            coord=Coord.clock(),
+        ),
+        chart(select_all("pts")).mark(polygon(fill="#1d3557", opacity=0.25)),
+    ],
+    w=320,
+    h=320,
+)
+```
+
+Inside the coordinate space, the edges are drawn through the space, as a
+line's are, so in a polar space they curve.
 
 ## Notes
 

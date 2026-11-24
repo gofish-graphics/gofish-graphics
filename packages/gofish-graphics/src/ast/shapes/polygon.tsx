@@ -27,6 +27,8 @@ import type { DisplayList } from "gofish-ir";
 import { lowerStyle, ringItem } from "../displayList/lowerHelpers";
 import { withWire } from "../wire";
 import { MARK_CHANNELS } from "../markChannels.generated";
+import { connect as Connect } from "../graphicalOperators/connect";
+import { createRelationalMark, type RelationalMark } from "../marks/chart";
 
 export type Ring = [number, number][];
 
@@ -194,20 +196,68 @@ export type PolygonMarkProps = Omit<
   Parameters<typeof basePolygon>[0],
   "points"
 > & {
-  /** A literal ring, or the name of a field holding one ring per row. */
-  points: Ring | string;
+  /** A literal ring, or the name of a field holding one ring per row.
+   *  Omitted, the ring runs through the centers of the marks the polygon is
+   *  applied to. */
+  points?: Ring | string;
 };
 
+/** The options of `polygon` over marks: its paint. */
+type PolygonRingOptions = Omit<PolygonMarkProps, "points">;
+
+// `polygon` over marks: the closed ring through the centers of the marks,
+// a ring-mode connector. It reads its operands as `line` does (connect.tsx).
+const polygonRing = createRelationalMark<PolygonRingOptions>(
+  "polygon",
+  (o, children) =>
+    Connect(
+      {
+        mode: "ring",
+        fill: o.fill as MaybeValue<string> | undefined,
+        stroke: o.stroke as MaybeValue<string> | undefined,
+        strokeWidth: o.strokeWidth as number | undefined,
+        opacity: o.opacity as number | undefined,
+      },
+      children
+    )
+);
+
 /**
- * `polygon` — a closed ring, either literal or field-bound.
+ * `polygon` — a closed ring: literal, field-bound, or through marks.
  *
  * `points: [[x, y], …]` is the local-coordinate shape. `points: "ring"` reads
  * the ring off each row of the mark's data, so one row is one ring and a whole
  * basemap is `chart(world110m).mark(polygon({ points: "ring" }))`. Field-bound
  * rings are data positions: they go through the axis scales and, under a `geo`
  * space, land at their own longitude and latitude.
+ *
+ * With no `points`, the ring runs through the centers of marks another flow
+ * placed, in order, with straight edges, the last back to the first: over a
+ * ref bag, `chart(selectAll("pts")).mark(polygon())`, or over explicit
+ * children, `polygon({}, [a, b, c])`. It reads the marks as `line` does.
  */
-export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
+export function polygon(
+  opts: PolygonMarkProps & { points: Ring | string }
+): NameableMark<any>;
+export function polygon(
+  opts: PolygonRingOptions | undefined,
+  children: GoFishAST[]
+): GoFishNode;
+export function polygon(opts?: PolygonRingOptions): RelationalMark;
+export function polygon(
+  opts?: PolygonMarkProps,
+  children?: GoFishAST[]
+): NameableMark<any> | RelationalMark | GoFishNode {
+  if (opts?.points === undefined)
+    return children === undefined
+      ? polygonRing(opts)
+      : polygonRing(opts, children);
+  if (children !== undefined)
+    throw new Error(
+      "[gofish] polygon({ points }, children): `points` gives the ring, and " +
+        "the children give it too, as the ring through their centers. Pass " +
+        "one: drop `points` to draw the ring through the children."
+    );
   if (typeof opts.points !== "string") {
     return basePolygon(opts as any);
   }
@@ -253,4 +303,4 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
   const result = nameableMark(mark);
   withWire(result, { type: "polygon", opts });
   return result;
-};
+}
