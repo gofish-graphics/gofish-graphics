@@ -1695,7 +1695,9 @@ layer([
               alt="GoTree sunburst, before and now"
             />
             <figcaption>
-              GoTree sunburst with its <b>emY</b> flag dropped. Same picture.
+              GoTree sunburst with its <b>emY</b> flag, then with the flag
+              dropped. Both are rendered with the branch's code today. Same
+              picture.
             </figcaption>
           </figure>
         </div>
@@ -1703,8 +1705,18 @@ layer([
         <p>
           Sixteen stories changed from embedding alone. The expected kinds of
           change are an arc that now ends on the mark's edges, a stroke that is
-          now an outline, or a flag dropped with the same picture. Captions
-          marked <b>Flag</b> show something else.
+          now an outline, a flag dropped with the same picture, or a root node
+          that now shows where main drew nothing. Captions marked <b>Flag</b>
+          show something else.
+        </p>
+        <p>
+          Seven stories below now show a root node that main did not draw. In
+          each one the spec gives the root a size and a fill. In six of them the
+          GoTree reference image also shows a root, and for the node-link
+          sunburst no reference was checked. Main hid the root because a ring
+          that spans the full circle collapsed to a point. On the branch a mark
+          that spans a full turn has no seam, so no white line runs from the
+          center to 12 o'clock.
         </p>
         <div class="strip wide">
           <figure>
@@ -1727,8 +1739,7 @@ layer([
               alt="Multilevel silhouette tree"
             />
             <figcaption>
-              Multilevel silhouette tree. Same picture by eye. Its first path is
-              now degenerate, with every point at the same place.
+              Multilevel silhouette tree. Same picture as main.
             </figcaption>
           </figure>
           <figure>
@@ -1758,8 +1769,8 @@ layer([
               alt="Hierarchical sector chart"
             />
             <figcaption>
-              <b>Flag.</b> Hierarchical sector chart. A root disc is now drawn
-              at the center, with a white line from the center to 12 o'clock.
+              Hierarchical sector chart. The root now shows as a red-orange disc
+              at the center, as in the GoTree reference image.
             </figcaption>
           </figure>
           <figure>
@@ -1768,8 +1779,9 @@ layer([
               alt="Icicle plot"
             />
             <figcaption>
-              <b>Flag.</b> Icicle plot. A root disc is now drawn at the center,
-              with a white line to 12 o'clock.
+              Icicle plot in polar. The root now shows as a disc at the center.
+              Its reference is a cartesian icicle, whose top band is the root.
+              The rings around the root sit at uneven radii, as they do on main.
             </figcaption>
           </figure>
           <figure>
@@ -1778,8 +1790,8 @@ layer([
               alt="Sector tree 2"
             />
             <figcaption>
-              <b>Flag.</b> Sector tree 2. A root disc at the center, with a
-              white line to 12 o'clock.
+              Sector tree 2. The root now shows as a dark disc at the center, as
+              in the GoTree reference image.
             </figcaption>
           </figure>
           <figure>
@@ -1788,8 +1800,8 @@ layer([
               alt="GoTree sunburst"
             />
             <figcaption>
-              <b>Flag.</b> GoTree sunburst. A root disc at the center, with a
-              white line to 12 o'clock.
+              GoTree sunburst. The root now shows as a dark disc at the center,
+              as in the GoTree reference image.
             </figcaption>
           </figure>
           <figure>
@@ -1798,8 +1810,9 @@ layer([
               alt="Node-link sunburst"
             />
             <figcaption>
-              <b>Flag.</b> Node-link sunburst. A root disc at the center, with a
-              white line to 12 o'clock.
+              Node-link sunburst. The root now shows as a disc at the center.
+              The spec declares the root the same way as the other sunbursts. No
+              reference image was checked.
             </figcaption>
           </figure>
           <figure>
@@ -1808,16 +1821,24 @@ layer([
               alt="Sector tree"
             />
             <figcaption>
-              <b>Flag.</b> Sector tree. A small root circle now shows at the
-              center.
+              Sector tree. The root now shows as an 8 px circle at the center.
+              The GoTree reference draws the root as the outer circle, because
+              its rings run the other way.
             </figcaption>
           </figure>
           <figure>
             <img src="img/rev2-main-vs-branch-tyre-tree.png" alt="Tyre tree" />
             <figcaption>
-              <b>Flag.</b> Tyre tree. On main the root was a line of no width.
-              Now it is a dark outer ring, every other ring moves inward, and
-              the outer ring meets the edge of the picture.
+              <b>Flag.</b> Tyre tree. The root now shows as the dark outer rim,
+              as in the GoTree reference image. The layout did not change, and
+              every ring has the same radii on main and on the branch. The two
+              sides are scaled to the same height, so the rings look smaller on
+              the branch. The picture is clipped by 15 px on the right and the
+              bottom, and it was clipped on main too, with the same warning that
+              it draws past the canvas. The story's four bands are sized by hand
+              in pixels and need 224 px of radial room, and the canvas gives
+              187.5 px. That is a problem in the story's spec, and it is not
+              fixed here.
             </figcaption>
           </figure>
           <figure>
