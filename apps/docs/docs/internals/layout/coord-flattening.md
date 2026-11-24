@@ -311,7 +311,10 @@ next to its axis names, so a node inside can read it. A chain that fills a
 closed axis keeps half a gap at each end by default (its spacing's `ends`),
 and its claim includes them, so the fit leaves room for n gaps (see
 [Underlying space](/internals/core/underlying-space)). The fit itself does
-not change. A partial sweep is not closed.
+not change. A partial sweep is not closed. Both rules read one test,
+`isPeriod`: whether a length along the axis is one whole period of it. A mark
+whose own extent passes that test starts where it ends, so it has no ends to
+draw (see [Layout and render passes](/internals/layout/passes)).
 
 **`HasZero`: literal offsets are distances from 0.** On an axis whose 0 is a
 fixed point (the polar center), the content's data starts at 0, whatever

@@ -87,15 +87,28 @@ export type AxisTraits = {
  * closed axis the end of the room is its start, so a chain that fills it
  * leaves a gap after its last part too (`closesAround` in distribute.ts).
  */
-export const closesOn = (t: CoordinateTransform, axis: 0 | 1): boolean => {
+export const closesOn = (t: CoordinateTransform, axis: 0 | 1): boolean =>
+  isPeriod(t, axis, t.domain[axis].size);
+
+/**
+ * Whether `length`, a length along axis `axis` of the space `t`, is one
+ * whole period of it (`HasCycle`). Two positions that far apart on that
+ * axis are the same place: a closed axis's room has this length
+ * ({@link closesOn}), and a mark this long there has no ends, since its
+ * start edge is its end edge (`bandRegion.ts`).
+ */
+export const isPeriod = (
+  t: CoordinateTransform,
+  axis: 0 | 1,
+  length: number | undefined
+): boolean => {
   const period = t.axisTraits?.[axis]?.HasCycle?.period;
   // Equal up to rounding: a sweep written in degrees (`360 * (Math.PI / 180)`)
   // can differ from 2π in its last bit, and it is still one full turn.
-  const size = t.domain[axis].size;
   return (
     period !== undefined &&
-    size !== undefined &&
-    Math.abs(size - period) <= 1e-9 * period
+    length !== undefined &&
+    Math.abs(Math.abs(length) - period) <= 1e-9 * period
   );
 };
 

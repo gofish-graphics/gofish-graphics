@@ -4,7 +4,7 @@
 
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
-import { bandRegion } from "../../bandRegion";
+import { bandRegion, boxRegion } from "../../bandRegion";
 import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
@@ -63,8 +63,8 @@ import type { DisplayList } from "gofish-ir";
 import {
   cornerRadii,
   lowerStyle,
-  pathToPixelSVG,
   rectItemFromBox,
+  regionToPixelSVG,
   roleFor,
 } from "../displayList/lowerHelpers";
 
@@ -396,15 +396,7 @@ export const Rect = ({
             [ends[0][1], ends[1][1]],
             () => thickness / 2
           );
-          return [
-            {
-              kind: "path",
-              d: pathToPixelSVG(band, toPixel),
-              datum: node.datum,
-              role: roleFor(node.datum),
-              style: elementStyle,
-            },
-          ];
+          return regionItems(regionToPixelSVG(band, toPixel), elementStyle);
         }
 
         // Both dimensions data — area.
@@ -416,30 +408,33 @@ export const Rect = ({
           return [rectItemFromBox(x, xMax, y, yMax, toPixel, rectExtra)];
         }
 
-        const corners = path(
-          [
-            [displayDims[0].min ?? 0, displayDims[1].min ?? 0],
-            [displayDims[0].max ?? 0, displayDims[1].min ?? 0],
-            [displayDims[0].max ?? 0, displayDims[1].max ?? 0],
-            [displayDims[0].min ?? 0, displayDims[1].max ?? 0],
-          ],
-          { closed: true }
+        // Nonlinear: the box's loops (`boxRegion`), each edge a straight
+        // line of the space drawn through it.
+        const loops = boxRegion(
+          space,
+          [displayDims[0].min ?? 0, displayDims[1].min ?? 0],
+          [displayDims[0].max ?? 0, displayDims[1].max ?? 0]
+        ).map((corners) =>
+          transformPath(path(corners, {}), space, { resample: true })
         );
-        const transformed = transformPath(corners, space, { resample: true });
-        return [
-          {
-            kind: "path",
-            d: pathToPixelSVG(transformed, toPixel),
-            datum: node.datum,
-            role: roleFor(node.datum),
-            style: lowerStyle({
-              fill: resolvedFill,
-              stroke: resolvedStroke,
-              strokeWidth: strokeWidth ?? 0,
-              opacity,
-            }),
-          },
-        ];
+        return regionItems(regionToPixelSVG(loops, toPixel), elementStyle);
+
+        /** The path item a region draws, or none for an empty region. */
+        function regionItems(
+          d: string,
+          style: DisplayList.Style
+        ): DisplayList.DisplayItem[] {
+          if (d === "") return [];
+          return [
+            {
+              kind: "path",
+              d,
+              datum: node.datum,
+              role: roleFor(node.datum),
+              style,
+            },
+          ];
+        }
       },
       // Its outline is what it draws: its box drawn in by its insets, with
       // its corners rounded (see `roundedBoxOutline`), painted as it is

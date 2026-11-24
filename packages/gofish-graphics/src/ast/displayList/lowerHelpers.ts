@@ -19,6 +19,7 @@ import {
   type Path,
   type Point,
   pathToSVGPath,
+  samePoint,
 } from "../../path";
 import { bakeChildren, bakeSubtree } from "../coordinateTransforms/bake";
 
@@ -60,6 +61,22 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
           }
     )
   );
+
+/** A region's closed loops (`bandRegion.ts`) as one SVG `d`, each loop its
+ *  own subpath, so the nonzero fill fills what they enclose and the stroke
+ *  outlines each. A loop that is one point, such as the inner edge of a
+ *  disc at the polar center, encloses nothing and is left out; a region
+ *  with no loops left is empty path data, which draws nothing. */
+export const regionToPixelSVG = (loops: Path[], toPixel: ToPixel): string =>
+  loops
+    .filter((loop) => {
+      const points = loop.flatMap((s) =>
+        s.type === "line" ? s.points : [s.start, s.control1, s.control2, s.end]
+      );
+      return points.some((p) => !samePoint(p, points[0]));
+    })
+    .map((loop) => pathToPixelSVG(loop, toPixel))
+    .join(" ");
 
 /** A closed ring of layout points as a path item, drawn straight under a
  *  linear coordinate space and adaptively resampled under any other, so a

@@ -28,7 +28,7 @@ import { Constraint } from "../ast/constraints";
 import { SlotOperand } from "../ast/constraints/shared";
 import { fr } from "../ast/length";
 import { atLeast, pitch } from "../families/spacing";
-import { bandRegion } from "../bandRegion";
+import { bandRegion, boxRegion } from "../bandRegion";
 
 /** A data value read from column `name`, i.e. an amount of that quantity. */
 const q = (v: number, name: string) => new DatumValueImpl(v, { name });
@@ -365,7 +365,9 @@ console.log("# embedding: Route B in context");
     // its sides on the radii r ± thickness / 2.
     const space = polar();
     const [t0, t1, r, half] = [0.3, 1.4, 80, 9];
-    const region = bandRegion(space, [t0, r], [t1, r], () => half);
+    const loops = bandRegion(space, [t0, r], [t1, r], () => half);
+    ok("the band is one loop", loops.length === 1);
+    const region = loops[0];
     const dist = (p: [number, number], q2: [number, number]) =>
       Math.hypot(p[0] - q2[0], p[1] - q2[1]);
     const at = (t: number, rr: number) => space.transform([t, rr]);
@@ -391,6 +393,75 @@ console.log("# embedding: Route B in context");
         const d = dist(p, center);
         return Math.abs(d - (r - half)) < 1e-3 || Math.abs(d - (r + half)) < 1e-3;
       })
+    );
+  }
+
+  console.log("# embedding: a region that spans the whole turn has no ends");
+  {
+    // On a glued axis a mark whose extent is one whole period starts where
+    // it ends, so it is drawn as its two edges along that axis, each a
+    // loop, with nothing along the seam. Almost a whole turn keeps its ends.
+    const space = polar();
+    const TAU = 2 * Math.PI;
+    const [r, half] = [80, 9];
+    const center = space.transform([0, 0]);
+    const radiusOf = (p: [number, number]) =>
+      Math.hypot(p[0] - center[0], p[1] - center[1]);
+    const pointsOf = (loop: any[]) =>
+      loop.flatMap((s: any) =>
+        s.type === "line" ? s.points : [s.start, s.end]
+      ) as [number, number][];
+    /** Whether every point of the loop is at one radius. */
+    const onOneCircle = (loop: any[]) => {
+      const radii = pointsOf(loop).map(radiusOf);
+      return Math.max(...radii) - Math.min(...radii) < 1e-6;
+    };
+
+    const full = bandRegion(space, [0.4, r], [0.4 + TAU, r], () => half);
+    ok(
+      "band, whole turn: two loops, no caps",
+      full.length === 2 && full.every((l) => l.every((s) => s.type !== "line"))
+    );
+    ok(
+      "band, whole turn: its loops are the circles r ± t/2",
+      full.every(onOneCircle) &&
+        Math.abs(radiusOf(pointsOf(full[0])[0]) - (r - half)) < 1e-6 &&
+        Math.abs(radiusOf(pointsOf(full[1])[0]) - (r + half)) < 1e-6
+    );
+    const disc = bandRegion(space, [0, half], [TAU, half], () => half);
+    ok(
+      "band, whole turn from the center: the inner loop is the center alone",
+      disc.length === 2 &&
+        disc[0].length === 0 &&
+        onOneCircle(disc[1]) &&
+        Math.abs(radiusOf(pointsOf(disc[1])[0]) - 2 * half) < 1e-6
+    );
+    const almost = bandRegion(
+      space,
+      [0.4, r],
+      [0.4 + 0.99 * TAU, r],
+      () => half
+    );
+    ok(
+      "band, 0.99 of a turn: one loop with its two caps",
+      almost.length === 1 &&
+        almost[0].filter((s) => s.type === "line").length === 2
+    );
+
+    const box = boxRegion(space, [0.4, 20], [0.4 + TAU, 50]);
+    ok(
+      "box, whole turn: two loops, each its edge along the angle",
+      box.length === 2 &&
+        box.every((l) => l.length === 2 && l[0][1] === l[1][1]) &&
+        box[0][0][1] === 20 &&
+        box[1][0][1] === 50 &&
+        box[0][1][0] > box[0][0][0] &&
+        box[1][1][0] < box[1][0][0]
+    );
+    const boxAlmost = boxRegion(space, [0.4, 20], [0.4 + 0.99 * TAU, 50]);
+    ok(
+      "box, 0.99 of a turn: one loop around its four corners",
+      boxAlmost.length === 1 && boxAlmost[0].length === 5
     );
   }
 

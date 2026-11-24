@@ -80,6 +80,7 @@ import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
   pathToPixelSVG,
+  regionToPixelSVG,
   roleFor,
 } from "../displayList/lowerHelpers";
 import type { BlendMode } from "../blendMode";
@@ -87,6 +88,7 @@ import { evalFieldValues, isMissing } from "../fieldExpr";
 import { resolveColumn } from "../channels";
 import { groupFun } from "../groupExpr";
 import { setDrawnRowPoints } from "../displayList/drawnRowPoints";
+import { wrappedBandLoops } from "../../bandRegion";
 import { cellOn } from "../groupCell";
 
 /** A band's or a path's two edges: functions of the parameter, in data
@@ -274,6 +276,10 @@ function sampledEdgePath(
 type LaidOutBand = {
   edges: BandEdges;
   path: Path;
+  /** A filled band's two edges as paths from its start to its end, which
+   *  `path` joins across its ends. Lowering reads them when the band runs
+   *  a whole period of a space and so has no ends (`wrappedBandLoops`). */
+  sides?: { upper: Path; lower: Path };
   points: { row: unknown; at: Point }[];
 };
 
@@ -445,6 +451,13 @@ export const Band = ({
         const renderData: LaidOutBand = {
           edges: ink ?? px,
           path: ink === undefined ? [] : pathOf(ink),
+          sides:
+            closed && ink !== undefined
+              ? {
+                  upper: edgePath(ink.upper, point),
+                  lower: edgePath(ink.lower, point),
+                }
+              : undefined,
           points,
         };
         return {
@@ -458,7 +471,7 @@ export const Band = ({
         _children,
         node
       ): DisplayList.DisplayItem[] => {
-        const { path, points } = renderData as LaidOutBand;
+        const { path, sides, points } = renderData as LaidOutBand;
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
@@ -470,12 +483,33 @@ export const Band = ({
           coordinateTransform && coordinateTransform.type !== "linear"
             ? coordinateTransform
             : undefined;
-        const drawn = warped
-          ? transformPath(placed, warped, { resample: true })
-          : placed;
+        // A filled band that runs a whole period of the space has no ends:
+        // it is its two edges, each a loop (`wrappedBandLoops`).
+        const loops =
+          warped && sides
+            ? wrappedBandLoops(
+                warped,
+                axis,
+                mapPathPoints(sides.upper, local),
+                mapPathPoints(sides.lower, local)
+              )
+            : undefined;
+        const d = !warped
+          ? pathToPixelSVG(placed, toPixel)
+          : loops
+            ? regionToPixelSVG(
+                loops.map((loop) =>
+                  transformPath(loop, warped, { resample: true })
+                ),
+                toPixel
+              )
+            : pathToPixelSVG(
+                transformPath(placed, warped, { resample: true }),
+                toPixel
+              );
         const item: DisplayList.DisplayItem = {
           kind: "path",
-          d: pathToPixelSVG(drawn, toPixel),
+          d,
           datum: node.datum,
           role: roleFor(node.datum),
           style: lowerStyle({

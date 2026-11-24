@@ -16,7 +16,8 @@
 import * as GoFish from "../lib";
 import { check, items, report } from "./testHelpers";
 
-const { chart, spread, stack, rect, Coord, Spacing, fr } = GoFish as any;
+const { chart, spread, stack, rect, layer, Coord, Spacing, fr } =
+  GoFish as any;
 
 type Pt = [number, number];
 const TAU = 2 * Math.PI;
@@ -444,6 +445,62 @@ async function main() {
         rs.every(([x, w], i) => near(x + w / 2, 37.5 + 75 * i, 1e-2)),
       rs
     );
+  }
+
+  console.log("\n# a mark that spans the whole turn has no ends");
+  {
+    // Its start edge is its end edge, so its outline is its edges along
+    // the angle, each a loop of its own (its own subpath), and nothing is
+    // drawn along the seam: every subpath lies on one circle. A mark that
+    // spans 0.99 of the turn keeps its two radial ends. Both drawings of a
+    // rect are checked: both axes embedded (an area) and the angle alone
+    // (a band with a pixel thickness along the radius).
+    const subpathsOf = async (sweep: number, y: number, emY: boolean) => {
+      const dl = await layer({ coord: Coord.polar() }, [
+        rect({ x: 0, w: sweep, y, h: 30, emX: true, emY, stroke: "white" }),
+      ]).toDisplayList({ w: 200, h: 200 });
+      const [path] = items(dl).filter((it) => it.kind === "path") as any[];
+      return (path?.d ?? "")
+        .split("M")
+        .filter((s: string) => s.trim() !== "")
+        .map((s: string) => pointsOf("M" + s));
+    };
+    const radiusSpread = (ps: Pt[], c: Pt) => {
+      const rs = ps.map(([x, y]) => Math.hypot(x - c[0], y - c[1]));
+      return Math.max(...rs) - Math.min(...rs);
+    };
+    /** The center: the middle of a loop's points, which go round it. */
+    const centerOf = (ps: Pt[]): Pt => {
+      const xs = ps.map((p) => p[0]);
+      const ys = ps.map((p) => p[1]);
+      return [
+        (Math.min(...xs) + Math.max(...xs)) / 2,
+        (Math.min(...ys) + Math.max(...ys)) / 2,
+      ];
+    };
+    for (const emY of [true, false]) {
+      const drawing = emY ? "area" : "band";
+      const ring = await subpathsOf(TAU, 20, emY);
+      const c = centerOf(ring[ring.length - 1] ?? []);
+      check(
+        `${drawing}, ring over the whole turn: two loops, each on one circle`,
+        // Within a pixel: the spline's control points sit just off it.
+        ring.length === 2 && ring.every((ps: Pt[]) => radiusSpread(ps, c) < 1),
+        ring.map((ps: Pt[]) => radiusSpread(ps, c))
+      );
+      const disc = await subpathsOf(TAU, 0, emY);
+      check(
+        `${drawing}, disc over the whole turn: one loop, its rim`,
+        disc.length === 1 && radiusSpread(disc[0], centerOf(disc[0])) < 1,
+        disc.map((ps: Pt[]) => [ps.length, radiusSpread(ps, centerOf(ps))])
+      );
+      const almost = await subpathsOf(0.99 * TAU, 20, emY);
+      check(
+        `${drawing}, ring over 0.99 of the turn: one loop with its radial ends`,
+        almost.length === 1 && radiusSpread(almost[0], c) > 29,
+        almost.length
+      );
+    }
   }
 
   report();

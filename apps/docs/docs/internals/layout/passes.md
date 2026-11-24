@@ -504,6 +504,17 @@ angle embedded this is an annular sector whose ends lie on the rays at its two
 angles. An ellipse draws the same band with an elliptical thickness. The fill
 fills the band and the stroke outlines it.
 
+A mark whose extent along a periodic axis is one whole period (`isPeriod` in
+`coord.tsx`) has no ends: its start edge is its end edge. So its region has no
+caps there. It is its two edges along that axis, each a closed loop of its own,
+turning opposite ways (`bandRegion`, and `boxRegion` for a mark with both axes
+embedded). A ring around the full turn is its outer and its inner circle, with
+nothing drawn along the seam, and a disc is its outer circle alone, since its
+inner edge is the center. A mark that spans almost the whole turn keeps its two
+ends. A filled `ribbon` that runs a whole period draws the same way
+(`wrappedBandLoops`), and where its value at the end differs from its value at
+the start, each edge steps across along the seam.
+
 ### Pass 9: Layout Calculation
 
 **Location**: `src/ast/gofish.tsx:208`

@@ -1,6 +1,6 @@
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
-import { bandRegion } from "../../bandRegion";
+import { bandRegion, boxRegion } from "../../bandRegion";
 import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
@@ -31,7 +31,7 @@ import { type LengthValue } from "../length";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
-  pathToPixelSVG,
+  regionToPixelSVG,
   roleFor,
 } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
@@ -239,15 +239,7 @@ export const Ellipse = ({
             (u) =>
               (thickness / 2) * Math.sqrt(Math.max(0, 1 - (2 * u - 1) ** 2))
           );
-          return [
-            {
-              kind: "path",
-              d: pathToPixelSVG(band, toPixel),
-              datum: node.datum,
-              role: roleFor(node.datum),
-              style: elementStyle,
-            },
-          ];
+          return regionItems(regionToPixelSVG(band, toPixel));
         }
 
         // Both dimensions data — area.
@@ -261,32 +253,30 @@ export const Ellipse = ({
           return [ellipseItem(cx, cy, width / 2, height / 2)];
         }
 
-        const corners = path(
-          [
-            [displayDims[0].min ?? 0, displayDims[1].min ?? 0],
-            [displayDims[0].max ?? 0, displayDims[1].min ?? 0],
-            [displayDims[0].max ?? 0, displayDims[1].max ?? 0],
-            [displayDims[0].min ?? 0, displayDims[1].max ?? 0],
-          ],
-          { closed: true, subdivision: 1000 }
+        // Nonlinear: the box's loops (`boxRegion`), each edge a straight
+        // line of the space, sampled evenly and drawn through it.
+        const loops = boxRegion(
+          space,
+          [displayDims[0].min ?? 0, displayDims[1].min ?? 0],
+          [displayDims[0].max ?? 0, displayDims[1].max ?? 0]
+        ).map((corners) =>
+          transformPath(path(corners, { subdivision: 1000 }), space)
         );
-        const transformed = transformPath(corners, space);
+        return regionItems(regionToPixelSVG(loops, toPixel));
 
-        return [
-          {
-            kind: "path",
-            d: pathToPixelSVG(transformed, toPixel),
-            datum: node.datum,
-            role: roleFor(node.datum),
-            style: lowerStyle({
-              fill: resolvedFill,
-              stroke: resolvedStroke,
-              strokeWidth: strokeWidth ?? 0,
-              opacity,
-              fillOpacity,
-            }),
-          },
-        ];
+        /** The path item a region draws, or none for an empty region. */
+        function regionItems(d: string): DisplayList.DisplayItem[] {
+          if (d === "") return [];
+          return [
+            {
+              kind: "path",
+              d,
+              datum: node.datum,
+              role: roleFor(node.datum),
+              style: elementStyle,
+            },
+          ];
+        }
       },
       // The smallest circle enclosing an ellipse is the circle of its larger
       // radius, centered on it.

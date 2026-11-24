@@ -66,7 +66,11 @@ A mark with one axis embedded in a space that is not linear is drawn as a filled
 (`src/bandRegion.ts`): the transformed midline, offset by half its pixel thickness on
 both sides along the transform's normal, closed by straight caps along the normal. In
 polar with the angle embedded and a pixel radius this is an annular sector, so a ring
-whose radius is ink draws the same picture as one whose radius is embedded.
+whose radius is ink draws the same picture as one whose radius is embedded. A mark whose
+embedded extent is one whole period of a periodic axis (`isPeriod`, `HasCycle`) has no
+ends there: it draws no caps, and its region is its two edges along the axis, each a
+closed loop (so a full-turn ring has no seam line, and a disc is its rim alone). The
+area drawing of a mark with both axes embedded follows the same rule (`boxRegion`).
 
 > **point / line / area = the number of axes whose edges are coordinate-space positions
 > (via Route A or Route B).**

@@ -117,6 +117,12 @@ resamples. A coordinate transform does: a closed ring of layout points (a
 and, under any other, maps it through the space with adaptive resampling
 (`transformPath(..., { resample: true })`), so a straight edge in data space draws as
 the curve the space makes of it. Only then does it go through `toPixel`.
+A region a mark draws through a space may be more than one loop (a ring that
+spans the full turn of a polar angle is its outer and its inner circle, see
+`bandRegion.ts`). `regionToPixelSVG` (`lowerHelpers.ts`) writes each loop as its
+own subpath of one `d`, so the fill fills what they enclose and the stroke
+outlines each. A loop that is one point is left out, and a region with no loops
+left draws nothing.
 A rectangle's corner radii follow SVG's rule, in one helper (`cornerRadii` in
 `lowerHelpers.ts`) that `rect` and `enclose`'s box both use: one of `rx` and `ry`
 given is both, and neither is the shape's own default (0 for `rect`, 2 for the box).
