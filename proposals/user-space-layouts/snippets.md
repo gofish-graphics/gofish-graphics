@@ -520,9 +520,9 @@ const x = solveSeparations(ids, seps, { policy });
 Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(10) }, [a, b]);
 
 // Contour spacing lowers to one of these per pair of siblings, with the
-// gap read from their two contours. `slack` says where the slack goes.
+// gap read from their two contours, and `slack` says where the slack goes.
 spread(
-  { dir: "x", spacing: Spacing.contour(10), slack: Slack.center() },
+  { dir: "x", spacing: Spacing.contour(10, { slack: Slack.center() }) },
   subtrees
 );
 
@@ -789,8 +789,8 @@ chart(browsers, { coord: Coord.clock() })
   .flow(stack({ by: "name", dir: "x" }))
   .mark(rect({ w: "value", fill: "name" }));
 
-// With d3's padAngle: a spread. A full turn is closed, so it leaves a gap
-// after the last slice too.
+// With d3's padAngle: a spread. It fills a full turn, so it leaves as
+// many gaps as slices, half a gap at each end, where d3.arc draws them.
 chart(browsers, { coord: Coord.clock() })
   .flow(spread({ by: "name", dir: "x", spacing: PAD }))
   .mark(rect({ w: "value", fill: "name" }));
@@ -800,9 +800,10 @@ chart(browsers, { coord: Coord.clock() })
 
 ```ts
 // Chord arcs: a spread of groups along the angle, each a stack of sub-arcs.
+// `ends: [0, 1]` starts the first group at 12 o'clock, as d3.chord does.
 layer({ coord: Coord.clock() }, [
   spread(
-    { dir: "x", spacing: PAD, y: 120 },
+    { dir: "x", spacing: Spacing.box(PAD, { ends: [0, 1] }), y: 120 },
     matrix.map((row, i) =>
       stack(
         { dir: "x", w: v(sum(row)) },
@@ -897,9 +898,9 @@ spread({ by: "x", dir: "x", spacing: 14, alignment: "middle" });
 <!-- id: slack-today -->
 
 ```ts
-// Before the Slack family (commit b960e601d's placeholder, now removed):
-// the rule rode on each gap, and two linked gaps with different rules were
-// an error.
+// Commit b960e601d's placeholder, before the Slack family. The rule rode
+// on each gap under the name `justify`. The branch keeps it on the gap,
+// renamed: Spacing.atLeast(8, { slack: Slack.center() }).
 layer([A, B, C, D, p, q, s, r]).relate((c) => [
   Constraint.align({ x: "start" }, [c.A, c.p]),
   Constraint.align({ x: "end" }, [c.D, c.r]),
@@ -913,8 +914,8 @@ layer([A, B, C, D, p, q, s, r]).relate((c) => [
 <!-- id: slack-a-family -->
 
 ```ts
-// The family, once per scope and axis. Each item takes a fraction t of
-// its slack: x = least + t * (greatest - least).
+// The family, an option of the minimum gap. Each item takes a fraction t
+// of its slack: x = least + t * (greatest - least).
 Slack.start(); // t = 0: the least solution (ASAP, early start)
 Slack.end(); // t = 1: the greatest solution (ALAP, late start)
 Slack.center(); // t = 1/2
@@ -925,33 +926,35 @@ Slack.even(); // on a chain: t grows by one step per gap between tight items (no
 <!-- id: slack-a-row -->
 
 ```ts
-layer({ slack: { x: Slack.even() } }, [A, B, C, D, p, q, s, r]).relate((c) => [
+layer([A, B, C, D, p, q, s, r]).relate((c) => [
   Constraint.align({ x: "start" }, [c.A, c.p]),
   Constraint.align({ x: "end" }, [c.D, c.r]),
-  Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
-    c.p,
-    c.q,
-    c.s,
-    c.r,
-  ]),
+  Constraint.distribute(
+    { dir: "x", spacing: Spacing.atLeast(8, { slack: Slack.even() }) },
+    [c.p, c.q, c.s, c.r]
+  ),
 ]);
 ```
 
 <!-- id: slack-a-sankey -->
 
 ```ts
-// Columns: every link's target at least one column after its source.
-layer({ slack: { x: Slack.end() } }, nodes).relate((c) =>
+// Columns: every link's target at least one column after its source. The
+// gaps are linked, so the rule is stated on each, the same every time.
+layer(nodes).relate((c) =>
   links.map((l) =>
-    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(COLUMN_GAP) }, [
-      c[l.source],
-      c[l.target],
-    ])
+    Constraint.distribute(
+      {
+        dir: "x",
+        spacing: Spacing.atLeast(COLUMN_GAP, { slack: Slack.end() }),
+      },
+      [c[l.source], c[l.target]]
+    )
   )
 );
 // Inside a column, a spread in the column's room: the walls are its edges.
 spread(
-  { dir: "y", spacing: Spacing.atLeast(10), slack: Slack.even() },
+  { dir: "y", spacing: Spacing.atLeast(10, { slack: Slack.even() }) },
   column.map((n) => rect({ w: 12, h: v(value(n)) }))
 );
 ```
@@ -961,7 +964,7 @@ spread(
 ```ts
 // Each set of siblings: at least their contour gap apart, slack shared.
 spread(
-  { dir: "x", spacing: Spacing.contour(10), slack: Slack.even() },
+  { dir: "x", spacing: Spacing.contour(10, { slack: Slack.even() }) },
   children.map(subtree)
 );
 ```
@@ -969,14 +972,16 @@ spread(
 <!-- id: slack-a-dendro -->
 
 ```ts
-layer({ slack: { y: Slack.end() } }, nodes).relate((c) => [
+layer(nodes).relate((c) => [
   ...edges.map(([parent, child]) =>
-    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
-      c[parent],
-      c[child],
-    ])
+    Constraint.distribute(
+      { dir: "y", spacing: Spacing.atLeast(70, { slack: Slack.end() }) },
+      [c[parent], c[child]]
+    )
   ),
-  ...inner.map((n) => Constraint.align({ x: "mean" }, [c[n], ...kids(c, n)])),
+  ...inner.map((n) =>
+    Constraint.align({ x: "middle" }, [c[n], mean(kids(c, n))])
+  ),
 ]);
 ```
 
@@ -1067,12 +1072,14 @@ layer({ solver: Solver.optimize({ cost: Cost.stretch() }) }, children).relate(
 ```python
 from gofish import Constraint, Slack, Spacing, layer, spread
 
-row = layer([A, B, C, D, p, q, s, r], slack={"x": Slack.even()}).relate(
+row = layer([A, B, C, D, p, q, s, r]).relate(
     lambda c: [
         Constraint.align([c.A, c.p], x="start"),
         Constraint.align([c.D, c.r], x="end"),
         Constraint.distribute(
-            [c.p, c.q, c.s, c.r], dir="x", spacing=Spacing.at_least(8)
+            [c.p, c.q, c.s, c.r],
+            dir="x",
+            spacing=Spacing.at_least(8, slack=Slack.even()),
         ),
     ]
 )
@@ -1080,8 +1087,7 @@ row = layer([A, B, C, D, p, q, s, r], slack={"x": Slack.even()}).relate(
 siblings = spread(
     [subtree(k) for k in children],
     dir="x",
-    spacing=Spacing.contour(10),
-    slack=Slack.even(),
+    spacing=Spacing.contour(10, slack=Slack.even()),
 )
 ```
 
@@ -1727,4 +1733,585 @@ Shape.hull({ convexity: 0.9 })
 [gofish] Shape.hull({ convexity }): Shape.hull is Shape.blob with
 convexity 1 and neck 1, and takes only the options it does not fix. For
 another convexity, write the kind: Shape.blob({ convexity: 0.9, neck: 1 }).
+```
+
+<!-- r2 blocks -->
+
+<!-- id: r2-sized-today -->
+
+```ts
+// Blue rows (the library): a spread 400 px wide, three 30 px boxes, gaps
+// of at least 10, under each slack rule, with ends 0 and then 0.5.
+const sizedToday = (slack: Slack.Slack, ends: number, y: number) =>
+  spread(
+    {
+      dir: "x",
+      w: 400,
+      x: 150,
+      y,
+      spacing: Spacing.atLeast(10, { slack, ends }),
+    },
+    [0, 1, 2].map(() => rect({ w: 30, h: 24, fill: "#457b9d" }))
+  );
+```
+
+<!-- id: r2-sized-proto -->
+
+```ts
+// Orange rows: a PROTOTYPE computed in the story, not by the library.
+// The ends keep `ends` gaps inside each side of the 400 px, and the slack
+// rule's t takes that fraction of what is left.
+const sizedPrototype = (t: number, ends: number, y: number) => {
+  const lo = ends * 10;
+  const hi = 400 - ends * 10;
+  const chain = 3 * 30 + 2 * 10; // 110 px
+  const first = lo + t * (hi - lo - chain);
+  return layer(
+    [0, 1, 2].map((i) =>
+      rect({ x: 150 + first + i * 40, y, w: 30, h: 24, fill: "#f4a261" })
+    )
+  );
+};
+```
+
+<!-- id: r2-atleast-ends -->
+
+```ts
+// Proposals / End Spacing / AtLeastEnds
+layer([
+  rect({ x: 0, y: 0, w: 300, h: 60, fill: "#eeeeee" }),
+  spread(
+    {
+      dir: "x",
+      spacing: Spacing.atLeast(10, { ends: 1 }),
+      w: 300,
+      x: 0,
+      y: 10,
+    },
+    [40, 70, 55].map((w) => rect({ w, h: 40, fill: "#59a14f" }))
+  ),
+]).render(container, { w: 340, h: 100 });
+```
+
+<!-- id: r2-pie-default -->
+
+```ts
+// Proposals / End Spacing / Pie: no option. The chain fills the turn, so
+// it gets half a gap (PAD = 0.04) at each end.
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(spread({ by: "name", dir: "x", spacing: PAD }))
+  .mark(rect({ w: "value", fill: "name" }))
+  .render(container);
+```
+
+<!-- id: r2-pie-noon -->
+
+```ts
+// Proposals / End Spacing / PieFromNoon: nothing before the first slice
+// and a whole gap after the last.
+chart(browsers, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({
+      by: "name",
+      dir: "x",
+      spacing: Spacing.box(PAD, { ends: [0, 1] }),
+    })
+  )
+  .mark(rect({ w: "value", fill: "name" }))
+  .render(container);
+```
+
+<!-- id: r2-chord -->
+
+```ts
+// Proposals / End Spacing / Chord
+layer({ coord: Coord.clock(), w: 360, h: 320 }, [
+  spread(
+    { dir: "x", spacing: Spacing.box(0.05, { ends: [0, 1] }), y: 120 },
+    trips.map((row, i) =>
+      stack(
+        { dir: "x", w: v(rowTotal(row)) },
+        row.map((m) => rect({ w: v(m), h: 18, fill: v(districts[i]) }))
+      )
+    )
+  ),
+]).render(container, { axes: false });
+```
+
+<!-- id: r2-tornado -->
+
+```ts
+// GoTree / Gallery / TornadoTree, as on the branch. Every node is 0.13 rad
+// wide, and pitches between centers place it along the angle.
+const TH = 0.13;
+const node = (d: any) =>
+  d.height === 0
+    ? rect({ w: TH, h: 59, emX: true, fill: byDepth()(d) /* ... */ })
+    : rect({ w: TH, emX: true, fill: byDepth()(d) /* ... */ });
+
+mount({
+  node,
+  link: "none",
+  parentChild: combine({
+    x: { kind: "distribute", spacing: Spacing.pitch(0.55, { at: "middle" }) },
+    y: { kind: "nest", pad: 44 },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: Spacing.pitch(0.42, { at: "middle" }) },
+    y: { kind: "distribute", spacing: Spacing.pitch(44, { at: "middle" }) },
+  }),
+  coord: Coord.clock(),
+});
+```
+
+<!-- id: r2-gotree-ends-b -->
+
+```ts
+// Option (b), a sketch, not run: GoTree's lowering adds `ends: [0, 1]` to
+// the sibling chain of the root only, where the chain fills the turn.
+// Inner chains keep the default, 0, so nothing else moves.
+Spacing.pitch(0.42, { at: "middle", ends: [0, 1] }); // root siblings only
+```
+
+<!-- id: r2-bars -->
+
+```ts
+// Proposals / End Spacing / BarsBetween, BarsAround, BarsEvenly
+const barsWith = (spacing: any) =>
+  chart(fruit, { w: 320, h: 160 })
+    .flow(spread({ by: "name", dir: "x", spacing }))
+    .mark(rect({ h: "count", fill: "#4e79a7" }));
+
+barsWith(Spacing.box(fr(1))); // ends 0, the default on a line
+barsWith(Spacing.box(fr(1), { ends: 0.5 }));
+barsWith(Spacing.box(fr(1), { ends: 1 }));
+```
+
+<!-- id: r2-rose-old -->
+
+```ts
+// Forward Syntax / Pie / Rose, on main: the bar states its angular width.
+chart(nightingale, { coord: Coord.clock(), axes: true, padding: 40 /* ... */ })
+  .flow(
+    spread({ by: "Month", dir: "x", spacing: 0, axes: { x: false, y: true } }),
+    stack({ by: "Type", dir: "y" }),
+    derive((d) => d.map((d) => ({ ...d, Death: Math.sqrt(d.Death) })))
+  )
+  .mark(rect({ w: (Math.PI * 2) / 12, h: "Death", fill: "Type" }));
+```
+
+<!-- id: r2-rose-new -->
+
+```ts
+// On the branch: the same, with no width on the bar.
+chart(nightingale, { coord: Coord.clock(), axes: true, padding: 40 /* ... */ })
+  .flow(
+    spread({ by: "Month", dir: "x", spacing: 0, axes: { x: false, y: true } }),
+    stack({ by: "Type", dir: "y" }),
+    derive((d) => d.map((d) => ({ ...d, Death: Math.sqrt(d.Death) })))
+  )
+  .mark(rect({ h: "Death", fill: "Type" }));
+```
+
+<!-- id: r2-tornado-box -->
+
+```ts
+// Run in a throwaway copy of the branch, not proposed: no emX, and box
+// gaps (pitch less the 0.13 rad node width) instead of the two pitches.
+const node = (d: any) =>
+  d.height === 0
+    ? rect({ w: TH, h: 59, fill: byDepth()(d) /* ... */ })
+    : rect({ w: TH, fill: byDepth()(d) /* ... */ });
+
+mount({
+  node,
+  link: "none",
+  parentChild: combine({
+    x: { kind: "distribute", spacing: Spacing.box(0.42) },
+    y: { kind: "nest", pad: 44 },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: Spacing.box(0.29) },
+    y: { kind: "distribute", spacing: Spacing.pitch(44, { at: "middle" }) },
+  }),
+  coord: Coord.clock(),
+});
+```
+
+<!-- id: r2-wedge -->
+
+```ts
+// GoTree / Gallery / MultilevelSilhouetteTree (OutsideInTree is alike):
+// angles and radii computed in story code and written as literal x, w,
+// y and h. No relation places the wedge.
+const wedgeMark = (
+  w: Wedge,
+  rInner: number,
+  rOuter: number,
+  strokeWidth: number
+) =>
+  rect({
+    x: w.theta0,
+    w: w.theta1 - w.theta0,
+    y: rInner,
+    h: rOuter - rInner,
+    emX: true,
+    fill: w.fill,
+    stroke: w.stroke,
+    strokeWidth,
+  });
+```
+
+<!-- id: r2-balloon -->
+
+```ts
+// Low Level Syntax / Balloon Chart: each string is a rect in a wavy
+// space, inside a layer placed at the data's x. No relation fixes its
+// height.
+layer(
+  { coord: Coord.wavy(), x: 0, y: 0 },
+  scatterData.map((data, i) =>
+    layer({ x: data.x }, [
+      rect({ x: 0, y: 0, w: 1, h: data.y, emY: true, fill: color.black }),
+      Balloon({ scale: 1, x: 0, y: data.y /* ... */ }),
+    ])
+  )
+);
+```
+
+<!-- id: r2-wedge-datum -->
+
+```ts
+// Option (b) for this group, a sketch, not run: the literal angles as
+// data values, so a data width embeds by the data size, with no flag.
+rect({
+  x: datum(w.theta0),
+  w: datum(w.theta1 - w.theta0),
+  y: rInner,
+  h: rOuter - rInner,
+  fill: w.fill,
+});
+```
+
+<!-- id: r2-nodelink-sunburst -->
+
+```ts
+// GoTree / Node-Link / Sunburst, as on the branch
+const sunburstNode = (d: any) =>
+  rect({
+    w: d.width * leafTheta,
+    h: bandHeight,
+    emX: true,
+    fill: polarGreens[Math.min(d.depth, polarGreens.length - 1)],
+    stroke: "white",
+    strokeWidth: 2,
+  });
+
+tree(
+  {
+    node: sunburstNode,
+    link: "none",
+    parentChild: distribute({ dir: "y", spacing: 0, alignment: "middle" }),
+    sibling: distribute({ dir: "x", spacing: 0, alignment: "middle" }),
+    coord: Coord.clock(),
+  },
+  deepBalancedTree
+);
+```
+
+<!-- id: r2-nodelink-rewrite -->
+
+```ts
+// Run in a throwaway copy of the branch: no emX on sunburstNode, and the
+// parent aligned to its children's group at both edges instead of the
+// middle. The normalized DOM is byte-identical to the branch's render.
+const parentChild = (children: any[]) => {
+  const named = children.map((c, i) => layer([c]).name(`pc-${i}`));
+  const refs = (c: any) => named.map((_, i) => c[`pc-${i}`]);
+  return layer(named).relate((c: any) => [
+    Constraint.distribute({ dir: "y", spacing: 0 }, refs(c)),
+    Constraint.align({ x: "start" }, refs(c)),
+    Constraint.align({ x: "end" }, refs(c)),
+  ]);
+};
+```
+
+<!-- id: r2-radar -->
+
+```ts
+// Proposals / Radar Outline / RadarTwoSeries
+layer({ w: 320, h: 320 }, [
+  layer({ coord: Coord.clock() }, [
+    chart(spokes)
+      .flow(scatter({ by: "metric", x: "metric" }))
+      .mark(rect({ w: 0, h: "max", stroke: GRID, strokeWidth: 1 })),
+    chart(levels)
+      .flow(
+        group({ by: "level" }),
+        scatter({ by: "metric", x: "metric", y: "level" })
+      )
+      .mark(circle({ r: 0 }).name("grid")),
+    chart(both, { color: Color.palette([INK, RED]) })
+      .flow(
+        group({ by: "series" }),
+        scatter({ by: "metric", x: "metric", y: "value" })
+      )
+      .mark(circle({ r: 4, fill: "series" }).name("pts")),
+  ]),
+  chart(selectAll("grid"))
+    .flow(group({ by: "level" }))
+    .mark(polygon({ fill: "none", stroke: GRID, strokeWidth: 1 })),
+  chart(selectAll("pts"))
+    .flow(group({ by: "series" }))
+    .mark(polygon({ fill: "series", opacity: 0.2 })),
+  chart(selectAll("pts"))
+    .flow(group({ by: "series" }))
+    .mark(polygon({ fill: "none", stroke: "series", strokeWidth: 2 })),
+]).render(container);
+```
+
+<!-- id: r2-radar-no-spokes -->
+
+```ts
+// Proposals / Review Examples / RadarNoSpokes: the left picture is
+// RadarWithSpokes, the radar above less its grid. The right one drops the
+// spokes' chart from the polar layer, and nothing else.
+layer({ coord: Coord.clock() }, [
+  chart(both, { color: Color.palette([INK, RED]) })
+    .flow(
+      group({ by: "series" }),
+      scatter({ by: "metric", x: "metric", y: "value" })
+    )
+    .mark(circle({ r: 4, fill: "series" }).name("pts")),
+]);
+```
+
+<!-- id: r2-radar-one-polygon -->
+
+```ts
+// Proposals / Review Examples / RadarOnePolygon: one polygon per series
+// in place of the two
+chart(selectAll("pts"))
+  .flow(group({ by: "series" }))
+  .mark(
+    polygon({ fill: "series", stroke: "series", strokeWidth: 2, opacity: 0.2 })
+  );
+```
+
+<!-- id: r2-dendrogram -->
+
+```ts
+// Proposals / Minimum Gap / Dendrogram
+layer([
+  spread(
+    { dir: "x", spacing: Spacing.pitch(DX, { at: "middle" }) },
+    leaves.map((n) => dot(n.path, "#457b9d"))
+  ).name("leaves"),
+  ...inner.map((n) => dot(n.path, "#1d3557")),
+]).relate((c) => [
+  ...inner.map((n) =>
+    Constraint.align({ x: "middle" }, [
+      c[n.path],
+      mean(n.t.children!.map((_, i) => c[`${n.path}.${i}`])),
+    ])
+  ),
+  ...ns
+    .filter((n) => n.parent)
+    .map((n) =>
+      Constraint.distribute(
+        {
+          dir: "y",
+          spacing: Spacing.atLeast(DY - 2 * R, { slack: Slack.end() }),
+        },
+        [c[n.parent!], c[n.path]]
+      )
+    ),
+  ...treeLinks(ns),
+]);
+```
+
+<!-- id: r2-tidy -->
+
+```ts
+// Proposals / Minimum Gap / TidyTree: a subtree's node at the mean of its
+// first and last child.
+Constraint.align({ x: "middle" }, [
+  c[path],
+  mean([c[kids[0]], c[kids[kids.length - 1]]]),
+]);
+```
+
+<!-- id: r2-row -->
+
+```ts
+// Proposals / Minimum Gap / RowAll: rowOfRects under start, center, end
+const rowOfRects = (slack: Slack.Slack) =>
+  layer([A, B, C, D, p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.A, c.B]),
+    Constraint.distribute({ dir: "x", spacing: 2 }, [c.C, c.D]),
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(16) }, [
+      c.B,
+      c.C,
+    ]),
+    Constraint.align({ x: "start" }, [c.A, c.p]),
+    Constraint.align({ x: "end" }, [c.D, c.r]),
+    Constraint.distribute(
+      { dir: "x", spacing: Spacing.atLeast(8, { slack }) },
+      [c.p, c.q, c.r]
+    ),
+    Constraint.align({ y: "start" }, [c.A, c.B, c.C, c.D]),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+    Constraint.distribute({ dir: "y", spacing: 12 }, [c.A, c.p]),
+  ]);
+
+spread(
+  { dir: "y", spacing: 24, alignment: "start" },
+  [Slack.start(), Slack.center(), Slack.end()].map(rowOfRects)
+);
+rowOfRects(Slack.at(0.25)); // RowQuarter
+```
+
+<!-- id: r2-row-pinned -->
+
+```ts
+// Proposals / Minimum Gap / RowPinned
+const pinnedRow = (slack: Slack.Slack) =>
+  layer([p, q, r]).relate((c) => [
+    Constraint.distribute({ dir: "x", spacing: 160 }, [c.p, c.r]),
+    Constraint.distribute(
+      { dir: "x", spacing: Spacing.atLeast(8, { slack }) },
+      [c.p, c.q, c.r]
+    ),
+    Constraint.align({ y: "start" }, [c.p, c.q, c.r]),
+  ]);
+```
+
+<!-- id: r2-slack-clash -->
+
+```text
+Two linked distributes that state different slack rules (from the
+minimumGap test, run on the branch):
+
+[gofish] Minimum gaps on x: distribute[0] states
+Spacing.atLeast(…, { slack: Slack.at(1) }) but distribute[1] states
+Spacing.atLeast(…, { slack: Slack.at(0.5) }), and their gaps are linked
+(through {node-21}), so they share one room. State the slack on one of
+them, or the same slack on both.
+```
+
+<!-- id: r2-ends-other -->
+
+```ts
+// Proposals / End Spacing: PieSeam, HalfTurn, HalfTurnAround
+pie(Coord.clock(), Spacing.box(PAD, { ends: 0 }));
+pie(Coord.clock({ centralAngle: Math.PI }), PAD);
+pie(Coord.clock({ centralAngle: Math.PI }), Spacing.box(PAD, { ends: 0.5 }));
+// where
+const pie = (coord: any, spacing: any) =>
+  chart(browsers, { coord, w: 360, h: 320 })
+    .flow(spread({ by: "name", dir: "x", spacing }))
+    .mark(rect({ w: "value", fill: "name" }));
+```
+
+<!-- id: r2-ends-nested -->
+
+```ts
+// Proposals / End Spacing / Nested and Rings
+chart(sales, { coord: Coord.clock(), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "x", spacing: 0.12 }),
+    spread({ by: "product", dir: "x", spacing: 0.03 })
+  )
+  .mark(rect({ w: "value", fill: "quarter" }));
+
+chart(sales, { coord: Coord.clock({ innerRadius: 0.3 }), w: 360, h: 320 })
+  .flow(
+    spread({ by: "quarter", dir: "y", spacing: 4 }),
+    spread({ by: "product", dir: "x", spacing: 0.08 })
+  )
+  .mark(rect({ w: "value", fill: "product" }));
+```
+
+<!-- id: r2-ends-fixed -->
+
+```ts
+// Proposals / End Spacing / FixedWidthLayer
+layer([
+  rect({ x: 0, y: 0, w: 360, h: 60, fill: "#eeeeee" }),
+  spread(
+    {
+      dir: "x",
+      spacing: Spacing.box(12, { ends: 2 }),
+      w: 360,
+      x: 0,
+      y: 10,
+    },
+    [1, 2, 1].map((k) => rect({ w: fr(k), h: 40, fill: "#f28e2b" }))
+  ),
+]);
+```
+
+<!-- id: r2-pies -->
+
+```ts
+// Proposals / Review Examples / PiePolar, PieClock, PiePolarClockwise
+const pie = (coord: any) =>
+  chart(slices, { coord, w: 200, h: 200, color: palette })
+    .flow(spread({ by: "name", dir: "x", spacing: 0.06 }))
+    .mark(rect({ w: "value", fill: "name" }));
+
+pie(Coord.polar()); // 0 at 3 o'clock, counter-clockwise
+pie(Coord.clock()); // 0 at 12 o'clock, clockwise
+pie(Coord.polar({ baselineAngle: 0, direction: -1 })); // 3 o'clock, clockwise
+```
+
+<!-- id: r2-clock-error -->
+
+```text
+Coord.clock({ baselineAngle: 0 })
+
+[gofish] Coord.clock({ baselineAngle }): Coord.clock is Coord.polar with
+baselineAngle 1.5707963267948966 and direction -1, and takes only the
+options it does not fix. For another baselineAngle, write the kind:
+Coord.polar({ baselineAngle: 0, direction: -1 }).
+
+On the wire, Coord.clock() is
+{"type":"polar","baselineAngle":1.5707963267948966,"direction":-1}
+```
+
+<!-- id: r2-hull-error -->
+
+```text
+Shape.hull({ convexity: 0.5 })
+
+[gofish] Shape.hull({ convexity }): Shape.hull is Shape.blob with
+convexity 1 and neck 1, and takes only the options it does not fix. For
+another convexity, write the kind: Shape.blob({ convexity: 0.5, neck: 1 }).
+```
+
+<!-- id: r2-radar-outside-open -->
+
+```ts
+// Proposals / Radar Outline / OutsideOpen: a line outside the space,
+// through the points where the space draws them
+layer({ w: 320, h: 320 }, [
+  layer({ coord: Coord.clock() }, [
+    chart(rows)
+      .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+      .mark(circle({ r: 4, fill: INK }).name("pts")),
+  ]),
+  chart(selectAll("pts")).mark(
+    line({ stroke: RED, strokeWidth: 2, curve: Curve.linear() })
+  ),
+]);
+```
+
+<!-- id: r2-radar-inside -->
+
+```ts
+// Proposals / Radar Outline / InsideCoord: the line inside the space
+chart(rows, { coord: Coord.clock(), w: 320, h: 320 })
+  .flow(scatter({ by: "metric", x: "metric", y: "value" }))
+  .mark(circle({ r: 4, fill: INK }))
+  .layer(line({ stroke: INK, strokeWidth: 2 }));
 ```

@@ -6,7 +6,12 @@ import {
   Slack,
   Spacing,
   chart,
+  circle,
+  group,
+  polygon,
   rect,
+  scatter,
+  selectAll,
   spread,
   text,
   layer,
@@ -190,6 +195,108 @@ export const SizedSpreadSlack: StoryObj = {
       y += 12;
     }
     layer(rows).render(container, { w: SIZED_LEFT + SIZED_W + 10, h: y });
+    return container;
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// 5. The radar's two workarounds (RadarTwoSeries in RadarOutline.stories)
+// ─────────────────────────────────────────────────────────────────────────
+
+const radarMetrics = ["speed", "power", "range", "armor", "agility", "stealth"];
+const radarA = [8, 6, 9, 4, 7, 5];
+const radarB = [5, 9, 4, 8, 3, 7];
+const radarBoth = [
+  ...radarMetrics.map((metric, i) => ({ series: "A", metric, value: radarA[i] })),
+  ...radarMetrics.map((metric, i) => ({ series: "B", metric, value: radarB[i] })),
+];
+const radarSpokes = radarMetrics.map((metric) => ({ metric, max: 10 }));
+const RADAR_INK = "#1d3557";
+const RADAR_RED = "#e63946";
+const RADAR_GRID = "#d0d4d9";
+
+/** RadarTwoSeries with its spokes. The same as in RadarOutline, less the
+ *  grid, so it sits beside the next two at the same size. */
+export const RadarWithSpokes: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    layer({ w: 320, h: 320 }, [
+      layer({ coord: Coord.clock() }, [
+        chart(radarSpokes)
+          .flow(scatter({ by: "metric", x: "metric" }))
+          .mark(rect({ w: 0, h: "max", stroke: RADAR_GRID, strokeWidth: 1 })),
+        chart(radarBoth, { color: Color.palette([RADAR_INK, RADAR_RED]) })
+          .flow(
+            group({ by: "series" }),
+            scatter({ by: "metric", x: "metric", y: "value" })
+          )
+          .mark(circle({ r: 4, fill: "series" }).name("pts")),
+      ]),
+      chart(selectAll("pts"))
+        .flow(group({ by: "series" }))
+        .mark(polygon({ fill: "series", opacity: 0.2 })),
+      chart(selectAll("pts"))
+        .flow(group({ by: "series" }))
+        .mark(polygon({ fill: "none", stroke: "series", strokeWidth: 2 })),
+    ]).render(container);
+    return container;
+  },
+};
+
+/** The same without the spokes. Nothing else claims radius 0, so the
+ *  radial position starts at the data's least value (3), and every point
+ *  moves. */
+export const RadarNoSpokes: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    layer({ w: 320, h: 320 }, [
+      layer({ coord: Coord.clock() }, [
+        chart(radarBoth, { color: Color.palette([RADAR_INK, RADAR_RED]) })
+          .flow(
+            group({ by: "series" }),
+            scatter({ by: "metric", x: "metric", y: "value" })
+          )
+          .mark(circle({ r: 4, fill: "series" }).name("pts")),
+      ]),
+      chart(selectAll("pts"))
+        .flow(group({ by: "series" }))
+        .mark(polygon({ fill: "series", opacity: 0.2 })),
+      chart(selectAll("pts"))
+        .flow(group({ by: "series" }))
+        .mark(polygon({ fill: "none", stroke: "series", strokeWidth: 2 })),
+    ]).render(container);
+    return container;
+  },
+};
+
+/** One polygon per series with a faint fill and a stroke: `opacity`
+ *  applies to both, so the outline is faint too. */
+export const RadarOnePolygon: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    layer({ w: 320, h: 320 }, [
+      layer({ coord: Coord.clock() }, [
+        chart(radarSpokes)
+          .flow(scatter({ by: "metric", x: "metric" }))
+          .mark(rect({ w: 0, h: "max", stroke: RADAR_GRID, strokeWidth: 1 })),
+        chart(radarBoth, { color: Color.palette([RADAR_INK, RADAR_RED]) })
+          .flow(
+            group({ by: "series" }),
+            scatter({ by: "metric", x: "metric", y: "value" })
+          )
+          .mark(circle({ r: 4, fill: "series" }).name("pts")),
+      ]),
+      chart(selectAll("pts"))
+        .flow(group({ by: "series" }))
+        .mark(
+          polygon({
+            fill: "series",
+            stroke: "series",
+            strokeWidth: 2,
+            opacity: 0.2,
+          })
+        ),
+    ]).render(container);
     return container;
   },
 };
