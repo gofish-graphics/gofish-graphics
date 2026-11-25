@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocations } from "../../src/data/catch";
-import { layer, ellipse, rect, Coord } from "../../src/lib";
+import { layer, spread, ellipse, rect, Coord } from "../../src/lib";
 import { color, color6, mix } from "../../src/color";
 import _ from "lodash";
 
@@ -46,78 +46,38 @@ export const Default: StoryObj<Args> = {
       5: color.orange,
     };
 
-    const Balloon = (options) =>
-      layer(
-        {
-          x: options?.x - 15 * (options?.scale ?? 1),
-          y: options?.y + 27 * (options?.scale ?? 1),
-          box: true,
-          transform: {
-            scale: { x: options?.scale ?? 1, y: (options?.scale ?? 1) * -1 },
-          },
-        },
-        [
-          ellipse({
-            cx: 15,
-            cy: 15,
-            w: 24,
-            h: 30,
-            fill: (options?.color ?? color.red)[4],
-          }),
-          ellipse({
-            cx: 12,
-            cy: 11,
-            w: 7,
-            h: 11,
-            fill: (options?.color ?? color.red)[3],
-          }),
-          rect({
-            cx: 15,
-            cy: 32,
-            w: 8,
-            h: 4,
-            fill: (options?.color ?? color.red)[5],
-            rx: 3,
-            ry: 2,
-          }),
-          rect({
-            cx: 15,
-            cy: 32,
-            w: 5,
-            h: 2.4,
-            fill: (options?.color ?? color.red)[6],
-            rx: 2,
-            ry: 1,
-          }),
-        ]
-      );
+    // A balloon, drawn y-up: the knot at the bottom (y 0 to 4) and the body
+    // above it (y 4 to 34), centered on x = 15. It is a box, so the wavy
+    // space does not bend it.
+    const Balloon = (palette) =>
+      layer({ box: true }, [
+        ellipse({ cx: 15, cy: 19, w: 24, h: 30, fill: palette[4] }),
+        ellipse({ cx: 12, cy: 23, w: 7, h: 11, fill: palette[3] }),
+        rect({ cx: 15, cy: 2, w: 8, h: 4, fill: palette[5], rx: 3, ry: 2 }),
+        rect({ cx: 15, cy: 2, w: 5, h: 2.4, fill: palette[6], rx: 2, ry: 1 }),
+      ]);
 
+    // Each string and its balloon are a chain along y with no gap, so the
+    // string's top edge is the balloon's bottom edge. The chain fixes both of
+    // the string's edges, so the string is a length of the space and bends
+    // with it.
+    // TODO: a box in a coordinate space is drawn at its unwarped position
+    // (repro: Proposals/Balloon Repro), so the balloons do not yet sit
+    // exactly on their strings.
     layer(
       { coord: Coord.wavy(), x: 0, y: 0 },
       scatterData.map((data, i) =>
-        layer({ x: data.x }, [
-          rect({
-            x: 0,
-            y: 0,
-            w: 1,
-            h: data.y,
-            emY: true,
-            fill: color.black,
-          }),
-          Balloon({
-            scale: 1,
-            x: 0,
-            y: data.y,
-            color: /* colorMap[i % 6] */[
-              null,
-              null,
-              null,
-              mix(color6[i % 6], color.white, 0.5),
-              color6[i % 6],
-              mix(color6[i % 6], color.black, 0.1),
-              mix(color6[i % 6], color.black, 0.35),
-            ],
-          }),
+        spread({ x: data.x, y: 0, dir: "y", spacing: 0, alignment: "middle" }, [
+          rect({ w: 1, h: data.y, fill: color.black }),
+          Balloon([
+            null,
+            null,
+            null,
+            mix(color6[i % 6], color.white, 0.5),
+            color6[i % 6],
+            mix(color6[i % 6], color.black, 0.1),
+            mix(color6[i % 6], color.black, 0.35),
+          ]),
         ])
       )
     ).render(container, {
