@@ -19,6 +19,14 @@
     </button>
     <button
       role="tab"
+      id="tab-protocol"
+      aria-controls="protocol"
+      aria-selected="false"
+    >
+      Layout protocol prototype
+    </button>
+    <button
+      role="tab"
       id="tab-design"
       aria-controls="design"
       aria-selected="false"
@@ -67,6 +75,12 @@
     </p>
 
     <h2 class="first">Open now</h2>
+    <div class="callout">
+      The layout protocol prototype is on the next tab. It defines
+      <code>spread</code>, <code>stack</code>, <code>tile</code> and user
+      layouts with one public call, <code>defineLayout</code>, and has three
+      forks of its own.
+    </div>
     <h3>GoTree polar stories against the GoTree gallery</h3>
     <p>
       Each card puts one GoTree story beside the picture in the GoTree gallery
@@ -1763,6 +1777,1114 @@
     </div>
   </section>
 
+  <!-- ======================== LAYOUT PROTOCOL ======================== -->
+  <section
+    class="panel"
+    id="protocol"
+    role="tabpanel"
+    aria-labelledby="tab-protocol"
+    data-title="Layout protocol prototype"
+    hidden
+  >
+    <h2 class="first">What this is</h2>
+    <p>
+      The maintainer set the goal in two sentences. "I think we can treat
+      constraints as the lowest level of layout (and position is a kind of
+      "escape-hatch" constraint) and then we can think of the layout/measure API
+      as being a form of "macro expansion" that bottoms out at the constraints."
+      And: "we should be able to write <i>everything</i>
+      including our stdlib against it". This tab shows a prototype of that
+      frame. A layout operator is defined with one public call,
+      <code>defineLayout</code>, whose body returns constraints among the
+      operator's children, so each use of the operator expands into constraints
+      that its layer's solver reads, and <code>Constraint.position</code> stays
+      the escape hatch that pins a child by hand. The prototype lives in a
+      throwaway copy of the repository at commit fac08ebd7, not on this branch.
+      In that copy the built-in <code>spread</code>, <code>stack</code> and
+      <code>tile</code> are rebuilt on the public call, all 751 existing stories
+      render the same normalized DOM as at fac08ebd7, and the unit tests pass.
+    </p>
+    <p class="note">
+      The full 751-story comparison ran before the renames on this tab. After
+      them, the prototype's own stories were rendered again and their normalized
+      DOM is byte-identical to before, the type check is clean, and the unit
+      tests pass. Every picture on this tab is a render of the code under it,
+      made in the copy today.
+    </p>
+
+    <div class="card">
+      <h3>Words used on this tab</h3>
+      <ul class="tight">
+        <li>
+          <b>Operator.</b> A function that takes children and arranges them,
+          e.g., <code>spread</code> or <code>tile</code>.
+        </li>
+        <li>
+          <b>Constraint.</b> A fact about the children's positions that the
+          solver keeps, e.g., <code>Constraint.align</code> (these line up at
+          their start) or <code>Constraint.distribute</code> (these follow one
+          another with a gap). <code>Constraint.position</code> pins a child at
+          a point or between two edges, and it is the escape hatch.
+        </li>
+        <li>
+          <b>Expansion.</b> The constraints an operator's body returns for its
+          actual children.
+        </li>
+        <li>
+          <b>Bounds.</b> The rectangle, in pixels, that a parent gives a child
+          to lay itself out in. SwiftUI uses the same word for the argument of
+          <code>placeSubviews(in:)</code>. A child's bounds are a box
+          <code>{ x, y, w, h }</code> or a <b>polygon</b>
+          <code>{ points }</code>, the same shape the <code>polygon</code> mark
+          takes.
+        </li>
+        <li>
+          <b>Scale, written σ.</b> Pixels per data unit. The solver picks σ so
+          that the visualization fits the size it is given.
+        </li>
+        <li><b>Scope.</b> A group of nodes that share one scale.</li>
+        <li>
+          <b>Glue.</b> What <code>stack</code> does and <code>spread</code> does
+          not. Glued children add up into one data space, so the stack's length
+          is the sum of theirs, with no gap.
+        </li>
+        <li>
+          <b>Size request.</b> What a node asks its parent for on each axis, as
+          a function of σ. A bar 3 data units wide asks for 3σ pixels.
+        </li>
+        <li>
+          <b>Length.</b> A size that may depend on σ, e.g., 9σ + 6, written
+          before σ is known.
+        </li>
+        <li>
+          <b>Claim walk.</b> The pass that works out each node's size request.
+          The word appears in the prototype's doc comments.
+        </li>
+      </ul>
+      <p class="note">
+        The prototype first called the bounds a "room" and a polygon a "ring",
+        and both words were replaced because neither has precedent outside
+        GoFish. Issue #1410 checks every layout engine term against what other
+        layout systems call it and proposes renames, and "bounds" is its first
+        row.
+      </p>
+    </div>
+
+    <h2>Defining and using a custom layout</h2>
+    <p>
+      Each card shows the picture, the definition in full, the use, what the use
+      expands into for its actual children, and the numbers that show it works.
+      The code is copied from the copy's stories file,
+      <code>LayoutProtocol.stories.tsx</code> in
+      <code>stories/_proposals</code>. A definition has one of two bodies.
+      <code>relate</code> returns constraints. <code>arrange</code> returns each
+      child's bounds once the operator's own bounds are known. The section on
+      the definition call below says why there are two.
+    </p>
+    <div class="gallery">
+      <!-- a -->
+      <div class="card">
+        <h3>
+          A row pitched by its widest child
+          <span class="tag proto">prototype</span>
+        </h3>
+        <p>
+          Each child starts the same distance after the one before it. That
+          distance, the pitch, is the widest child's width plus a gap. The top
+          row is eight words and the bottom row is eight 6 px squares, each a
+          <code>pitched</code> row.
+        </p>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/lp-pitched-labels.png"
+              alt="Eight words spaced evenly, and eight small squares below"
+            />
+            <figcaption>
+              Story <b>PitchedLabels</b>. The words start every 56.6035 px and
+              the squares every 14 px.
+            </figcaption>
+          </figure>
+        </div>
+        <p class="label">Definition</p>
+        {{code:lp-pitched-def}}
+        <p>
+          The body reads each child's width as a length with
+          <code>measure(c).w</code>, takes the largest with
+          <code>maxLength</code>, adds the gap, and hands the result to
+          <code>Spacing.pitch</code>. It returns two constraints and never sees
+          a pixel.
+        </p>
+        <p class="note">
+          <code>measure(child)</code> is the prototype's spelling, and the name
+          is open, because "measure" already means a unit of measure in GoFish.
+          The design note suggests <code>size(child)</code>.
+        </p>
+        <p class="label">Use</p>
+        {{code:lp-pitched-labels-use}}
+        <p class="label">What it expands into</p>
+        {{code:lp-pitched-labels-exp}}
+        <p>
+          The words start at x = 0, 56.6035, 113.207 and so on. The pitch is the
+          widest word's width, 48.6035, plus the gap of 8. The squares start at
+          x = 0, 14, 28 and so on.
+        </p>
+      </div>
+
+      <!-- b -->
+      <div class="card">
+        <h3>
+          The same row over data widths, fit to 400 px
+          <span class="tag proto">prototype</span>
+        </h3>
+        <p>
+          Here the children are bars whose widths are data. A bar's width in
+          pixels depends on σ, so the pitch does too, and the solver must find σ
+          with the pitch inside the row's size request. This is why
+          <code>measure</code> returns a length and not a number of pixels.
+        </p>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/lp-pitched-bars-fit.png"
+              alt="Eight yellow bars of different widths, evenly pitched across 400 px"
+            />
+            <figcaption>
+              Story <b>PitchedBarsFit</b>. The last bar ends at 400.0000 px.
+            </figcaption>
+          </figure>
+        </div>
+        <p class="label">Definition</p>
+        <p>The same <code>pitched</code> as in the card above.</p>
+        <p class="label">Use</p>
+        {{code:lp-pitched-bars-use}}
+        <p class="label">What it expands into</p>
+        {{code:lp-pitched-bars-exp}}
+        <ul class="tight">
+          <li>The solver finds σ = 5.1884 for 400 px.</li>
+          <li>
+            The first bar is 15.5652 px wide, which is 3σ, and the bars start
+            every 52.6957 px, which is 9σ + 6.
+          </li>
+          <li>
+            The last bar starts at 368.8696 and is 31.1304 px wide, which is 6σ,
+            so it ends at 400.0000.
+          </li>
+          <li>
+            The render ran the layout pipeline once. The story counts the runs
+            and prints the count under the picture.
+          </li>
+        </ul>
+      </div>
+
+      <!-- c -->
+      <div class="card">
+        <h3>
+          A squarified treemap that reads its bounds
+          <span class="tag proto">prototype</span>
+        </h3>
+        <p>
+          The squarify rule needs the treemap's own width and height, in pixels,
+          to decide where each row of cells ends. So this definition uses the
+          second body, <code>arrange</code>, which runs once the treemap's
+          bounds are known and returns each child's bounds. The built-in beside
+          it is <code>tile</code> with <code>Tiling.squarify</code>.
+        </p>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/lp-user-squarify.png"
+              alt="Squarified treemap of 20 countries, written by a user"
+            />
+            <figcaption>
+              Story <b>UserSquarify</b>, the user's <b>squarified</b>.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/lp-builtin-squarify.png"
+              alt="Squarified treemap of 20 countries, built-in tile"
+            />
+            <figcaption>
+              Story <b>BuiltinSquarify</b>, the built-in <b>tile</b>.
+            </figcaption>
+          </figure>
+        </div>
+        <p class="label">Definition</p>
+        {{code:lp-squarify-def}}
+        <details class="code">
+          <summary>
+            The <code>squarify</code> helper, 58 lines of plain TypeScript with
+            no GoFish imports
+          </summary>
+          <div class="inner">{{code:lp-squarify-helper}}</div>
+        </details>
+        <p>
+          <code>squarify</code> is the squarify rule as d3's
+          <code>squarifyRatio</code> runs it, with the golden ratio, written
+          from scratch. It returns one rectangle
+          <code>[x0, y0, x1, y1]</code> per weight, and <code>box</code> turns
+          each into a box.
+        </p>
+        <p class="label">Use</p>
+        {{code:lp-squarify-use}}
+        <p class="label">What it returns</p>
+        {{code:lp-squarify-exp}}
+        <p>
+          This body returns bounds, not constraints, so its use does not yet
+          expand into constraints. The card "The second body is not constraints
+          yet" below says why, and shows the treemap written with a constraint
+          instead.
+        </p>
+        <ul class="tight">
+          <li>
+            The normalized DOM of the two stories is byte for byte identical.
+          </li>
+          <li>
+            The drawn rectangles are the boxes above moved half a pixel right
+            and down, e.g., India's is at x = 0.5, y = 0.5 with width 182.9656.
+            The built-in draws the same numbers, so the user layout adds no
+            shift of its own.
+          </li>
+          <li>Neither story writes a layout warning.</li>
+          <li>Each render ran the layout pipeline once.</li>
+        </ul>
+      </div>
+
+      <!-- d -->
+      <div class="card">
+        <h3>
+          The treemap inside a larger visualization
+          <span class="tag proto">prototype</span>
+        </h3>
+        <p>
+          The same treemap under a title in a <code>spread</code>, with an arrow
+          from the title to China's cell. The treemap's bounds are what the
+          spread leaves it. The arrow reads the cell from outside the treemap,
+          by name.
+        </p>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/lp-user-in-spread.png"
+              alt="Title China above a treemap, with an arrow toward China's cell"
+            />
+            <figcaption>
+              Story <b>UserInSpread</b>, the user's <b>squarified</b>.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/lp-builtin-in-spread.png"
+              alt="The same picture with the built-in tile"
+            />
+            <figcaption>
+              Story <b>BuiltinInSpread</b>, the built-in <b>tile</b>.
+            </figcaption>
+          </figure>
+        </div>
+        {{code:lp-in-spread-use}}
+        <p>
+          The normalized DOM of the two stories is identical, and each render
+          ran the layout pipeline once. China's cell is the large one at the
+          lower left. The arrow ends a little above that cell's top edge, at the
+          same point for both treemaps. Whether that gap is the arrow's intended
+          padding was not checked.
+        </p>
+        <p>The same treemap under <code>Coord.polar()</code>:</p>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/lp-user-polar.png"
+              alt="The treemap warped into a disk by a polar coordinate space"
+            />
+            <figcaption>Story <b>UserPolar</b>.</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/lp-builtin-polar.png"
+              alt="The built-in tile warped the same way"
+            />
+            <figcaption>Story <b>BuiltinPolar</b>.</figcaption>
+          </figure>
+        </div>
+        {{code:lp-polar-use}}
+        <p>
+          The normalized DOM of the two stories is identical. An
+          <code>arrange</code> body works in its own flat frame, and the
+          coordinate space warps the result, as it does for the built-in.
+        </p>
+      </div>
+
+      <!-- e -->
+      <div class="card">
+        <h3>
+          A <code>spread</code> written by a user
+          <span class="tag proto">prototype</span>
+        </h3>
+        <p>
+          The built-in <code>spread</code> is nothing special. This
+          <code>row</code> is a <code>relate</code> definition of 15 lines that
+          aligns its children across <code>dir</code> and distributes them along
+          it. <code>axes.axis(dir, ...)</code> turns an axis name into axis 0 or
+          1, so <code>dir: "theta"</code> works under a polar coordinate space.
+        </p>
+        <div class="natural">
+          <figure>
+            <img src="img/lp-user-row.png" alt="Eight blue bars in a row" />
+            <figcaption>
+              Story <b>UserRow</b>, the user's <b>row</b>.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/lp-builtin-row.png" alt="The same eight bars" />
+            <figcaption>
+              Story <b>BuiltinRow</b>, the built-in <b>spread</b>.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/lp-user-row-polar.png"
+              alt="Eight wedges of different lengths around a center"
+            />
+            <figcaption>
+              Story <b>UserRowPolar</b>, <b>row</b> along theta.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/lp-builtin-row-polar.png"
+              alt="The same eight wedges"
+            />
+            <figcaption>
+              Story <b>BuiltinRowPolar</b>, <b>spread</b> along theta.
+            </figcaption>
+          </figure>
+        </div>
+        <p class="label">Definition</p>
+        {{code:lp-row-def}}
+        <p class="label">Use</p>
+        {{code:lp-row-use}}
+        <p class="label">What it expands into</p>
+        {{code:lp-row-exp}}
+        <p>
+          The normalized DOM of <b>UserRow</b> and <b>BuiltinRow</b> is
+          identical, and so is that of <b>UserRowPolar</b> and
+          <b>BuiltinRowPolar</b>.
+        </p>
+      </div>
+
+      <!-- f -->
+      <div class="card">
+        <h3>
+          What a wrong definition does
+          <span class="tag proto">prototype</span>
+        </h3>
+        <p>
+          Three wrong definitions, each rendered. The prototype checks one
+          mistake in each body and leaves others unchecked.
+        </p>
+        <p>
+          An <code>arrange</code> body that returns bounds for 19 of its 20
+          children:
+        </p>
+        {{code:lp-err-bounds}}
+        <p>The render fails with this message:</p>
+        {{code:lp-msg-bounds}}
+        <p>
+          A <code>relate</code> body that asks for the pixels of a length the
+          scale changes, here the width of a data bar:
+        </p>
+        {{code:lp-err-pixels}}
+        <p>The render fails with this message:</p>
+        {{code:lp-msg-pixels}}
+        <p>
+          The message does not name the operator, because it comes from the
+          length, which does not know which definition read it. Both errors are
+          thrown during layout, after <code>render</code> has returned, so they
+          reach the page as unhandled errors and the promise
+          <code>render</code> returns does not reject. The stories catch them
+          with a window listener to print them.
+        </p>
+        <p>
+          A <code>relate</code> body that leaves its first child (red) out of
+          every constraint. Nothing checks this. The red bar lands at the
+          layer's origin, under the first bar the constraints place:
+        </p>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/lp-unchecked-dropped-child.png"
+              alt="Seven blue bars in a row, with a red bar partly hidden under the first"
+            />
+            <figcaption>
+              Story <b>UncheckedDroppedChild</b>. No error and no warning.
+            </figcaption>
+          </figure>
+        </div>
+        {{code:lp-dropped}}
+        <p>
+          A <code>relate</code> body cannot create or remove a child, because it
+          returns constraints and not nodes. Naming a child in two constraints
+          on the same axis is how constraints normally combine, so it is not a
+          mistake the protocol can see.
+        </p>
+      </div>
+    </div>
+
+    <h2>The standard library on the same call</h2>
+    <p>
+      The built-in <code>spread</code>, <code>stack</code> and
+      <code>tile</code> are defined with <code>defineLayout</code> in the copy.
+      The line counts are these. <code>tile.tsx</code> went from 466 to 278
+      lines, because the engine code it held moved into
+      <code>layoutProtocol.ts</code>. <code>spread.tsx</code> went from 371 to
+      413 lines. <code>layoutProtocol.ts</code> is new and has 415 lines. Before
+      the renames on this tab the counts were 273 and 391. The renames added the
+      <code>Box</code> and <code>Polygon</code> types and the code that turns
+      them into the engine's outlines.
+    </p>
+    <div class="gallery">
+      <div class="card">
+        <h3><code>spread</code> <span class="tag proto">prototype</span></h3>
+        <p>
+          The key lines of its <code>relate</code> body, with comments removed
+          (<code>spread.tsx</code> lines 235 to 263 in the copy):
+        </p>
+        {{code:lp-spread-key}}
+        <details class="code">
+          <summary>
+            The whole implementation in the copy, spread.tsx lines 36 to 266
+          </summary>
+          <div class="inner">{{code:lp-spread-full}}</div>
+        </details>
+        <details class="code">
+          <summary>
+            Before, at fac08ebd7: the lines that built the constraints, 65 of
+            the operator's 172
+          </summary>
+          <div class="inner">{{code:lp-spread-before}}</div>
+        </details>
+        <p>
+          The definition returns an align across <code>dir</code> and a
+          distribute along it, the same two constraints the old code installed
+          by hand. From the protocol it needed <code>axes.axis</code>, to turn
+          <code>dir</code> into an axis inside the coordinate space, and the
+          <code>orientation</code> field, which replaces writing the node's
+          private <code>axisDir</code>. The file grew by 42 lines because the
+          options are now passed twice, once into the definition and once
+          destructured in its body, and because the definition has its own
+          option type, its list of option names and a doc comment.
+        </p>
+        <p>It still reaches for these, which a user could not write:</p>
+        <ul class="tight">
+          <li>
+            Four options of <code>Constraint.distribute</code> that are not in
+            the IR: <code>baseline</code>, <code>hasMidpoint</code>,
+            <code>measure</code> and <code>hasOrder</code> (spread.tsx 249 to
+            258). A JS user can pass them, but they are not documented and do
+            not cross to Python (gofish-ir <code>descriptors.ts</code> 2999).
+          </li>
+          <li>
+            The wrapper around the definition, which handles the
+            <code>size</code> option, wraps each child in a
+            <code>layer</code> and copies private node fields onto the wrapper
+            (<code>_syntheticKey</code>, <code>keyCell</code>,
+            <code>keyBy</code>, <code>__splitBy</code>, <code>datum</code>,
+            spread.tsx 139 to 153).
+          </li>
+          <li>
+            The internal helper <code>axisName</code> (spread.tsx 18, 226 and
+            227) and <code>createNodeOperator</code> (spread.tsx 54).
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3><code>stack</code> <span class="tag proto">prototype</span></h3>
+        <p>
+          <code>stack</code> did not change. It is <code>spread</code> with
+          <code>glue: true</code>, so it runs the same definition, and the
+          distribute it returns adds the children's data sizes in one data space
+          instead of spacing them.
+        </p>
+        <details class="code">
+          <summary>
+            Its code in the copy, spread.tsx lines 373 to 413, unchanged
+          </summary>
+          <div class="inner">{{code:lp-stack}}</div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3><code>tile</code> <span class="tag proto">prototype</span></h3>
+        <p>
+          The key lines, its <code>arrange</code> body with comments removed
+          (<code>tile.tsx</code> lines 211 to 250 in the copy):
+        </p>
+        {{code:lp-tile-key}}
+        <details class="code">
+          <summary>
+            The whole definition in the copy, tile.tsx lines 180 to 251
+          </summary>
+          <div class="inner">{{code:lp-tile-full}}</div>
+        </details>
+        <p>
+          Before, at fac08ebd7, <code>tile</code> was a node of its own of 223
+          lines (tile.tsx 217 to 439). It declared its own scope rules, its own
+          size request, the box it fills, the weights and the tiling, and it
+          laid out and placed each child in its cell by hand. Now the definition
+          is 59 lines. It returns each child's cell as a polygon, and the
+          protocol does the rest, with the same engine code the old node had.
+        </p>
+        <p>It still reaches for these, which a user could not write:</p>
+        <ul class="tight">
+          <li>
+            <code>cellsOf</code>, the internal code of the
+            <code>Tiling</code> strategies (tile.tsx 239).
+          </li>
+          <li>
+            Two internal checks, <code>Frontend.checkStrategy</code> (tile.tsx
+            223) and <code>checkSummable</code> (tile.tsx 206).
+          </li>
+          <li>
+            <code>byChild</code>, which puts the cells back in child order. It
+            is exported from <code>layoutProtocol.ts</code> but not from the
+            library (tile.tsx 245).
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>What the protocol itself reaches for</h3>
+        <p>
+          The call is written inside the engine, so it uses engine internals
+          that a definition does not see. These are the ones that would stay if
+          the call became public.
+        </p>
+        <ul class="tight">
+          <li>
+            A <code>relate</code> definition is built as a <code>layer</code>,
+            and its body runs in the pass that gives axis names their meaning,
+            by replacing the layer's private
+            <code>_elaborateInAxisScope</code> hook (layoutProtocol.ts 191 to
+            197).
+          </li>
+          <li>
+            The one <code>await</code> in the protocol is around
+            <code>INTERNAL_relate</code> (layoutProtocol.ts 221), because
+            drawing clauses in <code>.relate</code> are marks that are built
+            asynchronously today. Constraints alone need nothing asynchronous.
+          </li>
+          <li>
+            <code>INTERNAL_relate</code> runs <code>requireLayer</code>, a check
+            on the node's type by name (_node.ts 3708 and 3740), and four passes
+            check <code>type === "coord"</code> (_node.ts 2410 and 2484,
+            axisDirection.ts 105, gofish.tsx 1135). #1279 accepts both as
+            special cases of the domain.
+          </li>
+          <li>
+            The orientation and the <code>axes</code> option are written to the
+            private fields <code>axisDir</code> and
+            <code>_axisOverride</code> (layoutProtocol.ts 222, 224 and 385).
+          </li>
+          <li>
+            <code>defineLayout</code> picks the <code>relate</code> path or the
+            <code>arrange</code> path by the shape of the definition
+            (layoutProtocol.ts 175). That is a second path, and it goes away if
+            the second body becomes constraints.
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>The definition call</h2>
+    <p>
+      These are the public types in <code>layoutProtocol.ts</code> in the copy,
+      lines 50 to 156, and the call itself, lines 170 to 179. The library
+      exports <code>defineLayout</code> and <code>maxLength</code>, and the
+      types <code>LayoutDefinition</code>, <code>RelateDefinition</code>,
+      <code>ArrangeDefinition</code>, <code>LayoutChild</code>,
+      <code>Bounds</code>, <code>Box</code>, <code>Polygon</code>,
+      <code>Arrangement</code> and <code>Relations</code>.
+    </p>
+    {{code:lp-protocol-types}}
+    <p class="note">
+      Two names are open. <code>defineLayout</code> may instead be part of
+      <code>defineOperator</code>, the public call #692 plans beside
+      <code>defineMark</code>. <code>measure(child)</code> may become
+      <code>size(child)</code>. The callout below gives a recommendation.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Body</th>
+            <th>Returns</th>
+            <th>Knows when it runs</th>
+            <th>Takes part in fitting</th>
+            <th>A ref from outside can reach a child</th>
+            <th>Shares a scale with its children</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>relate</code>, without <code>measure</code></td>
+            <td>constraints</td>
+            <td>the children as handles, the axis names</td>
+            <td>yes</td>
+            <td>yes</td>
+            <td>yes</td>
+          </tr>
+          <tr>
+            <td><code>relate</code>, with <code>measure</code></td>
+            <td>constraints whose numbers are lengths</td>
+            <td>also the children's sizes, as lengths</td>
+            <td>yes</td>
+            <td>yes</td>
+            <td>yes</td>
+          </tr>
+          <tr>
+            <td><code>arrange</code></td>
+            <td>each child's bounds</td>
+            <td>
+              also its own bounds in pixels, and each child's request in pixels
+            </td>
+            <td>no, it fills its bounds or asks for a size in pixels</td>
+            <td>
+              yes, after layout, as the arrow shows, but not while sizes are
+              worked out
+            </td>
+            <td>no, each child is a scope of its own</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      A <code>relate</code> body asks a child one thing,
+      <code>measure(child)</code>, which gives its width and height as lengths.
+      A length supports four operations, and asking it for pixels throws when
+      the scale changes it, with the message shown in example (f):
+    </p>
+    <ul class="tight">
+      <li>
+        <code>a.add(b)</code>, where <code>b</code> is a length or pixels.
+      </li>
+      <li><code>a.sub(b)</code>.</li>
+      <li><code>a.times(k)</code>, for a number <code>k</code>.</li>
+      <li><code>maxLength(a, b, ...)</code>, the larger at every σ.</li>
+    </ul>
+    {{code:lp-length-ops}} {{code:lp-length-fns}}
+    <p>
+      An <code>arrange</code> body asks each child <code>request(axis)</code>,
+      its size in pixels before σ is known, and <code>fillsBounds(axis)</code>,
+      whether it fills the bounds it is given.
+    </p>
+    <div class="callout">
+      <b>Fork: the names.</b> (a) Keep <code>defineLayout</code>, which says
+      what the body does but adds a second definition call beside #692's. (b)
+      Make a layout a kind of operator under <code>defineOperator</code> (#692),
+      so one registration path covers layouts and other operators and a user
+      layout gets a descriptor that can cross to Python. For the child query,
+      (a) <code>measure(child)</code> as in the prototype, or (b)
+      <code>size(child)</code>, which reads as what it returns and does not
+      collide with GoFish's units of measure. For the constraint the next
+      section proposes, the naming survey recommends
+      <code>Constraint.cell</code>, and the card there gives the alternatives.
+      None of these names is decided.<br />Recommended:
+      <code>defineOperator</code> with a <code>relate</code> body, and
+      <code>size(child)</code>.
+    </div>
+
+    <h2>Where it falls short</h2>
+    <div class="gallery">
+      <div class="card">
+        <h3>
+          The second body is not constraints yet
+          <span class="tag sketch">proposed, not built</span>
+        </h3>
+        <p>
+          The squarified treemap in example (c) returns bounds, not constraints.
+          A layer reads its constraints three times before its own bounds exist.
+          It reads them to decide which children share a scale, to decide which
+          children are pinned in a coordinate space, and to work out its size
+          request. A body that needs the bounds cannot have its constraints
+          there in time, so the prototype gives such a body a node kind of its
+          own, the <code>arrange</code> path. That is a declared shortcut.
+        </p>
+        <p>
+          The fix is a bottom-level constraint that lays a child out inside a
+          box, whose kind is known early and whose numbers come once the bounds
+          are known. The three early readers learn what they need from its kind.
+          The child is a scope of its own, it is not pinned, and it asks its
+          parent for nothing. With it, a definition has one body,
+          <code>relate</code>:
+        </p>
+        {{code:lp-cell-sketch}}
+        <p>Beside it, the <code>arrange</code> body that ran:</p>
+        {{code:lp-squarify-def}}
+        <p>
+          The naming survey for this constraint is done, and its result is not
+          decided. It recommends
+          <code>Constraint.cell({ x: [x0, x1], y: [y0, y1] }, [child])</code>,
+          and <code>{ points }</code> for a polygon cell. The public
+          <code>tile</code> and <code>partition</code> docs already say each
+          child is handed "its cell", and CSS Grid's "grid cell" and
+          d3-delaunay's <code>cellPolygon</code> are precedent outside GoFish.
+          The two alternatives are these:
+        </p>
+        <ul class="tight">
+          <li>
+            <code>Constraint.frame</code>. SwiftUI's <code>.frame</code> does
+            this for one child, so it is the best match outside, but GoFish uses
+            "frame" for a node's coordinate frame about 860 times in the source.
+          </li>
+          <li>
+            <code>Constraint.place</code>. It is the common verb, but every
+            system that uses it places a child at a point, and it collides with
+            the public <code>Placement</code> family.
+          </li>
+        </ul>
+        <p>
+          <code>Constraint.position</code> already has a hidden internal form
+          for this, its <code>region</code> option, which is how
+          <code>partition</code> gives each child its cell. The new constraint
+          would take over that form, and <code>position</code> would go back to
+          meaning only "pin this point or these edges".
+        </p>
+        <div class="callout">
+          <b>Fork: should the second body become constraints?</b> (a) Keep two
+          bodies, <code>relate</code> and <code>arrange</code>. (b) Add the
+          bottom-level constraint above, so a definition has one body that
+          returns constraints, and <code>arrange</code> is either removed or
+          kept as a short way to write a <code>relate</code> body that returns
+          one such constraint. Two questions come with (b). Does a cell always
+          make its child a scope of its own? <code>tile</code>'s children are,
+          and <code>partition</code>'s data cells may not be. And should the
+          constraint take an alignment, as SwiftUI's <code>.frame</code> does?
+          It always centers today.<br />Recommended: (b), named
+          <code>Constraint.cell</code>. It is the frame the maintainer set, and
+          it removes the second path in <code>defineLayout</code>. It was not
+          built because it changes how a layer reads <code>position</code>'s
+          region form, which <code>partition</code> and
+          <code>scatter</code> share.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>
+          A child of the second body is asked only for pixels
+          <span class="tag sketch">not built</span>
+        </h3>
+        <p>
+          Each child of an <code>arrange</code> body is a scope of its own, so a
+          child whose size is data asks its parent for nothing, and
+          <code>request(axis)</code> returns no size for it. A body that wants
+          its children's sizes in σ cannot have them. This is the same limit
+          #967 found for <code>pack</code>. The fix is the constraint in the
+          card above, together with <code>measure</code> in a
+          <code>relate</code> body.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>
+          No layout whose height depends on its width
+          <span class="tag sketch">not built</span>
+        </h3>
+        <p>
+          A flow of words that wraps into lines has a height that depends on the
+          width it is given. A size request is one function of σ per axis, and
+          <code>request</code> in <code>arrange</code> returns pixels per axis,
+          so a wrapping row inside a layout that fits to it cannot be written.
+          This is the same limit the <code>choose</code> proposal found for
+          wrapping at a solved width.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>
+          A measured length has no wire form
+          <span class="tag sketch">not built</span>
+        </h3>
+        <p>
+          A length from <code>measure</code> is a function inside the engine,
+          and its <code>toJSON</code> throws. The IR's <code>Length</code>
+          type cannot say "the width of child 3", so a definition that uses
+          <code>measure</code> cannot cross to Python. A Python
+          <code>relate</code> body would also have to run as a callback, as
+          <code>derive</code> lambdas do. The prototype also checks a measured
+          spacing as 0 px when it validates a spacing strategy (<code
+            >distribute.ts</code
+          >
+          205), which is a declared shortcut marked in the code. The fix is an
+          IR <code>Length</code> member for a measured length.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Built-ins that are not expansions into constraints</h3>
+        <p>
+          These do not arrange children, so they stay outside the protocol, and
+          that is fine for each:
+        </p>
+        <ul class="tight">
+          <li>
+            <code>coord</code> gives axis names their meaning and warps its
+            children after layout.
+          </li>
+          <li>
+            <code>connect</code>, <code>line</code>, <code>ribbon</code>,
+            <code>arrow</code> and <code>enclose</code> draw from other nodes'
+            positions after layout.
+          </li>
+          <li><code>cut</code> clips its child.</li>
+          <li>
+            The compositing operators (<code>union</code>,
+            <code>intersect</code> and the rest) combine the regions of their
+            children.
+          </li>
+          <li>
+            Axes, legends and titles are layers that the library adds around a
+            visualization, so they are already constraints.
+          </li>
+          <li>Marks have a size request and no children to place.</li>
+        </ul>
+        <p>
+          One is not fine. <code>pack</code> arranges children and is still a
+          node of its own that places circles by a procedure in pixels.
+          <code>scatter</code>, <code>partition</code> and <code>table</code>
+          already build a layer with constraints, but they were not moved onto
+          <code>defineLayout</code>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>
+          Operators are built asynchronously
+          <span class="tag proto">separate prototype</span>
+        </h3>
+        <p>
+          A separate prototype makes building an operator synchronous. Its patch
+          touches 23 files. With it, 748 of the 751 stories render the same
+          normalized DOM, and the other three are byte-identical after a
+          one-line fix. This prototype does not include it. With it, the one
+          <code>await</code> in <code>defineLayout</code> goes away, and no
+          definition changes.
+        </p>
+        <div class="callout">
+          <b>Fork: landing order.</b> (a) Land the layout protocol first and the
+          synchronous building after. (b) Land the synchronous building first,
+          as its own change, and then the layout protocol on top of it.<br />Recommended:
+          (b). It is a refactor that changes no output, and the protocol is then
+          written without the <code>await</code>
+          from the start.
+        </div>
+      </div>
+    </div>
+
+    <h2>How this compares with SwiftUI</h2>
+    <p>
+      SwiftUI's custom layout is the <code>Layout</code> protocol (<a
+        href="https://developer.apple.com/documentation/swiftui/layout"
+        >Apple's documentation</a
+      >, and the WWDC22 session
+      <a href="https://developer.apple.com/videos/play/wwdc2022/10056/"
+        >Compose custom layouts with SwiftUI</a
+      >). A layout writes
+      <a
+        href="https://developer.apple.com/documentation/swiftui/layout/sizethatfits(proposal:subviews:cache:)"
+        ><code>sizeThatFits</code></a
+      >, which returns its size for a proposed size, and
+      <code>placeSubviews(in:)</code>, which places each child with
+      <code>place(at:)</code>. The prototype differs in four ways:
+    </p>
+    <ul class="tight">
+      <li>
+        <b>The size request.</b> A SwiftUI layout writes its own. In the
+        prototype the solver derives it from the constraints a
+        <code>relate</code> body returns.
+      </li>
+      <li>
+        <b>Asking a child its size.</b> A SwiftUI layout asks a child (<a
+          href="https://developer.apple.com/documentation/swiftui/layoutsubview"
+          ><code>LayoutSubview</code></a
+        >) for its size in points, as many times as it likes. A
+        <code>relate</code> body reads each child once, as a length in σ.
+      </li>
+      <li>
+        <b>Placing.</b> A SwiftUI layout calls <code>place(at:)</code> for each
+        child. A <code>relate</code> body returns constraints as data, and the
+        solver places.
+      </li>
+      <li>
+        <b>Choosing between layouts.</b> SwiftUI has <code>ViewThatFits</code>.
+        GoFish would have <code>choose</code>, which is proposed and not built.
+      </li>
+    </ul>
+    <p>
+      The reason is one. A SwiftUI size is a number, so asking a child its size
+      is cheap and exact. A GoFish size depends on σ, which is solved for a
+      whole scope at once, so a body cannot ask a child for pixels before the
+      solve. No public statement by a SwiftUI engineer about a more declarative
+      layout was found, so none is cited here.
+    </p>
+    <p>A row or a column, whichever fits, in SwiftUI as a custom layout:</p>
+    {{code:lp-swift-row}}
+    <p>
+      In GoFish with <code>choose</code>, as a sketch. It is one choice between
+      two expansions, and the engine already has each one's size request, so
+      nothing is measured twice and nothing is placed by hand.
+    </p>
+    {{code:lp-choose-row}}
+
+    <h2><code>choose</code> and what stays procedural</h2>
+    <p>
+      Each studied layout makes some decisions that depend on its bounds or on
+      sizes. The table sorts those decisions into four kinds:
+    </p>
+    <ul class="tight">
+      <li>(a) none,</li>
+      <li>
+        (b) a small fixed set of alternatives, which <code>choose</code> covers,
+      </li>
+      <li>(c) a large family of alternatives with a cost to compare them,</li>
+      <li>(d) a procedure.</li>
+    </ul>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Layout</th>
+            <th>Kind</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>spread, stack</td>
+            <td>(a)</td>
+            <td>The order and gaps are fixed, and σ is solved.</td>
+          </tr>
+          <tr>
+            <td>pie, sunburst, icicle</td>
+            <td>(a)</td>
+            <td>Stacks and partitions under a coordinate space.</td>
+          </tr>
+          <tr>
+            <td>treemap slice, dice, slice-dice</td>
+            <td>(a)</td>
+            <td>
+              A stack of <code>fr</code> shares along one axis, alternating by
+              depth.
+            </td>
+          </tr>
+          <tr>
+            <td>treemap binary</td>
+            <td>(b) per split</td>
+            <td>Each split chooses x or y by the shape of its bounds.</td>
+          </tr>
+          <tr>
+            <td>treemap squarify, strip</td>
+            <td>(c)</td>
+            <td>
+              Where each row ends and which way it runs, scored by aspect ratio.
+            </td>
+          </tr>
+          <tr>
+            <td>tidy tree</td>
+            <td>(a)</td>
+            <td>
+              Separations are maxima of contour lengths, which compose with
+              <code>maxLength</code> once <code>measure</code> returns contours.
+            </td>
+          </tr>
+          <tr>
+            <td>dendrogram</td>
+            <td>(a)</td>
+            <td>
+              Leaves are a spread, and each parent sits at the middle of its
+              children.
+            </td>
+          </tr>
+          <tr>
+            <td>sankey columns</td>
+            <td>(a) for layout, (d) for order</td>
+            <td>
+              Columns come from data. The order heuristic repeats, but reads
+              only data, so it runs in <code>derive</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>layered graph ranks</td>
+            <td>(a) for layout, (d) for crossings</td>
+            <td>
+              Ranks and crossing reduction read only the graph. Coordinates are
+              a linear program, which is constraints.
+            </td>
+          </tr>
+          <tr>
+            <td>wrap, flow</td>
+            <td>(c), or (b) per break</td>
+            <td>
+              Each possible line break chooses to break or not. The first fit at
+              each break is the greedy flow, and a cost gives the best one.
+            </td>
+          </tr>
+          <tr>
+            <td>row or column</td>
+            <td>(b)</td>
+            <td>Two alternatives.</td>
+          </tr>
+          <tr>
+            <td>circle pack</td>
+            <td>(d), independent of its bounds</td>
+            <td>
+              A chain of circles placed in turn. Without padding it is a
+              multiple of σ, so it expands to positions in lengths.
+            </td>
+          </tr>
+          <tr>
+            <td>Voronoi</td>
+            <td>(d), needs its bounds</td>
+            <td>Cells come from the sites and the shape of its bounds.</td>
+          </tr>
+          <tr>
+            <td>force</td>
+            <td>(d), needs its bounds</td>
+            <td>It repeats its steps in a fixed box.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Squarify both ways. The <code>arrange</code> body that ran is in example
+      (c). As a <code>choose</code> with a cost, as a sketch:
+    </p>
+    {{code:lp-squarify-choose}}
+    <p>
+      The <code>choose</code> form needs an axis named by the shape of the
+      bounds (<code>dir: "short"</code>), a cost read from placed cells, and a
+      choice at each break. All three read the bounds, so the decision still
+      happens after σ is solved. For squarify the <code>choose</code> form gains
+      nothing over the body that ran, because a treemap fills its bounds and
+      asks for nothing. For flow and for row or column it gains a lot, because
+      there the choice changes the size request.
+    </p>
+    <p>
+      Deriving size requests from constraints is cheap today. A scratch script
+      in the copy (<code>src/tests/unfoldCost.scratch.ts</code>) timed the claim
+      walk, the pass that works out each node's size request. Each node is
+      worked out once, at about 0.04 ms per node, and the claim walk is 36 to 43
+      percent of layout for visualizations made of spreads and stacks. A
+      definition that wrote its own size request would save only its own part of
+      that 0.04 ms, because placement reads its children's requests anyway. So
+      the protocol has no way to write a size request by hand except in
+      <code>arrange</code>, and it should add one only if a profile shows the
+      claim walk is the bottleneck.
+    </p>
+  </section>
+
   <!-- ============================== DESIGN ============================== -->
   <section
     class="panel"
@@ -2089,6 +3211,13 @@
     </div>
 
     <h2>Writing the decisions</h2>
+    <p class="note">
+      The Layout protocol prototype tab builds this as one call,
+      <code>defineLayout</code>, and shows two things this section does not
+      know: the function that calls <code>measure</code> ran with lengths, and
+      <code>layout(children, body)</code> (there an <code>arrange</code> body)
+      needed no second run, because its children are laid out in the same run.
+    </p>
     <div class="gallery">
       <div class="card">
         <h3>Three ways, by when the structure is known</h3>
@@ -3057,12 +4186,14 @@
           <li>
             <b>The names <code>layout</code> and <code>measure</code></b
             >, or a second argument to <code>createMark</code>. Shown with the
-            API on the first tab.
+            API on The design tab. The Layout protocol prototype tab has a newer
+            form of this fork.
           </li>
           <li>
             <b>What spacing means in a tiling:</b> d3's inset or a stack's gap.
-            Shown with the treemap on the second tab. It decides whether the
-            built-in tilings can become presets with no pixel change.
+            Shown with the treemap on the Every d3 layout tab. It decides
+            whether the built-in tilings can become presets with no pixel
+            change.
           </li>
           <li>
             <b>The spelling of the minimum gap and its slack rule.</b>

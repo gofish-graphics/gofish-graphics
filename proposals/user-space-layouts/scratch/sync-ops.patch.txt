@@ -1,0 +1,2580 @@
+diff --git a/packages/gofish-graphics/package.json b/packages/gofish-graphics/package.json
+index 30a098dae..18241cd55 100644
+--- a/packages/gofish-graphics/package.json
++++ b/packages/gofish-graphics/package.json
+@@ -107,7 +107,8 @@
+     "fetch-titanic-passengers": "node scripts/fetch-titanic-passengers.mjs",
+     "storybook": "storybook dev -p 6006",
+     "build-storybook": "storybook build",
+-    "test": "pnpm run test:path && pnpm run test:interpolate && pnpm run test:spline && pnpm run test:time-window && pnpm run test:font && pnpm run test:bbox && pnpm run test:pwl && pnpm run test:fun && pnpm run test:band && pnpm run test:space && pnpm run test:measure && pnpm run test:geometry && pnpm run test:region && pnpm run test:circle && pnpm run test:resolve-accessors && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:compose && pnpm run test:sharing && pnpm run test:keyed-domains && pnpm run test:keyed-domains-render && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split && pnpm run test:gapminder-tower && pnpm run test:connected-scatterplot && pnpm run test:build-schedule && pnpm run test:build-in-tower && pnpm run test:name-scope && pnpm run test:axis-dims && pnpm run test:relate-schedule && pnpm run test:auto-label-angle && pnpm run test:signed-extent && pnpm run test:schema && pnpm run test:time && pnpm run test:cells && pnpm run test:polygon-cells && pnpm run test:baseline && pnpm run test:stack-profile && pnpm run test:fun-channel && pnpm run test:group-expr && pnpm run test:polar-baseline && pnpm run test:overlap && pnpm run test:families && pnpm run test:spacing && pnpm run test:enclose && pnpm run test:enclose-wire && pnpm run test:rect-corners && pnpm run test:enclose-render && pnpm run test:clip && pnpm run test:label-placement && pnpm run test:selection-layer && pnpm run test:operator-name && pnpm run test:claim-layout && pnpm run test:color && pnpm run test:text-center && pnpm run test:placement-symbolic && pnpm run test:minimum-gap &&pnpm run test:lengths && pnpm run test:voronoi-treemap && pnpm run test:hidden && pnpm run test:effect && pnpm run test:position-in && pnpm run test:room-layout && pnpm run test:plot-space && pnpm run test:dist && pnpm run test:length-entry && pnpm run test:tooltip && pnpm run test:tooltip-interaction && pnpm run test:closed-axis && pnpm run test:cross-coord",
++    "test": "pnpm run test:path && pnpm run test:interpolate && pnpm run test:spline && pnpm run test:time-window && pnpm run test:font && pnpm run test:bbox && pnpm run test:pwl && pnpm run test:fun && pnpm run test:band && pnpm run test:space && pnpm run test:measure && pnpm run test:geometry && pnpm run test:region && pnpm run test:circle && pnpm run test:resolve-accessors && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:compose && pnpm run test:sharing && pnpm run test:keyed-domains && pnpm run test:keyed-domains-render && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split && pnpm run test:gapminder-tower && pnpm run test:connected-scatterplot && pnpm run test:build-schedule && pnpm run test:build-in-tower && pnpm run test:name-scope && pnpm run test:axis-dims && pnpm run test:relate-schedule && pnpm run test:auto-label-angle && pnpm run test:signed-extent && pnpm run test:schema && pnpm run test:time && pnpm run test:cells && pnpm run test:polygon-cells && pnpm run test:baseline && pnpm run test:stack-profile && pnpm run test:fun-channel && pnpm run test:group-expr && pnpm run test:polar-baseline && pnpm run test:overlap && pnpm run test:families && pnpm run test:spacing && pnpm run test:enclose && pnpm run test:enclose-wire && pnpm run test:rect-corners && pnpm run test:enclose-render && pnpm run test:clip && pnpm run test:label-placement && pnpm run test:selection-layer && pnpm run test:operator-name && pnpm run test:claim-layout && pnpm run test:color && pnpm run test:text-center && pnpm run test:placement-symbolic && pnpm run test:minimum-gap &&pnpm run test:lengths && pnpm run test:voronoi-treemap && pnpm run test:hidden && pnpm run test:effect && pnpm run test:position-in && pnpm run test:room-layout && pnpm run test:plot-space && pnpm run test:dist && pnpm run test:length-entry && pnpm run test:tooltip && pnpm run test:tooltip-interaction && pnpm run test:closed-axis && pnpm run test:cross-coord && pnpm run test:sync-layout",
++    "test:sync-layout": "tsx src/tests/syncLayout.test.ts",
+     "test:closed-axis": "tsx src/tests/closedAxis.test.ts",
+     "test:cross-coord": "tsx src/tests/crossCoordRefs.test.ts",
+     "test:length-entry": "tsx src/tests/lengthEntry.test.ts",
+diff --git a/packages/gofish-graphics/src/animation/timeArrangements.ts b/packages/gofish-graphics/src/animation/timeArrangements.ts
+index a2e9dc7a8..513f04d82 100644
+--- a/packages/gofish-graphics/src/animation/timeArrangements.ts
++++ b/packages/gofish-graphics/src/animation/timeArrangements.ts
+@@ -65,8 +65,8 @@ type TimeArrangementOperator = Operator<any, any> & TimeArrangement;
+ 
+ function timeOperator(spec: ArrangementSpec): TimeArrangementOperator {
+   const operator = createOperator<any, ArrangementSpec>(
+-    async (_opts, children) => {
+-      const node = (await layer({}, children)) as GoFishNode;
++    (_opts, children) => {
++      const node = layer({}, children) as GoFishNode;
+       // The split below already put each group in its own child.
+       const { by: _spent, ...arrangement } = spec;
+       setNodeTransition(node, { kind: "operator", enter: arrangement });
+diff --git a/packages/gofish-graphics/src/ast/_node.ts b/packages/gofish-graphics/src/ast/_node.ts
+index 34968863d..6b747bb8f 100644
+--- a/packages/gofish-graphics/src/ast/_node.ts
++++ b/packages/gofish-graphics/src/ast/_node.ts
+@@ -117,7 +117,7 @@ import type { LayerPlan } from "./solver/plan";
+ import { aroundShare, plotForms } from "./solver/plotForms";
+ import { toJSON, width as intervalWidth } from "../util/interval";
+ import type { AxisMap, AxisScale } from "./domain";
+-import { envFlag } from "../util";
++import { envFlag, isThenable, type MaybePromise } from "../util";
+ import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
+ import type { LabelRow } from "./axes/elaborate";
+ import type { Ring } from "./geometry/ring";
+@@ -2340,25 +2340,22 @@ export class GoFishNode {
+    * {@link resolveEmbedding}, not here. A name no enclosing coord declares is
+    * a build-time error that lists the names that are declared.
+    */
+-  public async resolveAliases(): Promise<void> {
+-    const work: (() => Promise<void>)[] = [];
++  public resolveAliases(): void {
++    const work: (() => void)[] = [];
+     this.collectAxisScopeWork(BASE_AXIS_SCOPE, work);
+-    for (const run of work) await run();
++    for (const run of work) run();
+   }
+ 
+   /** The synchronous walk of {@link resolveAliases}: queue each node's hook,
+    *  with its scopes, in pre-order. Every coord establishes its own scope: the
+    *  names its transform declares, or only `x`/`y` when it declares none (a
+    *  name has a meaning only inside the space that declares it). */
+-  private collectAxisScopeWork(
+-    outer: AxisScope,
+-    work: (() => Promise<void>)[]
+-  ): void {
++  private collectAxisScopeWork(outer: AxisScope, work: (() => void)[]): void {
+     const inner = this._space ? axisScopeFor(this._space, outer) : outer;
+     const hook = this._elaborateInAxisScope;
+     if (hook) {
+-      work.push(async () => {
+-        await hook(outer, inner);
++      work.push(() => {
++        hook(outer, inner);
+         if (this._elaborateInAxisScope === hook)
+           this._elaborateInAxisScope = undefined;
+       });
+@@ -3584,7 +3581,7 @@ export class GoFishNode {
+       : undefined;
+   }
+ 
+-  public render(container: HTMLElement, options: GoFishRenderOptions) {
++  public render(container: HTMLElement, options: GoFishRenderOptions = {}) {
+     return gofish(container, options, this);
+   }
+ 
+@@ -3680,7 +3677,7 @@ export class GoFishNode {
+    * node this layer's lookup finds, not a same-named node of the nested
+    * layer.
+    */
+-  public async relate(fn: RelateFn, rows?: unknown): Promise<this> {
++  public relate(fn: RelateFn, rows?: unknown): MaybePromise<this> {
+     this.requireLayer();
+     return this.INTERNAL_relate(fn(relateEnv(this), this), rows);
+   }
+@@ -3697,20 +3694,41 @@ export class GoFishNode {
+    * sees the names the layer holds, and the call that replaces it discards
+    * that registry, so its names are gone.
+    */
+-  public async INTERNAL_relate(
+-    clauses: unknown,
+-    rows?: unknown
+-  ): Promise<this> {
++  public INTERNAL_relate(clauses: unknown, rows?: unknown): MaybePromise<this> {
+     this.requireLayer();
+     const names = this._names?.child() ?? new LayerContext();
+-    let resolved: Awaited<ReturnType<typeof resolveRelateClauses>>;
+-    try {
+-      resolved = await resolveRelateClauses(clauses, this, names, rows);
+-    } catch (e) {
++    const fail = (e: unknown): never => {
+       names.discard();
+       throw e;
++    };
++    let resolved: ReturnType<typeof resolveRelateClauses>;
++    try {
++      resolved = resolveRelateClauses(clauses, this, names, rows);
++    } catch (e) {
++      return fail(e);
+     }
+-    const { constraints, nodes, positions } = resolved;
++    return isThenable(resolved)
++      ? Promise.resolve(resolved).then(
++          (r) => this.installRelate(names, r),
++          fail
++        )
++      : this.installRelate(names, resolved);
++  }
++
++  /** Attach what {@link INTERNAL_relate} resolved, replacing an earlier
++   *  call's clauses. */
++  private installRelate(
++    names: LayerContext,
++    {
++      constraints,
++      nodes,
++      positions,
++    }: {
++      constraints: ConstraintSpec[];
++      nodes: GoFishNode[];
++      positions: number[];
++    }
++  ): this {
+     // A later call replaces the drawing clauses of an earlier one.
+     const old = this._relateClauses;
+     const kept = this.children.filter((_, i) => !old.has(i));
+diff --git a/packages/gofish-graphics/src/ast/axes/elaborate.tsx b/packages/gofish-graphics/src/ast/axes/elaborate.tsx
+index 8c15aed18..971d1b70f 100644
+--- a/packages/gofish-graphics/src/ast/axes/elaborate.tsx
++++ b/packages/gofish-graphics/src/ast/axes/elaborate.tsx
+@@ -1560,11 +1560,8 @@ function elaborationsFor(
+ 
+ /** Wrap `inner` in one ring of chrome (`wrapRing`), marked as one
+  *  (`GoFishNode._chromeRing`). */
+-async function wrapChromeRing(
+-  inner: GoFishNode,
+-  ring: ChromeRing
+-): Promise<GoFishNode> {
+-  const root = await wrapRing(inner, ring);
++function wrapChromeRing(inner: GoFishNode, ring: ChromeRing): GoFishNode {
++  const root = wrapRing(inner, ring);
+   root._chromeRing = true;
+   return root;
+ }
+@@ -1612,21 +1609,21 @@ export type ChromeOptions = {
+  * OWN children folded. `layout` reads the root's fold to check every
+  * per-level entry applied.
+  */
+-export async function elaborateChrome(
++export function elaborateChrome(
+   node: GoFishNode,
+   options: ChromeOptions = {}
+-): Promise<{
++): {
+   node: GoFishNode;
+   changed: boolean;
+   fold: LevelFold;
+-}> {
++} {
+   let changed = false;
+   const below = emptyFold();
+   // Bottom-up: replace each child with its elaborated form.
+   for (let i = 0; i < node.children.length; i++) {
+     const child = node.children[i];
+     if (child instanceof GoFishNode) {
+-      const res = await elaborateChrome(child, options);
++      const res = elaborateChrome(child, options);
+       if (res.changed) changed = true;
+       for (const dim of [0, 1] as (0 | 1)[]) {
+         const b = below.dims[dim];
+@@ -1671,7 +1668,7 @@ export async function elaborateChrome(
+     return { node, changed, fold };
+   }
+ 
+-  const root = await wrapPreservingIdentity(node, async (content) => {
++  const root = wrapPreservingIdentity(node, (content) => {
+     let ring: GoFishNode = content;
+     // The box its axes (continuous ones and category label rows) are
+     // seated beside is a plot: it covers the whole niced domain they draw.
+@@ -1691,7 +1688,7 @@ export async function elaborateChrome(
+     // grid by that overhang.
+     if (constrained.length > 0)
+       // Ticks read their datums in the content's frame.
+-      ring = await wrapChromeRing(ring, axesRing(constrained));
++      ring = wrapChromeRing(ring, axesRing(constrained));
+ 
+     // Category label rows: ordinal labels track their keys via `ref(...)`, so
+     // they must be laid out AFTER the gutters have shifted the content (the
+@@ -1699,12 +1696,11 @@ export async function elaborateChrome(
+     // their own. They `distribute` against the ring inside, whose bbox
+     // includes any nested inner-facet labels, so an outer label row stacks
+     // below the inner row.
+-    if (refBased.length > 0)
+-      ring = await wrapChromeRing(ring, axesRing(refBased));
++    if (refBased.length > 0) ring = wrapChromeRing(ring, axesRing(refBased));
+ 
+     // Axis titles, seated past the axes so they clear the tick and label rows.
+     if (titles[0] !== undefined || titles[1] !== undefined)
+-      ring = await wrapChromeRing(
++      ring = wrapChromeRing(
+         ring,
+         axisTitles(
+           titles,
+@@ -1714,7 +1710,7 @@ export async function elaborateChrome(
+       );
+ 
+     // The legend, beside everything inside it, titles included.
+-    if (legend !== undefined) ring = await wrapChromeRing(ring, legend);
++    if (legend !== undefined) ring = wrapChromeRing(ring, legend);
+     return ring;
+   });
+   // A chart is placed whole, its chrome with it (#1241): its outermost ring
+diff --git a/packages/gofish-graphics/src/ast/constraints/relate.ts b/packages/gofish-graphics/src/ast/constraints/relate.ts
+index ff5092fdb..0907d8acb 100644
+--- a/packages/gofish-graphics/src/ast/constraints/relate.ts
++++ b/packages/gofish-graphics/src/ast/constraints/relate.ts
+@@ -7,14 +7,14 @@ import { GoFishNode } from "../_node";
+ import { GoFishRef, directChildOf, one, type ResolvedOperand } from "../_ref";
+ import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
+ import { LayerContext, resolveMarkResult } from "../marks/markResult";
+-import { flattenAndAwaitPromises } from "../withGoFish";
++import { flattenChildren } from "../withGoFish";
+ import {
+   isZOrderConstraint,
+   validateOperands,
+   type ConstraintSpec,
+ } from "./index";
+ import { childNameKey, type ConstraintRef } from "./shared";
+-import { isThenable } from "../../util";
++import { andThen, isThenable, mapInOrder, type MaybePromise } from "../../util";
+ 
+ /**
+  * An operand of a `.relate()` callback: a name, bound when the call runs to
+@@ -132,11 +132,11 @@ function flattenClausesSync(c: unknown, out: unknown[] = []): unknown[] {
+ }
+ 
+ /** Flatten clauses the way an operator flattens its children
+- *  (`flattenAndAwaitPromises`), with two additions: any thenable is awaited,
++ *  (`flattenChildren`), with two additions: any thenable is awaited,
+  *  not only a `Promise`, and `false` is dropped, so `cond && clause` works. */
+ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
+   if (isThenable(c)) c = await c;
+-  const flat = await flattenAndAwaitPromises<unknown>(c);
++  const flat = await flattenChildren<unknown>(c);
+   const parts = await Promise.all(
+     flat.map((x) => (isThenable(x) ? flattenClausesAsync(x) : [x]))
+   );
+@@ -155,61 +155,66 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
+  * `names`, with its 1-based position in the flattened list (for error
+  * messages).
+  */
+-export async function resolveRelateClauses(
++export function resolveRelateClauses(
+   result: unknown,
+   layer: GoFishNode,
+   names: LayerContext,
+   rows?: unknown
+-): Promise<{
++): MaybePromise<{
+   constraints: ConstraintSpec[];
+   nodes: GoFishNode[];
+   positions: number[];
+ }> {
+-  const awaited = isThenable(result) ? await result : result;
+-  if (!Array.isArray(awaited)) {
+-    throw new Error(
+-      `.relate(): the callback must return a list of clauses, got ${String(
+-        awaited
+-      )}.`
+-    );
+-  }
+-  const clauses = containsThenable(awaited)
+-    ? await flattenClausesAsync(awaited)
+-    : flattenClausesSync(awaited);
+-  const constraints: ConstraintSpec[] = [];
+-  const terms: { term: unknown; position: number }[] = [];
+-  clauses.forEach((c, i) => {
+-    const position = i + 1;
+-    if (isConstraintSpec(c)) constraints.push(c);
+-    else if (c instanceof RelateOperand || c instanceof GoFishRef) {
+-      throw new Error(
+-        `.relate(): clause ${position} is a bare reference${
+-          c instanceof RelateOperand ? ` ("${c.name}")` : ""
+-        }. A reference draws nothing and places nothing on its own; use it ` +
+-          `as an operand of a constraint or as a child of a drawing clause, ` +
+-          `e.g. arrow({}, [a, b]).`
+-      );
+-    } else terms.push({ term: c, position });
+-  });
+-  validateOperands(constraints, layer);
+-  // One at a time, like `reifyChildrenSequentially`: resolving a term can
+-  // have effects (a mark function or builder runs), so their order is kept.
+-  const nodes: GoFishNode[] = [];
+-  const positions: number[] = [];
+-  for (const { term, position } of terms) {
+-    // A drawing clause is a mark position over the layer's rows, as the
+-    // layer's children are: an empty-scope `chart()` in it binds them.
+-    const node = await resolveMarkResult(term as any, names, rows);
+-    if (!(node instanceof GoFishNode)) {
++  return andThen(result, (awaited) => {
++    if (!Array.isArray(awaited)) {
+       throw new Error(
+-        `.relate(): clause ${position} is neither a constraint nor a mark or ` +
+-          `operator (got ${String(node)}).`
++        `.relate(): the callback must return a list of clauses, got ${String(
++          awaited
++        )}.`
+       );
+     }
+-    nodes.push(node);
+-    positions.push(position);
+-  }
+-  return { constraints, nodes, positions };
++    const flat = containsThenable(awaited)
++      ? flattenClausesAsync(awaited)
++      : flattenClausesSync(awaited);
++    return andThen(flat, (clauses) => {
++      const constraints: ConstraintSpec[] = [];
++      const terms: { term: unknown; position: number }[] = [];
++      clauses.forEach((c, i) => {
++        const position = i + 1;
++        if (isConstraintSpec(c)) constraints.push(c);
++        else if (c instanceof RelateOperand || c instanceof GoFishRef) {
++          throw new Error(
++            `.relate(): clause ${position} is a bare reference${
++              c instanceof RelateOperand ? ` ("${c.name}")` : ""
++            }. A reference draws nothing and places nothing on its own; use it ` +
++              `as an operand of a constraint or as a child of a drawing clause, ` +
++              `e.g. arrow({}, [a, b]).`
++          );
++        } else terms.push({ term: c, position });
++      });
++      validateOperands(constraints, layer);
++      // One at a time, like `reifyChildrenSequentially`: resolving a term can
++      // have effects (a mark function or builder runs), so their order is
++      // kept. A drawing clause is a mark position over the layer's rows, as
++      // the layer's children are: an empty-scope `chart()` in it binds them.
++      const nodes = mapInOrder(terms, ({ term, position }) =>
++        andThen(resolveMarkResult(term as any, names, rows), (node) => {
++          if (!(node instanceof GoFishNode)) {
++            throw new Error(
++              `.relate(): clause ${position} is neither a constraint nor a ` +
++                `mark or operator (got ${String(node)}).`
++            );
++          }
++          return node;
++        })
++      );
++      return andThen(nodes, (nodes) => ({
++        constraints,
++        nodes,
++        positions: terms.map((t) => t.position),
++      }));
++    });
++  });
+ }
+ 
+ /** Every ref in `node`'s subtree (a ref has no children of its own). */
+diff --git a/packages/gofish-graphics/src/ast/dims.ts b/packages/gofish-graphics/src/ast/dims.ts
+index f77e26b29..00c743fc0 100644
+--- a/packages/gofish-graphics/src/ast/dims.ts
++++ b/packages/gofish-graphics/src/ast/dims.ts
+@@ -231,10 +231,7 @@ export const resolveAxisName = (
+  * in (its parent's), `inner` the scope of its children (different only on a
+  * coord that declares names).
+  */
+-export type AxisScopeHook = (
+-  outer: AxisScope,
+-  inner: AxisScope
+-) => void | Promise<void>;
++export type AxisScopeHook = (outer: AxisScope, inner: AxisScope) => void;
+ 
+ /** The hook a box-dims factory leaves on its node: write the `dims` option
+  *  (if any) onto the node's own per-axis dims array, against `outer`. */
+diff --git a/packages/gofish-graphics/src/ast/elaborationUtils.ts b/packages/gofish-graphics/src/ast/elaborationUtils.ts
+index f0b84b363..3928637ae 100644
+--- a/packages/gofish-graphics/src/ast/elaborationUtils.ts
++++ b/packages/gofish-graphics/src/ast/elaborationUtils.ts
+@@ -1,4 +1,5 @@
+ import { GoFishNode } from "./_node";
++import { now } from "../util";
+ import { type SharingPlan } from "./constraints/compose";
+ import { round12 } from "./cells";
+ import { layer } from "./graphicalOperators/layer";
+@@ -19,10 +20,10 @@ import type { GoFishAST } from "./_ast";
+  * `.hidden()` moves with it the same way, so a hidden mark's label, and a
+  * hidden chart's axes and legend, are hidden with it. Shared
+  * by the axis, legend and label elaboration passes. */
+-export async function wrapPreservingIdentity(
++export function wrapPreservingIdentity(
+   node: GoFishNode,
+-  build: (node: GoFishNode) => GoFishNode | Promise<GoFishNode>
+-): Promise<GoFishNode> {
++  build: (node: GoFishNode) => GoFishNode
++): GoFishNode {
+   const origKey = node.key;
+   node.key = undefined;
+   const moved = MOVED_FIELDS.map(([field, unset]) => {
+@@ -30,7 +31,7 @@ export async function wrapPreservingIdentity(
+     (node as any)[field] = unset;
+     return [field, unset, value] as const;
+   });
+-  const root = await build(node);
++  const root = build(node);
+   if (origKey !== undefined) root.setKey(origKey);
+   for (const [field, unset, value] of moved)
+     if (value !== unset) (root as any)[field] = value;
+@@ -69,11 +70,8 @@ export type ChromeRing = {
+  *  placement is first-write-wins, so the box the ring reads is placed before
+  *  anything seats off it): at the ring's origin, by its baseline, so a
+  *  chain of chrome against it moves only the chrome. */
+-export async function wrapRing(
+-  inner: GoFishNode,
+-  ring: ChromeRing
+-): Promise<GoFishNode> {
+-  const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
++export function wrapRing(inner: GoFishNode, ring: ChromeRing): GoFishNode {
++  const root = layer([inner, ...ring.nodes]) as GoFishNode;
+   root._transparent = true;
+   // A ring's content is the box it dresses, seated in the ring's own frame:
+   // it is the ring's own set on both axes, so the ring reports the content's
+@@ -93,20 +91,16 @@ export async function wrapRing(
+     return { sets: [sets, [...sets]], nested: [new Set(), new Set()] };
+   });
+   // Every handle is a slot: the content is slot 0, and each of the ring's
+-  // shapes is the slot of the child `layer` made of it. A shape may be
+-  // handed in as the promise its builder returned, which the layer awaits:
+-  // awaiting it again gives the same node, so each entry is matched to its
+-  // child by identity, and a shape the layer did not keep is an error, not
+-  // a shifted slot.
++  // shapes is the slot of the child `layer` made of it. Each shape is
++  // matched to its child by identity, and a shape the layer did not keep is
++  // an error, not a shifted slot.
+   const slots = new Map<unknown, number>();
+-  for (const entry of ring.nodes) {
+-    const node = await entry;
++  for (const node of ring.nodes) {
+     const k = root.indexOfChild(node);
+     if (k === undefined || k === 0)
+       throw new Error(
+         "[gofish] wrapRing: a shape of the ring is not a child of its layer"
+       );
+-    slots.set(entry, k);
+     slots.set(node, k);
+   }
+   const at = (node: GoFishAST): SlotOperand => {
+@@ -116,10 +110,13 @@ export async function wrapRing(
+     return new SlotOperand(root, k);
+   };
+   const content = new SlotOperand(root, 0);
+-  await root.INTERNAL_relate([
+-    Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [content]),
+-    ...ring.constraints(at, content),
+-  ]);
++  now(
++    root.INTERNAL_relate([
++      Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [content]),
++      ...ring.constraints(at, content),
++    ]),
++    "a chrome ring's constraints"
++  );
+   return root;
+ }
+ 
+diff --git a/packages/gofish-graphics/src/ast/gofish.tsx b/packages/gofish-graphics/src/ast/gofish.tsx
+index 8ac42990d..1aca821cb 100644
+--- a/packages/gofish-graphics/src/ast/gofish.tsx
++++ b/packages/gofish-graphics/src/ast/gofish.tsx
+@@ -404,7 +404,7 @@ export const axesEnabled = (
+   return enabled;
+ };
+ 
+-export async function layout(
++export function layout(
+   {
+     w,
+     h,
+@@ -432,11 +432,11 @@ export async function layout(
+      *  inputs through, so a tooltip in it has a focus. */
+     interaction?: InteractionRuntime;
+   },
+-  child: GoFishNode | Promise<GoFishNode>,
++  child: GoFishNode,
+   contexts: {
+     session: RenderSession;
+   }
+-): Promise<{
++): {
+   underlyingSpaceX: UnderlyingSpace;
+   underlyingSpaceY: UnderlyingSpace;
+   posScales: PixelPosScales;
+@@ -445,9 +445,10 @@ export async function layout(
+   height: number;
+   legendFields: ReadonlySet<string>;
+   warnings: LayoutWarning[];
+-}> {
+-  child = await child;
+-  // The render's size is the outermost room: pixels only (a size from the
++} {
++  // The whole pass is synchronous: the node tree it lays out is built, and
++  // whatever building it waited for (data, `derive` and Python callbacks,
++  // images) is done. The render's size is the outermost room: pixels only (a size from the
+   // HTML container is a separate feature).
+   rejectLength("render's w", w);
+   rejectLength("render's h", h);
+@@ -467,7 +468,7 @@ export async function layout(
+   // Resolve axis names (polar theta/r, geo lon/lat, …) BEFORE space inference
+   // reads the dims: run each node's deferred axis-scope work (a mark's `dims`,
+   // spread's `dir`, scatter's `dims`). Top-down + scope-bounded (see resolveAliases).
+-  await child.resolveAliases();
++  child.resolveAliases();
+   // Then every reference, the operands of the constraints that pass
+   // installed included (one round of the fixed point; see `reresolve`).
+   resolveReferences(child);
+@@ -481,11 +482,11 @@ export async function layout(
+   // wrappers, every cached space is cleared and recomputed from scratch. The
+   // color scale is NOT re-resolved: it was final before chrome was elaborated
+   // (the legend shows it), and chrome adds no data colors.
+-  const reresolve = async (n: GoFishNode) => {
++  const reresolve = (n: GoFishNode) => {
+     n.setRenderSession(contexts.session);
+     // The inserted chrome is built from operators (Spread) whose constraints
+     // install in this pass; nodes resolved before are consumed and untouched.
+-    await n.resolveAliases();
++    n.resolveAliases();
+     resolveReferences(n);
+     n.clearUnderlyingSpace();
+     n.resolveUnderlyingSpace();
+@@ -571,7 +572,7 @@ export async function layout(
+     });
+   });
+   child._chromeRequest = {
+-    legend: await legendRing(
++    legend: legendRing(
+       {
+         color: hasLegend
+           ? (unitScale as CategoricalScale | ContinuousColorScale)
+@@ -587,7 +588,7 @@ export async function layout(
+     const chartAxes = n === child ? axes : n._chartAxes;
+     n._chromeRequest = { ...n._chromeRequest, axes: chartAxes };
+   }
+-  const elaborated = await elaborateChrome(child, {
++  const elaborated = elaborateChrome(child, {
+     sides: [read[0].side, read[1].side],
+     labelSettings: labelRowSettings ?? manualLabelRowSettings(read),
+     perLevel,
+@@ -602,7 +603,7 @@ export async function layout(
+   if (levelsErr !== undefined) throw levelsErr;
+   if (elaborated.changed) {
+     child = elaborated.node;
+-    await reresolve(child);
++    reresolve(child);
+   }
+ 
+   // The modifiers lowered as layers over their selections
+@@ -618,10 +619,10 @@ export async function layout(
+     : [labelLayer];
+   for (const modifier of layers) {
+     const lowered: { node: GoFishNode; changed: boolean } =
+-      await lowerSelectionLayers(child, modifier);
++      lowerSelectionLayers(child, modifier);
+     if (lowered.changed) {
+       child = lowered.node;
+-      await reresolve(child);
++      reresolve(child);
+     }
+   }
+   perfAdd("axes", perfNow() - __tAxes);
+@@ -1285,7 +1286,7 @@ async function layoutOnce(
+       perfAdd("fonts", perfNow() - __tFonts);
+     }
+ 
+-    return await layout(
++    return layout(
+       {
+         w,
+         h,
+@@ -1298,7 +1299,7 @@ async function layoutOnce(
+         labelRowSettings,
+         interaction: options.interaction,
+       },
+-      child,
++      await child,
+       contexts
+     );
+   } finally {
+@@ -1461,7 +1462,7 @@ export function gofish(
+       const node = await build();
+       // A thunk can build the chart again, which `label.angle: "auto"` needs
+       // (see `GoFishNode.rebuild`); the rebuild is for the same render.
+-      node.rebuild = build;
++      node.rebuild = async () => build();
+       return { node, options: { ...options } };
+     }, container);
+   }
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
+index 392de1f03..356694ab8 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
+@@ -215,7 +215,7 @@ export type LayerOptions = {
+   FancyDims;
+ 
+ export const layer = createNodeOperatorSequential(
+-  async (
++  (
+     childrenOrOptions: LayerOptions | GoFishAST[],
+     maybeChildren?: GoFishAST[]
+   ) => {
+@@ -244,7 +244,7 @@ export const layer = createNodeOperatorSequential(
+       // target's, which only a layer plans (`planPlacement`), so the space
+       // gets the nodes alone.
+       return applyFilter(
+-        await coord(
++        coord(
+           { ...rest, transform: coordTransform },
+           children.filter((c): c is GoFishNode => c instanceof GoFishNode)
+         ),
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
+index 24b2ad92c..3b85d46ef 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
+@@ -2,6 +2,7 @@
+ // @wiki Underlying Space — /internals/core/underlying-space
+ // </gofish-wiki>
+ 
++import { now } from "../../util";
+ import { CycleCell, RegionCell, spell, type BinStep } from "../cells";
+ import { columnValue, resolveColumn } from "../channels";
+ import { isField, type FieldAccessor } from "../data";
+@@ -186,7 +187,7 @@ type PartitionNodeProps = {
+ };
+ 
+ const PartitionNode = createNodeOperator(
+-  async (
++  (
+     {
+       key,
+       dir,
+@@ -208,10 +209,10 @@ const PartitionNode = createNodeOperator(
+         );
+       return cell;
+     });
+-    const node = (await layer({ key, ...rest } as any, children)) as GoFishNode;
++    const node = layer({ key, ...rest } as any, children) as GoFishNode;
+     // `dir` may be a name the enclosing coordinate space declares, so the
+     // constraints wait for the resolveAliases pass.
+-    node._elaborateInAxisScope = async (_outer, inner) => {
++    node._elaborateInAxisScope = (_outer, inner) => {
+       // The axes the key's columns are placed along: `dir` for a field, both
+       // for a struct (a cell of the plane).
+       const placed: (0 | 1)[] =
+@@ -237,14 +238,17 @@ const PartitionNode = createNodeOperator(
+         (axis) => regions[0]?.spans[axis] === undefined
+       );
+       const refs = childSlots(node);
+-      await node.INTERNAL_relate([
+-        ...refs.map((ref, i) =>
+-          Constraint.position({ region: regions[i] }, [ref])
+-        ),
+-        ...free.map((axis) =>
+-          Constraint.align({ [axisName(axis)]: alignment }, refs)
+-        ),
+-      ]);
++      now(
++        node.INTERNAL_relate([
++          ...refs.map((ref, i) =>
++            Constraint.position({ region: regions[i] }, [ref])
++          ),
++          ...free.map((axis) =>
++            Constraint.align({ [axisName(axis)]: alignment }, refs)
++          ),
++        ]),
++        "partition's constraints"
++      );
+     };
+     if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
+     return node;
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/scatter.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/scatter.tsx
+index 955182984..4bab9cba0 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/scatter.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/scatter.tsx
+@@ -1,3 +1,4 @@
++import { now } from "../../util";
+ import { axisOverrideOf, GoFishNode } from "../_node";
+ import type { AxisOptions } from "../gofish";
+ import { MaybeValue, type PositionValue } from "../data";
+@@ -193,10 +194,7 @@ function placedChildren(
+ }
+ 
+ const Scatter = createNodeOperator(
+-  async (
+-    options: ScatterProps,
+-    children: GoFishAST[] | Collection<GoFishAST>
+-  ) => {
++  (options: ScatterProps, children: GoFishAST[] | Collection<GoFishAST>) => {
+     const {
+       key,
+       x,
+@@ -235,14 +233,11 @@ const Scatter = createNodeOperator(
+       dims
+     );
+     const childList = placed.children;
+-    const node = (await layer(
+-      { key, ...fancyDims } as any,
+-      childList
+-    )) as GoFishNode;
++    const node = layer({ key, ...fancyDims } as any, childList) as GoFishNode;
+     // `dims` names its axes the way the enclosing coordinate space does
+     // (`theta`, `lon`, ...), so the per-axis placement, and the constraints
+     // built from it, wait for the resolveAliases pass.
+-    node._elaborateInAxisScope = async (_outer, inner) => {
++    node._elaborateInAxisScope = (_outer, inner) => {
+       if (overlap !== undefined) assertLinearSpace(inner);
+       const placement = scatterAxes(
+         placed.xy,
+@@ -294,7 +289,7 @@ const Scatter = createNodeOperator(
+             ? createOverlapConstraint(axisName(axis), alignment, overlap, refs)
+             : Constraint.align({ [axisName(axis)]: alignment }, refs)
+         );
+-      await node.INTERNAL_relate(cs);
++      now(node.INTERNAL_relate(cs), "scatter's constraints");
+     };
+     if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
+     return node;
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx
+index 6e85fd879..b648e50a4 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx
+@@ -1,3 +1,4 @@
++import { now } from "../../util";
+ import { axisOverrideOf, GoFishNode } from "../_node";
+ import { checkLengths, type LengthValue } from "../length";
+ import { Frontend } from "gofish-ir";
+@@ -51,7 +52,7 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
+  * rule that a data-valued size nests its content.
+  */
+ export const Spread = createNodeOperator(
+-  async (
++  (
+     {
+       key,
+       dir,
+@@ -133,26 +134,24 @@ export const Spread = createNodeOperator(
+       }
+       // The wrapper's size is on the `dir` axis, named the same way `dir`
+       // names it, so it resolves in the same scope pass as `dir` itself.
+-      childList = await Promise.all(
+-        childList.map(async (child, i) => {
+-          const wrapped = (await layer(
+-            { dims: { [dirName]: { size: size[i] } } } as any,
+-            [child]
+-          )) as GoFishNode;
+-          // Copy split identity onto the wrapper so downstream ordinal-axis
+-          // labeling / resolve()-by-key see the same key/datum the unwrapped
+-          // child would have — the wrapper is purely a sizing shim.
+-          if (child instanceof GoFishNode) {
+-            wrapped.setKey(child.key ?? "");
+-            wrapped._syntheticKey = child._syntheticKey;
+-            wrapped.keyCell = child.keyCell;
+-            wrapped.keyBy = child.keyBy;
+-            (wrapped as any).__splitBy = (child as any).__splitBy;
+-            wrapped.datum = child.datum;
+-          }
+-          return wrapped;
+-        })
+-      );
++      childList = childList.map((child, i) => {
++        const wrapped = layer(
++          { dims: { [dirName]: { size: size[i] } } } as any,
++          [child]
++        ) as GoFishNode;
++        // Copy split identity onto the wrapper so downstream ordinal-axis
++        // labeling / resolve()-by-key see the same key/datum the unwrapped
++        // child would have — the wrapper is purely a sizing shim.
++        if (child instanceof GoFishNode) {
++          wrapped.setKey(child.key ?? "");
++          wrapped._syntheticKey = child._syntheticKey;
++          wrapped.keyCell = child.keyCell;
++          wrapped.keyBy = child.keyBy;
++          (wrapped as any).__splitBy = (child as any).__splitBy;
++          wrapped.datum = child.datum;
++        }
++        return wrapped;
++      });
+     }
+ 
+     // Its constraints refer to the children by slot (`SlotOperand`), so no
+@@ -161,21 +160,21 @@ export const Spread = createNodeOperator(
+     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
+     // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
+     // node: it maps its keyed domain into that size.
+-    const node = (await layer(
++    const node = layer(
+       {
+         key,
+         ...fancyDims,
+       } as any,
+       childList
+-    )) as GoFishNode;
++    ) as GoFishNode;
+     // `dir` names an axis in the scope of the spread's children: `x`/`y`, or a
+     // name the enclosing coordinate space declares (`theta`, `lon`, ...). The
+     // spread is built before that space exists, so the constraints, which need
+     // the axis, are installed by the resolveAliases pass, after the layer's
+     // own `dims` hook (if the spread was given `dims`).
+     const layerDims = node._elaborateInAxisScope;
+-    node._elaborateInAxisScope = async (outer, inner) => {
+-      await layerDims?.(outer, inner);
++    node._elaborateInAxisScope = (outer, inner) => {
++      layerDims?.(outer, inner);
+       const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
+       const alignAxis = axisName((1 - stackDir) as Direction);
+       const stackAxis = axisName(stackDir);
+@@ -192,28 +191,31 @@ export const Spread = createNodeOperator(
+       // self-positioned child (a scatter facet) is left alone by `align`
+       // automatically — the placement solver reads the child's abstract
+       // placement, so no guard flag.
+-      await node.INTERNAL_relate([
+-        Constraint.align({ [alignAxis]: alignment }, refs),
+-        Constraint.distribute(
+-          {
+-            dir: stackAxis,
+-            spacing,
+-            glue,
+-            order: reverse ? "reverse" : "forward",
+-            baseline:
+-              baseline?.kind === "at"
+-                ? { ...baseline, part: refs[baseline.part] }
+-                : baseline,
+-            hasMidpoint,
+-            // The grouping field for this (stack) axis → the ORDINAL
+-            // space's measure, so a spread-by-category axis titles itself
+-            // off its space.
+-            measure: axisMeasures?.[dirName],
+-            hasOrder,
+-          },
+-          refs
+-        ),
+-      ]);
++      now(
++        node.INTERNAL_relate([
++          Constraint.align({ [alignAxis]: alignment }, refs),
++          Constraint.distribute(
++            {
++              dir: stackAxis,
++              spacing,
++              glue,
++              order: reverse ? "reverse" : "forward",
++              baseline:
++                baseline?.kind === "at"
++                  ? { ...baseline, part: refs[baseline.part] }
++                  : baseline,
++              hasMidpoint,
++              // The grouping field for this (stack) axis → the ORDINAL
++              // space's measure, so a spread-by-category axis titles itself
++              // off its space.
++              measure: axisMeasures?.[dirName],
++              hasOrder,
++            },
++            refs
++          ),
++        ]),
++        "spread's constraints"
++      );
+       // Tag with stack direction so coord can map axis overrides to polar dims.
+       node.axisDir = stackDir;
+     };
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/table.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/table.tsx
+index 582e56ed4..a45fb57e5 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/table.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/table.tsx
+@@ -1,3 +1,4 @@
++import { now } from "../../util";
+ import { GoFishNode } from "../_node";
+ import { GoFishAST } from "../_ast";
+ import { createNodeOperator } from "../withGoFish";
+@@ -17,7 +18,7 @@ import type { OrdinalKey } from "../underlyingSpace";
+  * and centers it. See `constraints/grid.ts`.
+  */
+ const Table = createNodeOperator(
+-  async (
++  (
+     {
+       key,
+       numCols: numColsOpt,
+@@ -48,24 +49,27 @@ const Table = createNodeOperator(
+ 
+     // The grid refers to the cells by slot, as spread does.
+ 
+-    const node = (await layer(children)) as GoFishNode;
+-    await node.INTERNAL_relate([
+-      // grid is table's private elaboration target — not part of the public
+-      // `Constraint` factory (see constraints/index.ts).
+-      createGridConstraint(
+-        {
+-          numCols,
+-          spacing,
+-          colKeys,
+-          rowKeys,
+-          colMeasure: axisMeasures?.x,
+-          rowMeasure: axisMeasures?.y,
+-          colHasOrder,
+-          rowHasOrder,
+-        },
+-        childSlots(node)
+-      ),
+-    ]);
++    const node = layer(children) as GoFishNode;
++    now(
++      node.INTERNAL_relate([
++        // grid is table's private elaboration target — not part of the public
++        // `Constraint` factory (see constraints/index.ts).
++        createGridConstraint(
++          {
++            numCols,
++            spacing,
++            colKeys,
++            rowKeys,
++            colMeasure: axisMeasures?.x,
++            rowMeasure: axisMeasures?.y,
++            colHasOrder,
++            rowHasOrder,
++          },
++          childSlots(node)
++        ),
++      ]),
++      "table's grid"
++    );
+ 
+     // `_ordinalKeyMap`: axis elaboration runs BEFORE layout and needs the
+     // representative cell for each col/row key — first-row cells for columns,
+diff --git a/packages/gofish-graphics/src/ast/legends/elaborate.tsx b/packages/gofish-graphics/src/ast/legends/elaborate.tsx
+index b24f210f2..8bdd59c83 100644
+--- a/packages/gofish-graphics/src/ast/legends/elaborate.tsx
++++ b/packages/gofish-graphics/src/ast/legends/elaborate.tsx
+@@ -2,6 +2,7 @@
+ // @wiki Legends — /internals/frontend/legends
+ // </gofish-wiki>
+ 
++import { now } from "../../util";
+ import { breadthFirst, GoFishNode } from "../_node";
+ import { Rect } from "../shapes/rect";
+ import { Text } from "../shapes/text";
+@@ -55,18 +56,11 @@ function legendRow(key: any, color: string): GoFishNode {
+  * The swatch column: one row per entry of `colorMap`, in that order, top to
+  * bottom (a `Spread({dir:"y"})` reads top-down).
+  */
+-export async function legendColumn(
+-  colorMap: Map<any, string>
+-): Promise<GoFishNode> {
++export function legendColumn(colorMap: Map<any, string>): GoFishNode {
+   const rows = [...colorMap.entries()].map(([key, color]) =>
+     legendRow(key, color)
+   );
+-  // `Spread` returns a PromiseWithRender — await the real node.
+-  const col = (await (Spread as any)(
+-    { dir: "y", spacing: ROW_GAP, alignment: "start" },
+-    rows
+-  )) as GoFishNode;
+-  return col;
++  return Spread({ dir: "y", spacing: ROW_GAP, alignment: "start" }, rows);
+ }
+ 
+ /**
+@@ -133,10 +127,10 @@ const BAR_LABEL_GAP = 4; // gap between a tick mark and its label
+  * is the union of these, so the colorbar is measured by normal layout exactly
+  * like the swatch column.
+  */
+-export async function legendColorbar(
++export function legendColorbar(
+   scaleFn: (v: number) => string,
+   domain: [number, number]
+-): Promise<GoFishNode> {
++): GoFishNode {
+   const [min, max] = domain;
+   // A one-value domain still needs a span to lay the bar out over.
+   const span = max === min ? 1 : max - min;
+@@ -173,11 +167,11 @@ export async function legendColorbar(
+     })
+   );
+ 
+-  const root = (await (layer as any)({ h: BAR_HEIGHT }, [
++  const root = (layer as any)({ h: BAR_HEIGHT }, [
+     ...bands,
+     ...tickMarks,
+     ...tickLabels,
+-  ])) as GoFishNode;
++  ]) as GoFishNode;
+ 
+   const at = slotOf(root);
+   const cs: any[] = [];
+@@ -219,7 +213,7 @@ export async function legendColorbar(
+       )
+     );
+   });
+-  await root.INTERNAL_relate(cs);
++  now(root.INTERNAL_relate(cs), "the colorbar's constraints");
+ 
+   return root;
+ }
+@@ -246,7 +240,7 @@ const ENTRY_SWATCH_GAP = 14; // gap between the entry and the swatches below
+  * many pixels, so the legend column's claim is a claim in σ and the fit
+  * solves the plot's room and the entry's length together.
+  */
+-async function lengthEntryNode(e: LengthEntry): Promise<GoFishNode> {
++function lengthEntryNode(e: LengthEntry): GoFishNode {
+   const along = e.dim === 1 ? "y" : "x";
+   const across = e.dim === 1 ? "x" : "y";
+   const line = Rect(
+@@ -261,29 +255,32 @@ async function lengthEntryNode(e: LengthEntry): Promise<GoFishNode> {
+         : { w: 1, h: ENTRY_TICK, fill: LABEL_COLOR }
+     )
+   );
+-  const bracket = (await (layer as any)([line, ...ticks])) as GoFishNode;
++  const bracket = layer([line, ...ticks]) as GoFishNode;
+   const at = slotOf(bracket);
+-  await bracket.INTERNAL_relate([
+-    // The ticks hang from the line, one at each end, on the side the label
+-    // is on.
+-    Constraint.align({ [across]: "start" } as any, [
+-      at(line),
+-      at(ticks[0]),
+-      at(ticks[1]),
++  now(
++    bracket.INTERNAL_relate([
++      // The ticks hang from the line, one at each end, on the side the label
++      // is on.
++      Constraint.align({ [across]: "start" } as any, [
++        at(line),
++        at(ticks[0]),
++        at(ticks[1]),
++      ]),
++      Constraint.align({ [along]: "start" } as any, [at(line), at(ticks[0])]),
++      Constraint.align({ [along]: "end" } as any, [at(line), at(ticks[1])]),
+     ]),
+-    Constraint.align({ [along]: "start" } as any, [at(line), at(ticks[0])]),
+-    Constraint.align({ [along]: "end" } as any, [at(line), at(ticks[1])]),
+-  ]);
++    "a length entry's constraints"
++  );
+   const text = Text({
+     text: e.label,
+     fontSize: LABEL_FONT_SIZE,
+     fill: LABEL_COLOR,
+   });
+   // The label sits past the bracket's ticks, across from its middle.
+-  return (await (Spread as any)(
+-    { dir: "x", spacing: ENTRY_LABEL_GAP, alignment: "middle" },
+-    [bracket, text]
+-  )) as GoFishNode;
++  return Spread({ dir: "x", spacing: ENTRY_LABEL_GAP, alignment: "middle" }, [
++    bracket,
++    text,
++  ]);
+ }
+ 
+ /**
+@@ -299,22 +296,22 @@ async function lengthEntryNode(e: LengthEntry): Promise<GoFishNode> {
+  * the screen, when it does (see `seriesDownTheScreen`), and "top" is read in
+  * the axis order of the rings around it.
+  */
+-export async function legendRing(
++export function legendRing(
+   scales: {
+     color?: CategoricalScale | ContinuousColorScale;
+     lengths: LengthEntry[];
+   },
+   owner: GoFishNode
+-): Promise<ChromeRing | undefined> {
++): ChromeRing | undefined {
+   const { color, lengths } = scales;
+   const entries = [
+-    ...(await Promise.all(lengths.map(lengthEntryNode))),
++    ...lengths.map(lengthEntryNode),
+     ...(color === undefined
+       ? []
+       : [
+           "scaleFn" in color
+-            ? await legendColorbar(color.scaleFn, color.domain)
+-            : await legendColumn(legendEntries(color, owner)),
++            ? legendColorbar(color.scaleFn, color.domain)
++            : legendColumn(legendEntries(color, owner)),
+         ]),
+   ];
+   if (entries.length === 0) return undefined;
+diff --git a/packages/gofish-graphics/src/ast/marks/chart.ts b/packages/gofish-graphics/src/ast/marks/chart.ts
+index 763e7038f..3fbca99ed 100644
+--- a/packages/gofish-graphics/src/ast/marks/chart.ts
++++ b/packages/gofish-graphics/src/ast/marks/chart.ts
+@@ -26,7 +26,13 @@ import { type ColorConfig } from "../colorSchemes";
+ 
+ export type { ColorConfig };
+ import { colorValue, resolveChannelAccessors } from "../channels";
+-import { isThenable } from "../../util";
++import {
++  allOf,
++  andThen,
++  isThenable,
++  mapInOrder,
++  type MaybePromise,
++} from "../../util";
+ import { MARK_CHANNELS } from "../markChannels.generated";
+ import {
+   liveChannelsOf,
+@@ -716,16 +722,25 @@ const groupChannelsOf = (type: string): Record<string, "color" | "raw"> =>
+  * Python accessors are resolved first, over exactly the rows that walk reads
+  * (`rowsReached`), in one batch call each (`resolveChannelAccessors`).
+  */
+-async function resolveGroupPaint<O extends Record<string, unknown>>(
++function resolveGroupPaint<O extends Record<string, unknown>>(
+   type: string,
+   opts: O,
+   group: unknown
+-): Promise<O> {
++): MaybePromise<O> {
+   const paint = groupChannelsOf(type);
+-  const pending = resolveChannelAccessors(opts, paint, () =>
+-    rowsReached(group)
++  return andThen(
++    resolveChannelAccessors(opts, paint, () => rowsReached(group)),
++    (resolved) => readGroupPaint(type, paint, resolved, group)
+   );
+-  let resolved = isThenable(pending) ? await pending : pending;
++}
++
++/** {@link resolveGroupPaint} once its Python accessors are resolved. */
++function readGroupPaint<O extends Record<string, unknown>>(
++  type: string,
++  paint: ReturnType<typeof groupChannelsOf>,
++  resolved: O,
++  group: unknown
++): O {
+   for (const key of Object.keys(paint)) {
+     const raw = (resolved as any)[key];
+     if (typeof raw !== "string" && typeof raw !== "function") continue;
+@@ -911,28 +926,31 @@ export function createRelationalMark<O extends Record<string, unknown>>(
+     /** Build one connector over `operands` from `o`: its paint (and other
+      *  per-group channels) read off the rows `group` reaches, its live
+      *  channels at `datum`, tagged by `finish`. */
+-    const build = async (
++    const build = (
+       o: O,
+       group: unknown,
+       operands: GoFishAST[],
+       datum: unknown,
+       key?: string,
+       layerContext?: LayerContext
+-    ): Promise<GoFishNode> => {
+-      const paint = await resolveGroupPaint(type, o, group);
+-      // The one call of its `produce`, with its `live()` channels evaluated
+-      // at resolve, in the scope of the context it is applied in.
+-      const node = await withRegistrar(layerContext?.registrar, () =>
+-        produce(
+-          resolveLive(paint, datum),
+-          operands,
+-          inferred,
+-          key,
+-          layerContext
++    ): MaybePromise<GoFishNode> =>
++      andThen(resolveGroupPaint(type, o, group), (paint) =>
++        andThen(
++          // The one call of its `produce`, with its `live()` channels
++          // evaluated at resolve, in the scope of the context it is applied
++          // in.
++          withRegistrar(layerContext?.registrar, () =>
++            produce(
++              resolveLive(paint, datum),
++              operands,
++              inferred,
++              key,
++              layerContext
++            )
++          ),
++          (node) => finish(node as GoFishNode, operands, datum)
+         )
+       );
+-      return finish(node as GoFishNode, operands, datum);
+-    };
+     /** The rows a bag of operands reaches: each operand's datum (a ref's is
+      *  its node's, a node's its own). */
+     const rowsOf = (operands: GoFishAST[]): unknown[] =>
+@@ -948,20 +966,15 @@ export function createRelationalMark<O extends Record<string, unknown>>(
+       // what this form already returned (`produce` is itself async).
+       // The combinator form carries its IR tag (`tagCombinator`), so a
+       // chart that holds it serializes it with its children.
+-      const built = addRenderMethod(
+-        (async () => {
+-          // The same child list every combinator takes: marks, promises and
+-          // nested arrays reify to nodes (`reifyChildren`).
+-          const operands = await reifyChildren(children);
+-          // The connector's paint is read off its operands' data.
+-          return build(
+-            opts,
+-            rowsOf(operands),
+-            operands,
+-            groupDatumOf(operands)
+-          );
+-        })()
++      // The same child list every combinator takes: marks, promises and
++      // nested arrays reify to nodes (`reifyChildren`). The connector's
++      // paint is read off its operands' data.
++      const pending = andThen(reifyChildren(children), (operands) =>
++        build(opts, rowsOf(operands), operands, groupDatumOf(operands))
+       );
++      const built = isThenable(pending)
++        ? addRenderMethod(Promise.resolve(pending))
++        : pending;
+       return tagCombinator(
+         built,
+         type,
+@@ -986,9 +999,9 @@ export function createRelationalMark<O extends Record<string, unknown>>(
+       }
+       const from = spatialOpts.from;
+       const to = spatialOpts.to;
+-      const mark: Mark<any[]> = async (rows: any[], _key, layerContext) => {
+-        const segments = await Promise.all(
+-          rows.map(async (row) => {
++      const mark: Mark<any[]> = (rows: any[], _key, layerContext): any => {
++        const segments = allOf(
++          rows.map((row) => {
+             const a = row[from];
+             const b = row[to];
+             if (!(a instanceof GoFishRef) || !(b instanceof GoFishRef)) {
+@@ -1004,7 +1017,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
+             return build(opts, datum, [a, b], datum, undefined, layerContext);
+           })
+         );
+-        return Layer({}, segments);
++        return andThen(segments, (segments) => Layer({}, segments));
+       };
+       const result = withWire(nameableMark(mark), { type, opts });
+       return result;
+@@ -1020,11 +1033,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
+     // `.mark()`/`.layer()`, and writes it into `inferred`, a cell disjoint
+     // from `opts` (see `tagRelationalFusable`'s doc comment). `opts.dir`, if
+     // given, still wins over the inferred travel direction.
+-    const mark: Mark<GoFishRef[]> = async (
++    const mark: Mark<GoFishRef[]> = (
+       d: GoFishRef[],
+       _key,
+       layerContext
+-    ) => {
++    ): any => {
+       const split = inferred.split;
+       const dir = (opts as any).dir ?? inferred.dir;
+       // Only allocate a copy when there's actually an inferred `dir` to
+@@ -1038,7 +1051,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
+ 
+       if (split !== undefined) {
+         const entries = splitByTiers(split, d);
+-        const nodes = await Promise.all(
++        const nodes = allOf(
+           [...entries].map(([key, groupRefs]) =>
+             build(
+               baseOpts,
+@@ -1050,7 +1063,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
+             )
+           )
+         );
+-        return Layer({}, nodes);
++        return andThen(nodes, (nodes) => Layer({}, nodes));
+       }
+ 
+       // Unsplit: one connector through the whole bag, treated as a single
+@@ -1552,9 +1565,8 @@ export type RelatableMark<T> = Mark<T> & {
+  */
+ const relateModifier = {
+   name: "relate",
+-  apply: async (node, _layerContext, datum, fn) => {
+-    await node.relate(fn, datum);
+-  },
++  apply: (node, _layerContext, datum, fn) =>
++    andThen(node.relate(fn, datum), () => undefined),
+ } satisfies ModifierConfig<[fn: RelateFn]>;
+ 
+ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
+@@ -1589,7 +1601,7 @@ export function layer<T>(
+   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
+   const withChildren =
+     (children: readonly MarkChild[]): Mark<T> =>
+-    async (d, key, _layerContext) => {
++    (d, key, _layerContext): any => {
+       // A layer establishes its OWN name scope: `.name(...)` registrations of
+       // its children go into a registry nested in the enclosing one
+       // (`LayerContext.child`). A `ref(name)`/`selectAll(name)` reads the
+@@ -1599,18 +1611,19 @@ export function layer<T>(
+       // sequentially so a child referencing a name sees earlier siblings'
+       // registrations.
+       const sharedContext = markContext(_layerContext).child();
+-      const resolved: GoFishNode[] = [];
+-      for (const m of children) {
+-        // Each child is a mark position over this layer's rows: an empty-scope
+-        // `chart()` child (or a chain whose first tier is one) binds them
+-        // (issue #243, #1181), as in every combinator and `.mark(...)`.
+-        resolved.push(await resolveMarkResult(m, sharedContext, d, key));
+-      }
+-      const node = await Layer(opts, resolved);
+-      node.datum = datumOfInput(d as unknown[]);
+-      // Its `.relate()` clauses are resolved in the same context.
+-      node._names = sharedContext;
+-      return node;
++      // Each child is a mark position over this layer's rows: an empty-scope
++      // `chart()` child (or a chain whose first tier is one) binds them
++      // (issue #243, #1181), as in every combinator and `.mark(...)`.
++      const resolved = mapInOrder(children, (m) =>
++        resolveMarkResult(m, sharedContext, d, key)
++      );
++      return andThen(resolved, (resolved) => {
++        const node = Layer(opts, resolved);
++        node.datum = datumOfInput(d as unknown[]);
++        // Its `.relate()` clauses are resolved in the same context.
++        node._names = sharedContext;
++        return node;
++      });
+     };
+   // Each child is applied to the layer's own input.
+   const base = forwardInputsResolver(withChildren(marks), marks, (children) =>
+@@ -1636,17 +1649,21 @@ function makeCompositeCombinator<O extends object>(
+     const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) ?? [];
+     const withChildren =
+       (children: readonly MarkChild[]): Mark<T> =>
+-      async (d, key, given) => {
++      (d, key, given): any => {
+         const layerContext = markContext(given);
+-        const operands = await Promise.all(
++        const operands = allOf(
+           children.map((m) => resolveMarkResult(m, layerContext, d, key))
+         );
+         // Its paint (`fill` and `stroke`) is read off its input, as a
+         // connector's is off the group it threads.
+-        const paintOpts = await resolveGroupPaint(irType, opts, d);
+-        const node = await lowLevel(paintOpts, operands);
+-        node.datum = datumOfInput(d as unknown[]);
+-        return node;
++        return andThen(operands, (operands) =>
++          andThen(resolveGroupPaint(irType, opts as any, d), (paintOpts) =>
++            andThen(lowLevel(paintOpts, operands), (node: GoFishNode) => {
++              node.datum = datumOfInput(d as unknown[]);
++              return node;
++            })
++          )
++        );
+       };
+     // Each child is applied to the combinator's own input.
+     const base = forwardInputsResolver(withChildren(marks), marks, (children) =>
+diff --git a/packages/gofish-graphics/src/ast/marks/createOperator.ts b/packages/gofish-graphics/src/ast/marks/createOperator.ts
+index 76f32882a..5a036bfc1 100644
+--- a/packages/gofish-graphics/src/ast/marks/createOperator.ts
++++ b/packages/gofish-graphics/src/ast/marks/createOperator.ts
+@@ -91,7 +91,13 @@ import {
+ import { withWire, wireOf } from "../wire";
+ import { recordTooltip, type TooltipCall } from "../tooltip/request";
+ import { isFlowStep, withFlowStep } from "./compose";
+-import { isThenable } from "../../util";
++import {
++  allOf,
++  andThen,
++  isThenable,
++  mapInOrder,
++  type MaybePromise,
++} from "../../util";
+ import { withKindValues } from "../strategyKind";
+ import { resolveRefData } from "./resolveRefData";
+ import { GoFishRef } from "../_ref";
+@@ -155,30 +161,30 @@ export function withMarkKind<M>(mark: M, kind: MarkKind): M {
+  * Both branches return `GoFishNode[]`. Per-item returns a singleton; expand
+  * returns N nodes 1:1 with the input data.
+  */
+-export async function applyMark<T>(
++export function applyMark<T>(
+   mark: Mark<T> | Mark<T[]>,
+   group: T[],
+   groupKey: string | number | undefined,
+   layerContext: LayerContext
+-): Promise<GoFishNode[]> {
++): MaybePromise<GoFishNode[]> {
+   const kind = getMarkKind(mark);
+   if (kind === "expand") {
+-    const result = await callMark(
+-      mark as Mark<T[]>,
+-      group,
+-      groupKey,
+-      layerContext
+-    );
+-    return Promise.all(
+-      (result as unknown as GoFishNode[]).map((r) =>
+-        resolveMarkResult(r as any, layerContext)
+-      )
++    return andThen(
++      callMark(mark as Mark<T[]>, group, groupKey, layerContext) as any,
++      (result) =>
++        allOf(
++          (result as unknown as GoFishNode[]).map((r) =>
++            resolveMarkResult(r as any, layerContext)
++          )
++        )
+     );
+   }
+   // per-item: one call per leaf; the mark may aggregate. The mark is any
+   // mark position's child (a chart or chain binds the leaf as an empty scope).
+-  const node = await resolveMarkResult(mark, layerContext, group, groupKey);
+-  return [node];
++  return andThen(
++    resolveMarkResult(mark, layerContext, group, groupKey),
++    (node) => [node]
++  );
+ }
+ 
+ /* ------------------------------------------------------------------------ *
+@@ -215,7 +221,7 @@ export type ModifierConfig<Args extends any[] = any[]> = {
+     layerContext: LayerContext,
+     datum: unknown,
+     ...args: Args
+-  ) => void | Promise<void>;
++  ) => MaybePromise<void>;
+   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
+   /** Called once per chained call, with the arguments it was given; what
+    *  it returns is what `apply` and `resolveArgs` receive, for every node
+@@ -328,30 +334,42 @@ function modifierMethod(
+   return (...given: any[]) => {
+     const args = cfg.bind ? cfg.bind(...given) : given;
+     const resolveArgs = cfg.resolveArgs?.(...args);
+-    const wrapped: Mark<any> = async (
++    const wrapped: Mark<any> = (
+       d: any,
+       key?: string | number,
+       given?: LayerContext
+-    ) => {
++    ): any => {
+       const layerContext = markContext(given);
+-      const raw = await callMark(base, d, key, layerContext);
++      const raw = callMark(base, d, key, layerContext) as MaybePromise<any>;
+       // Resolved once per input, however many nodes it produces.
+-      const applied = resolveArgs ? await resolveArgs([d]) : args;
++      const applied = resolveArgs ? resolveArgs([d]) : args;
++      const apply = (node: GoFishNode, a: any[]) =>
++        andThen(cfg.apply(node, layerContext, d, ...a), () => node);
+       // Expand-kind marks return an array of nodes; per-item return one.
+       // Apply the modifier to each produced node either way.
+       if (getMarkKind(base) === "expand") {
+-        const nodes = await Promise.all(
+-          (raw as unknown as GoFishNode[]).map((r) =>
+-            resolveMarkResult(r, layerContext)
++        return andThen(raw, (slices) =>
++          andThen(
++            allOf(
++              (slices as GoFishNode[]).map((r) =>
++                resolveMarkResult(r, layerContext)
++              )
++            ),
++            (nodes) =>
++              andThen(applied, (a) =>
++                andThen(
++                  mapInOrder(nodes, (node) => apply(node, a)),
++                  () => nodes as unknown as GoFishNode
++                )
++              )
+           )
+         );
+-        for (const node of nodes)
+-          await cfg.apply(node, layerContext, d, ...applied);
+-        return nodes as unknown as GoFishNode;
+       }
+-      const node = await resolveMarkResult(raw, layerContext);
+-      await cfg.apply(node, layerContext, d, ...applied);
+-      return node;
++      return andThen(raw, (r) =>
++        andThen(resolveMarkResult(r, layerContext), (node) =>
++          andThen(applied, (a) => apply(node, a))
++        )
++      );
+     };
+     // The same chain with every link's arguments resolved over `inputs`
+     // (`inputsResolver`), so a batch accessor anywhere in it makes one
+@@ -395,15 +413,19 @@ export function translateMark<T>(
+   base: Mark<T>,
+   opts: TranslateModifierOptions
+ ): Mark<T> {
+-  const wrapped: Mark<T> = async (
++  const wrapped: Mark<T> = (
+     d: T,
+     key?: string | number,
+     given?: LayerContext
+-  ) => {
++  ): any => {
+     const layerContext = markContext(given);
+-    const raw = await callMark(base, d, key, layerContext);
+-    const node = await resolveMarkResult(raw, layerContext);
+-    return positionNode(opts, [node]);
++    return andThen(
++      resolveMarkResult(
++        callMark(base, d, key, layerContext) as any,
++        layerContext
++      ),
++      (node) => positionNode(opts, [node])
++    );
+   };
+   withMarkKind(wrapped, getMarkKind(base));
+   withFlowStep(wrapped, isFlowStep(base));
+@@ -1303,7 +1325,7 @@ function stripFactoryKeys<Options extends Record<string, any>>(
+  *  channel is resolved first, over every row `applyChannels` reads (the
+  *  whole input and each entry's rows), so `applyChannels` stays synchronous
+  *  (`resolveChannelAccessors`, #1080). */
+-async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
++function buildLayoutOpts<Datum, Options extends Record<string, any>>(
+   channels: ChannelAnnotations<Options> | undefined,
+   opts: Options,
+   d: Datum[],
+@@ -1311,7 +1333,7 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
+   layoutOpts: Record<string, unknown> | undefined,
+   layerContext: LayerContext,
+   operator = "operator"
+-): Promise<Options> {
++): MaybePromise<Options> {
+   const pending = resolveChannelAccessors(
+     opts,
+     channels,
+@@ -1328,14 +1350,15 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
+     // each entry, the arrays `applyChannels` reads.
+     () => [d, ...(entries?.values() ?? [])]
+   );
+-  const resolved = isThenable(pending) ? await pending : pending;
+-  // The one call of an operator's channel functions.
+-  const withChannels = withRegistrar(layerContext.registrar, () =>
+-    applyChannels(resolved, channels, d, entries, operator)
+-  );
+-  const stripped = stripFactoryKeys(withChannels);
+-  // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
+-  return { ...stripped, ...layoutOpts } as Options;
++  return andThen(pending, (resolved) => {
++    // The one call of an operator's channel functions.
++    const withChannels = withRegistrar(layerContext.registrar, () =>
++      applyChannels(resolved, channels, d, entries, operator)
++    );
++    const stripped = stripFactoryKeys(withChannels);
++    // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
++    return { ...stripped, ...layoutOpts } as Options;
++  });
+ }
+ 
+ /**
+@@ -1365,39 +1388,50 @@ export function createOperator<Datum, Options extends Record<string, any>>(
+       // Combinator form: apply each mark to the same data d, then layout.
+       const withChildren =
+         (children: MarkChild[] | Promise<MarkChild[]>): Mark<Datum[]> =>
+-        async (d: Datum[], key?: string | number, given?: LayerContext) => {
++        (d: Datum[], key?: string | number, given?: LayerContext): any => {
+           const layerContext = markContext(given);
+           // Marks may be a Promise<Mark[]> when produced by helpers like
+-          // `map(...)` — await before mapping. Entries may also be already
+-          // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
+-          // pass non-functions through as-is.
+-          const resolvedMarks = await Promise.resolve(children);
++          // `map(...)`. Entries may also be already resolved nodes (e.g.
++          // `ref(...)`) rather than mark functions, so pass non-functions
++          // through as-is.
+           // Each child is a mark position over `d` (a chart or chain binds it
+           // as an empty scope). Its key is local (not parent-prefixed) —
+           // matches the operator form: a nested grouping's keys are scoped to
+           // its own subtree, so ordinal axis labels read locally and per-layer
+           // uniqueness suffices.
+-          const nodes = await Promise.all(
+-            resolvedMarks.map((mark, i) =>
+-              resolveMarkResult(mark, layerContext, d, i)
++          const nodes = andThen(children, (resolvedMarks) =>
++            allOf(
++              resolvedMarks.map((mark, i) =>
++                resolveMarkResult(mark, layerContext, d, i)
++              )
+             )
+           );
+-          const lowOpts = await buildLayoutOpts(
+-            cfg.channels,
+-            opts,
+-            d,
+-            undefined,
+-            undefined,
+-            layerContext,
+-            cfg.serialize
++          return andThen(nodes, (nodes) =>
++            andThen(
++              buildLayoutOpts(
++                cfg.channels,
++                opts,
++                d,
++                undefined,
++                undefined,
++                layerContext,
++                cfg.serialize
++              ),
++              (lowOpts) =>
++                andThen(
++                  // The one call of the layout function, in the scope of the
++                  // context the operator is applied in (`time.sequence` reads
++                  // its clock in it).
++                  withRegistrar(layerContext.registrar, () =>
++                    layout(lowOpts, nodes)
++                  ) as MaybePromise<GoFishNode>,
++                  (node) => {
++                    node.datum = datumOfInput(d);
++                    return node;
++                  }
++                )
++            )
+           );
+-          // The one call of the layout function, in the scope of the context
+-          // the operator is applied in (`time.sequence` reads its clock in it).
+-          const node = (await withRegistrar(layerContext.registrar, () =>
+-            layout(lowOpts, nodes)
+-          )) as GoFishNode;
+-          node.datum = datumOfInput(d);
+-          return node;
+         };
+       const combinator = nameableMark(withChildren(marks));
+       // Each child is applied to the combinator's own input. A child list
+diff --git a/packages/gofish-graphics/src/ast/marks/markResult.ts b/packages/gofish-graphics/src/ast/marks/markResult.ts
+index 95db044e6..9729805ca 100644
+--- a/packages/gofish-graphics/src/ast/marks/markResult.ts
++++ b/packages/gofish-graphics/src/ast/marks/markResult.ts
+@@ -16,6 +16,7 @@ import { GoFishRef } from "../_ref";
+ import { RelateOperand } from "../constraints/relate";
+ import { isToken } from "../createName";
+ import type { Mark, MarkChild } from "../types";
++import { andThen, isThenable, type MaybePromise } from "../../util";
+ import {
+   scopedRegistrar,
+   withRegistrar,
+@@ -294,19 +295,20 @@ export function callMark(
+  * itself. What a mark function returns is resolved as a root: with
+  * {@link NO_ROWS}, the rows of no partition.
+  */
+-export async function resolveMarkResult(
++export function resolveMarkResult(
+   raw: MarkChild,
+   layerContext: LayerContext,
+   rows: unknown = NO_ROWS,
+   key?: string | number
+-): Promise<GoFishNode> {
+-  // Mark functions are typed as sync-returning, but async marks are a
+-  // valid pattern (e.g. the Python wrapper's mark-as-function bridges via
+-  // RPC and returns `Promise<ChartBuilder>`). Await any thenable upfront
+-  // so the checks below see the resolved value.
+-  if (raw && typeof (raw as any).then === "function") {
+-    raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
+-  }
++): MaybePromise<GoFishNode> {
++  // A mark may be asynchronous (the Python wrapper's mark-as-function
++  // bridges over RPC and returns `Promise<ChartBuilder>`): its result is
++  // resolved once it is there, by the same rule. Anything else resolves in
++  // the call.
++  if (isThenable(raw))
++    return andThen(raw as PromiseLike<MarkChild>, (r) =>
++      resolveMarkResult(r, layerContext, rows, key)
++    );
+   // A `.relate()` operand in term position (a child of a drawing clause) is
+   // a string ref to the node it names, resolved from the layer that bound it.
+   if (raw instanceof RelateOperand) return raw.toRef() as unknown as GoFishNode;
+@@ -322,7 +324,7 @@ export async function resolveMarkResult(
+       // Pass layerContext through so mark wrappers (e.g. .name(...)) that
+       // need to register into the layer context still see it when invoked
+       // here.
+-      callMark(raw as Mark<any>, rows, key, layerContext),
++      callMark(raw as Mark<any>, rows, key, layerContext) as MarkChild,
+       layerContext
+     );
+   return raw as unknown as GoFishNode;
+diff --git a/packages/gofish-graphics/src/ast/selectionLayer.ts b/packages/gofish-graphics/src/ast/selectionLayer.ts
+index 8c53d22a9..ab4b8aa9e 100644
+--- a/packages/gofish-graphics/src/ast/selectionLayer.ts
++++ b/packages/gofish-graphics/src/ast/selectionLayer.ts
+@@ -71,10 +71,7 @@ export type SelectionLayer<E, D> = {
+    * once per home, when its content is about to be wrapped. A tier reads a
+    * node through a ref made as `selectAll` makes one (`selectNode`).
+    */
+-  draw(
+-    entries: E[],
+-    env: { home: GoFishNode; inside: D[] }
+-  ): Promise<DrawnTier<D>> | DrawnTier<D>;
++  draw(entries: E[], env: { home: GoFishNode; inside: D[] }): DrawnTier<D>;
+ };
+ 
+ /**
+@@ -96,10 +93,10 @@ export function homeOf(target: GoFishNode, root: GoFishNode): GoFishNode {
+  * home's content wrapped once with its tier, the deepest homes first. The
+  * wrapper takes the home's place in its parent (or is the new root).
+  */
+-export async function lowerSelectionLayers<E, D>(
++export function lowerSelectionLayers<E, D>(
+   root: GoFishNode,
+   modifier: SelectionLayer<E, D>
+-): Promise<{ node: GoFishNode; changed: boolean }> {
++): { node: GoFishNode; changed: boolean } {
+   const entries = modifier.take(root);
+   if (entries.length === 0) return { node: root, changed: false };
+   const homes = new Map<GoFishNode, E[]>();
+@@ -126,8 +123,8 @@ export async function lowerSelectionLayers<E, D>(
+       .filter((d) => isBelow(d.node, home))
+       .map((d) => d.drawn);
+     let drawn!: D;
+-    const wrapped = await wrapPreservingIdentity(home, async (content) => {
+-      const tier = await modifier.draw(here, { home: content, inside });
++    const wrapped = wrapPreservingIdentity(home, (content) => {
++      const tier = modifier.draw(here, { home: content, inside });
+       drawn = tier.drawn;
+       return wrapRing(content, tier);
+     });
+diff --git a/packages/gofish-graphics/src/ast/tooltip/tooltip.ts b/packages/gofish-graphics/src/ast/tooltip/tooltip.ts
+index 4d73dc1e9..1f9da2b0d 100644
+--- a/packages/gofish-graphics/src/ast/tooltip/tooltip.ts
++++ b/packages/gofish-graphics/src/ast/tooltip/tooltip.ts
+@@ -30,6 +30,7 @@
+  * after the labels (`gofish.tsx`).
+  */
+ import { GoFishNode } from "../_node";
++import { now } from "../../util";
+ import { text } from "../shapes/text";
+ import { spread } from "../graphicalOperators/spread";
+ import { circle, enclose } from "../marks/chart";
+@@ -129,7 +130,7 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
+   },
+   target: (entry) => entry.node,
+   home: (_target, root) => root,
+-  async draw(entries) {
++  draw(entries) {
+     const nodes: GoFishNode[] = [];
+     type Seat = {
+       stand: GoFishNode;
+@@ -148,20 +149,26 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
+     for (const { node, rows, point } of entries) {
+       const stand = selectNode(node) as unknown as GoFishNode;
+       const shown = float(
+-        await resolveMarkResult(box(rows) as any, new LayerContext())
++        now(
++          resolveMarkResult(box(rows) as any, new LayerContext()),
++          "a tooltip's box"
++        )
+       );
+       const marker =
+         point &&
+         float(
+-          await resolveMarkResult(
+-            circle({
+-              r: MARKER_RADIUS,
+-              fill: "white",
+-              // The line's own color: this point, on this line.
+-              stroke: point.color ?? VALUE_FILL,
+-              strokeWidth: 2,
+-            }) as any,
+-            new LayerContext()
++          now(
++            resolveMarkResult(
++              circle({
++                r: MARKER_RADIUS,
++                fill: "white",
++                // The line's own color: this point, on this line.
++                stroke: point.color ?? VALUE_FILL,
++                strokeWidth: 2,
++              }) as any,
++              new LayerContext()
++            ),
++            "a tooltip's marker"
+           )
+         );
+       nodes.push(stand, ...(marker ? [marker] : []), shown);
+diff --git a/packages/gofish-graphics/src/ast/withGoFish.ts b/packages/gofish-graphics/src/ast/withGoFish.ts
+index 4c07738a1..a5662fafd 100644
+--- a/packages/gofish-graphics/src/ast/withGoFish.ts
++++ b/packages/gofish-graphics/src/ast/withGoFish.ts
+@@ -49,7 +49,13 @@ import type { Token } from "./createName";
+ import type { MarkTransition } from "../animation/transition";
+ import { attachTerminals } from "./marks/terminals";
+ import { withWire } from "./wire";
+-import { isThenable } from "../util";
++import {
++  allOf,
++  andThen,
++  isThenable,
++  mapInOrder,
++  type MaybePromise,
++} from "../util";
+ import { withKindValues } from "./strategyKind";
+ import { functionInChannelError, groupFun } from "./groupExpr";
+ 
+@@ -142,12 +148,15 @@ function hasRenderMethod(value: any): value is GoFishNode {
+  * `null`/`undefined` (a thunk that opted out) comes back as `undefined` and is
+  * dropped by the caller.
+  */
+-async function reifyChild(
++function reifyChild(
+   child: unknown,
+   layerContext: LayerContext
+-): Promise<GoFishAST | undefined> {
++): MaybePromise<GoFishAST | undefined> {
+   if (child == null) return undefined;
+-  return (await resolveMarkResult(child as any, layerContext)) ?? undefined;
++  return andThen(
++    resolveMarkResult(child as any, layerContext),
++    (node) => node ?? undefined
++  );
+ }
+ 
+ /** The GoFishNode methods `addRenderMethod` republishes on a promise: each one
+@@ -191,13 +200,19 @@ export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
+   return promise as PromiseWithRender<T>;
+ }
+ 
++/** A built node as it is, or a promise of one with the node's chainable
++ *  methods (`addRenderMethod`): what a node operator returns. */
++function settle<T>(built: MaybePromise<T>): T | PromiseWithRender<T> {
++  return isThenable(built) ? addRenderMethod(Promise.resolve(built)) : built;
++}
++
+ /**
+- * Recursively flattens nested structures and awaits all promises, returning a flat array.
+- * If the type includes functions (thunks), they are preserved (not called).
+- * Always returns a flat array.
+- * ChartBuilder instances are automatically resolved.
++ * Flatten nested child lists into one flat list, waiting only for the
++ * promises in them (a child list from `map(...)`, a child still being
++ * built): a list of values is flattened now. Thunks, marks and chart
++ * builders are kept as they are; resolving them is the child loops' work.
+  */
+-export async function flattenAndAwaitPromises<T>(
++export function flattenChildren<T>(
+   value:
+     | T
+     | Promise<T>
+@@ -205,34 +220,23 @@ export async function flattenAndAwaitPromises<T>(
+     | Promise<ListOfRecursiveArraysOrValues<T | Promise<T>>>
+     | null
+     | undefined
+-): Promise<T[]> {
+-  if (value === null || value === undefined) {
+-    return [];
+-  }
+-
+-  if (value instanceof Promise) {
+-    const resolved = await value;
+-    return flattenAndAwaitPromises(resolved);
+-  }
+-
+-  // A chart/layer builder falls through to the single-value case below, which
+-  // preserves it unresolved — resolution is the child loops' business.
+-
+-  if (Array.isArray(value)) {
+-    const awaited = await Promise.all(
+-      value.map((item) => flattenAndAwaitPromises(item))
++): MaybePromise<T[]> {
++  if (value === null || value === undefined) return [];
++  if (value instanceof Promise)
++    return andThen(value as Promise<any>, (v) => flattenChildren<T>(v));
++  if (Array.isArray(value))
++    return andThen(
++      allOf(value.map((item) => flattenChildren<T>(item))),
++      (parts) => _.flattenDeep(parts) as T[]
+     );
+-    return _.flattenDeep(awaited) as T[];
+-  }
+-
+   return [value as T];
+ }
+ 
+ /**
+- * Process children sequentially, calling thunks and awaiting promises one at a time
+- * ChartBuilder instances are automatically resolved sequentially
++ * Reify children one at a time: a child that reads a name an earlier
++ * sibling registers needs it registered first.
+  */
+-export async function reifyChildrenSequentially(
++export function reifyChildrenSequentially(
+   children: (
+     | GoFishAST
+     | (() => GoFishAST | Promise<GoFishAST>)
+@@ -241,16 +245,11 @@ export async function reifyChildrenSequentially(
+     | Mark<any>
+   )[],
+   layerContext: LayerContext
+-): Promise<GoFishAST[]> {
+-  // A thunked promise must resolve before the next child is resolved.
+-  const resolved: GoFishAST[] = [];
+-
+-  for (const child of children) {
+-    const node = await reifyChild(child, layerContext);
+-    if (node != null) resolved.push(node);
+-  }
+-
+-  return resolved;
++): MaybePromise<GoFishAST[]> {
++  return andThen(
++    mapInOrder(children, (child) => reifyChild(child, layerContext)),
++    (nodes) => nodes.filter((n): n is GoFishAST => n != null)
++  );
+ }
+ 
+ /**
+@@ -271,27 +270,39 @@ function parseOperatorArgs<T extends Record<string, any>, C>(
+   return { opts: {} as T, children: args.length === 1 ? args[0] : undefined };
+ }
+ 
++/** Children that are already nodes (nested lists of them): a node operator
++ *  over these builds its node in the call. */
++export type NodeChildren = ListOfRecursiveArraysOrValues<GoFishAST> | null;
++
++/** A node operator: `(opts?, children?)` or `(children)`. Over nodes it
++ *  returns the node it builds. Over children that must still be resolved (a
++ *  mark, a chart builder, a promise) it returns the node too, unless one of
++ *  them is truly asynchronous; then it returns a promise of it. */
++export type NodeOperator<T, R, C> = {
++  (opts: T, children: NodeChildren): R;
++  (children: NodeChildren): R;
++  (opts?: T, children?: C): R | PromiseWithRender<R>;
++  (children: C): R | PromiseWithRender<R>;
++};
++
+ /**
+  * Turn a low-level `(opts, children) => node` function into an operator that
+- * flattens deeply nested children, awaits promises anywhere in them, and lets
+- * `opts` be omitted.
++ * flattens deeply nested children, resolves marks and builders among them,
++ * and lets `opts` be omitted. The node is built in the call: only a child
++ * that is truly asynchronous (a promise) defers it.
+  */
+ export function createNodeOperator<T extends Record<string, any>, R>(
+   func: (opts: T, children: GoFishAST[]) => R
+-): {
+-  (opts?: T, children?: GoFishChildrenInput): PromiseWithRender<Awaited<R>>;
+-  (children: GoFishChildrenInput): PromiseWithRender<Awaited<R>>;
+-} {
+-  return function (...args: any[]): PromiseWithRender<Awaited<R>> {
+-    const promise = (async () => {
+-      const { opts, children } = parseOperatorArgs<T, GoFishChildrenInput>(
+-        args,
+-        "createNodeOperator"
+-      );
+-      return func(opts, await reifyChildren(children ?? null));
+-    })();
+-    return addRenderMethod(promise) as PromiseWithRender<Awaited<R>>;
+-  };
++): NodeOperator<T, R, GoFishChildrenInput> {
++  return function (...args: any[]) {
++    const { opts, children } = parseOperatorArgs<T, GoFishChildrenInput>(
++      args,
++      "createNodeOperator"
++    );
++    return settle(
++      andThen(reifyChildren(children ?? null), (kids) => func(opts, kids))
++    );
++  } as NodeOperator<T, R, GoFishChildrenInput>;
+ }
+ 
+ /**
+@@ -300,25 +311,22 @@ export function createNodeOperator<T extends Record<string, any>, R>(
+  * node, and each ChartBuilder resolved. Shared by every combinator form, so
+  * a child list means the same thing to all of them.
+  */
+-export async function reifyChildren(
++export function reifyChildren(
+   children: GoFishChildrenInput
+-): Promise<GoFishAST[]> {
+-  // Built before the first `await`, so a combinator called in a user call (a
+-  // component thunk) takes that call's registrar (`LayerContext.registrar`).
++): MaybePromise<GoFishAST[]> {
++  // Built in the call, so a combinator called in a user call (a component
++  // thunk) takes that call's registrar (`LayerContext.registrar`).
+   const layerContext = new LayerContext();
+-  const flattened = await flattenAndAwaitPromises<
+-    | GoFishAST
+-    | Promise<GoFishAST>
+-    | ChartBuilder<any, any>
+-    | LayerBuilder
+-    | Mark<any>
+-  >(children);
+-  const resolvedAll = await Promise.all(
+-    flattened.map((child) => reifyChild(child, layerContext))
++  return andThen(
++    flattenChildren<
++      GoFishAST | ChartBuilder<any, any> | LayerBuilder | Mark<any>
++    >(children as any),
++    (flattened) =>
++      andThen(
++        allOf(flattened.map((child) => reifyChild(child, layerContext))),
++        (all) => all.filter((child): child is GoFishAST => child != null)
++      )
+   );
+-  return resolvedAll.filter(
+-    (child): child is GoFishAST => child != null && !(child instanceof Promise)
+-  ) as GoFishAST[];
+ }
+ 
+ /**
+@@ -328,38 +336,32 @@ export async function reifyChildren(
+  */
+ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
+   func: (opts: T, children: GoFishAST[]) => R
+-): {
+-  (
+-    opts?: T,
+-    children?: GoFishChildrenInputWithThunks
+-  ): PromiseWithRender<Awaited<R>>;
+-  (children: GoFishChildrenInputWithThunks): PromiseWithRender<Awaited<R>>;
+-} {
+-  return function (...args: any[]): PromiseWithRender<Awaited<R>> {
+-    const promise = (async () => {
+-      const { opts, children } = parseOperatorArgs<
+-        T,
+-        GoFishChildrenInputWithThunks
+-      >(args, "createNodeOperatorSequential");
+-      // Built before the first `await`, as in `reifyChildren`.
+-      const layerContext = new LayerContext();
+-      // First phase: flatten and await, preserving thunks, marks, and
+-      // ChartBuilder instances for the sequential second phase.
+-      const flattenedWithThunks = await flattenAndAwaitPromises<
+-        | GoFishAST
+-        | (() => GoFishAST | Promise<GoFishAST>)
+-        | ChartBuilder<any, any>
+-        | LayerBuilder
+-        | Mark<any>
+-      >(children);
+-      const resolvedChildren = await reifyChildrenSequentially(
+-        flattenedWithThunks,
+-        layerContext
+-      );
+-      return func(opts, resolvedChildren);
+-    })();
+-    return addRenderMethod(promise) as PromiseWithRender<Awaited<R>>;
+-  };
++): NodeOperator<T, R, GoFishChildrenInputWithThunks> {
++  return function (...args: any[]) {
++    const { opts, children } = parseOperatorArgs<
++      T,
++      GoFishChildrenInputWithThunks
++    >(args, "createNodeOperatorSequential");
++    // Built in the call, as in `reifyChildren`.
++    const layerContext = new LayerContext();
++    // Flatten first, keeping thunks, marks and builders for the sequential
++    // second phase.
++    return settle(
++      andThen(
++        flattenChildren<
++          | GoFishAST
++          | (() => GoFishAST | Promise<GoFishAST>)
++          | ChartBuilder<any, any>
++          | LayerBuilder
++          | Mark<any>
++        >(children as any),
++        (flat) =>
++          andThen(reifyChildrenSequentially(flat, layerContext), (kids) =>
++            func(opts, kids)
++          )
++      )
++    );
++  } as NodeOperator<T, R, GoFishChildrenInputWithThunks>;
+ }
+ 
+ /**
+@@ -510,11 +512,11 @@ function buildCreatedMark(
+   // (`drawEffect.ts`), whatever the mark draws. It is checked once, here.
+   const { effect, ...channelOpts } = markOpts;
+   const filter = displayFilter(effect, `${serialize ?? "mark"}({ effect })`);
+-  const baseMark: Mark<any> = async (
++  const baseMark: Mark<any> = (
+     d: unknown[],
+     key?: string | number,
+     given?: LayerContext
+-  ) => {
++  ): any => {
+     const _layerContext = markContext(given);
+     if (markOpts.debug) {
+       console.log("mark", key, d);
+@@ -532,98 +534,119 @@ function buildCreatedMark(
+     // resolve-time value; the paint layer re-evaluates it reactively per frame
+     // via the datum-bound thunk baked at lower time. One split, shared with
+     // every other mark factory — see `splitLiveChannels`. It is evaluated
+-    // before the first `await`, in the scope `callMark` sets.
++    // in the call, in the scope `callMark` sets.
+     const { static: staticOpts, live: liveChannels } = splitLiveChannels(
+       channelOpts,
+       d
+     );
+-    const pending = resolveChannelAccessors(staticOpts, channels, () => d);
+-    const resolvedOpts = isThenable(pending) ? await pending : pending;
+-    // A data channel the mark is given that has no value over its rows (the
+-    // mean of no rows, a field of no first row) leaves the mark nothing to
+-    // draw it with, whichever channel it is (a size, a position, a color, a
+-    // text, a slot of a `dims` bag: `hasNoValue`), so the mark is not drawn
+-    // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
+-    // layout. A sum or a count of no rows is 0, a value, and draws.
+-    let noValue = false;
+-    // The one call of a mark's channel functions and of a `createMark` body,
+-    // after the `await` above, in the scope of the mark's context.
+-    const raw = await withRegistrar(_layerContext.registrar, () => {
+-      for (const propName of Object.keys(resolvedOpts)) {
+-        if (propName === "debug") continue;
+-        const channelSpec = channels[propName];
+-        const markValue = resolvedOpts[propName];
+-
+-        const channelType: ChannelType | undefined =
+-          typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+-        const isEntry =
+-          typeof channelSpec === "object" && channelSpec?.entry === true;
+-
+-        if (isEntry && channelType === "size") {
+-          // An already-wrapped value (`v(...)`) is the size as it is.
+-          shapeProps[propName] = isValue(markValue)
+-            ? markValue
+-            : inferEntrySize(markValue, d);
+-        } else if (channelType !== undefined) {
+-          // A function value is read only by a mark that draws along a path
+-          // (the shape form of ribbon and line, which is no createMark).
+-          if (groupFun(markValue, d) !== undefined)
+-            throw functionInChannelError(serialize ?? "mark", propName);
+-          // Each kind reads an already-wrapped value (`datum(...)`) itself
+-          // (`CHANNEL_INFER`): an area roots it, the others keep it.
+-          shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
+-          if (
+-            markValue !== undefined &&
+-            hasNoValue(channelType, shapeProps[propName])
+-          )
+-            noValue = true;
+-        } else {
+-          shapeProps[propName] = markValue;
++    return andThen(
++      resolveChannelAccessors(staticOpts, channels, () => d),
++      (resolvedOpts) =>
++        buildFromOpts(resolvedOpts as Record<string, any>, liveChannels)
++    );
++    function buildFromOpts(
++      resolvedOpts: Record<string, any>,
++      liveChannels: ReturnType<typeof splitLiveChannels>["live"]
++    ): any {
++      // A data channel the mark is given that has no value over its rows (the
++      // mean of no rows, a field of no first row) leaves the mark nothing to
++      // draw it with, whichever channel it is (a size, a position, a color, a
++      // text, a slot of a `dims` bag: `hasNoValue`), so the mark is not drawn
++      // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
++      // layout. A sum or a count of no rows is 0, a value, and draws.
++      let noValue = false;
++      // The one call of a mark's channel functions and of a `createMark` body,
++      // in the scope of the mark's context.
++      const raw = withRegistrar(_layerContext.registrar, () => {
++        for (const propName of Object.keys(resolvedOpts)) {
++          if (propName === "debug") continue;
++          const channelSpec = channels[propName];
++          const markValue = resolvedOpts[propName];
++
++          const channelType: ChannelType | undefined =
++            typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
++          const isEntry =
++            typeof channelSpec === "object" && channelSpec?.entry === true;
++
++          if (isEntry && channelType === "size") {
++            // An already-wrapped value (`v(...)`) is the size as it is.
++            shapeProps[propName] = isValue(markValue)
++              ? markValue
++              : inferEntrySize(markValue, d);
++          } else if (channelType !== undefined) {
++            // A function value is read only by a mark that draws along a path
++            // (the shape form of ribbon and line, which is no createMark).
++            if (groupFun(markValue, d) !== undefined)
++              throw functionInChannelError(serialize ?? "mark", propName);
++            // Each kind reads an already-wrapped value (`datum(...)`) itself
++            // (`CHANNEL_INFER`): an area roots it, the others keep it.
++            shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
++            if (
++              markValue !== undefined &&
++              hasNoValue(channelType, shapeProps[propName])
++            )
++              noValue = true;
++          } else {
++            shapeProps[propName] = markValue;
++          }
+         }
++        // For expand-kind marks, hand the data array to shapeFn so it can
++        // build N output nodes 1:1 with input rows. shapeFn may be async.
++        // A component body may return anything a combinator child may be (a
++        // built node, or a mark such as `layer([...])`), so it is reified
++        // through the same `resolveMarkResult` path. The name context is fresh:
++        // the component is a naming boundary. An expand mark (its kind,
++        // declared at `createMark`) returns an array of slices, each reified
++        // the same way, in one boundary.
++        return shapeFn(shapeProps, kind === "expand" ? d : undefined);
++      });
++      // A fresh ROOT registry, a name boundary, for the same chart.
++      const boundary = new LayerContext(undefined, _layerContext.registrar);
++      if (kind === "expand") {
++        return andThen(
++          andThen(raw as MaybePromise<MarkChild[]>, (slices) =>
++            allOf(slices.map((slice) => resolveMarkResult(slice, boundary)))
++          ),
++          (result) => sealSlices(result)
++        );
+       }
+-      // For expand-kind marks, hand the data array to shapeFn so it can
+-      // build N output nodes 1:1 with input rows. shapeFn may be async.
+-      // A component body may return anything a combinator child may be (a
+-      // built node, or a mark such as `layer([...])`), so it is reified
+-      // through the same `resolveMarkResult` path. The name context is fresh:
+-      // the component is a naming boundary. An expand mark (its kind,
+-      // declared at `createMark`) returns an array of slices, each reified
+-      // the same way, in one boundary.
+-      return shapeFn(shapeProps, kind === "expand" ? d : undefined);
+-    });
+-    // A fresh ROOT registry, a name boundary, for the same chart.
+-    const boundary = new LayerContext(undefined, _layerContext.registrar);
+-    if (kind === "expand") {
+-      const result = await Promise.all(
+-        (raw as MarkChild[]).map((slice) => resolveMarkResult(slice, boundary))
++      return andThen(
++        andThen(raw as MaybePromise<MarkChild>, (r) =>
++          resolveMarkResult(r, boundary)
++        ),
++        (node) => sealNode(node)
+       );
+-      const types = getColumnTypes(d);
+-      // Expand path: stamp each slice with its own datum, a one-row group
+-      // `[row]` tagged with the column types like any split leaf. A slice
+-      // past the last row (a `size` array longer than the data) has no row of
+-      // its own and keeps the whole group.
+-      for (let i = 0; i < result.length; i++) {
+-        const node = result[i];
+-        node.datum =
+-          i >= d.length
+-            ? datumOfInput(d)
+-            : types
+-              ? setColumnTypes([d[i]], types)
+-              : [d[i]];
++      function sealSlices(result: GoFishNode[]): GoFishNode {
++        const types = getColumnTypes(d);
++        // Expand path: stamp each slice with its own datum, a one-row group
++        // `[row]` tagged with the column types like any split leaf. A slice
++        // past the last row (a `size` array longer than the data) has no row of
++        // its own and keeps the whole group.
++        for (let i = 0; i < result.length; i++) {
++          const node = result[i];
++          node.datum =
++            i >= d.length
++              ? datumOfInput(d)
++              : types
++                ? setColumnTypes([d[i]], types)
++                : [d[i]];
++          if (liveChannels) node.__gfLive = liveChannels;
++          applyFilter(node, filter);
++        }
++        return result as unknown as GoFishNode;
++      }
++      function sealNode(node: GoFishNode): GoFishNode {
+         if (liveChannels) node.__gfLive = liveChannels;
+         applyFilter(node, filter);
++        // Its whole drawing, not only its own lowering: a component's children
++        // lower on their own. TODO(#1267): a mark with no value draws no shape
++        // either, even under a compositor; should it be `.hidden()`, giving its
++        // shape as a blank does?
++        if (noValue)
++          for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
++        return sealComponent(node, d);
+       }
+-      return result as unknown as GoFishNode;
+     }
+-    const node = await resolveMarkResult(raw, boundary);
+-    if (liveChannels) node.__gfLive = liveChannels;
+-    applyFilter(node, filter);
+-    // Its whole drawing, not only its own lowering: a component's children
+-    // lower on their own. TODO(#1267): a mark with no value draws no shape
+-    // either, even under a compositor; should it be `.hidden()`, giving its
+-    // shape as a blank does?
+-    if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
+-    return sealComponent(node, d);
+   };
+   withMarkKind(baseMark, kind);
+ 
+diff --git a/packages/gofish-graphics/src/tests/encloseWire.test.ts b/packages/gofish-graphics/src/tests/encloseWire.test.ts
+index 2fcc3b886..49b65a745 100644
+--- a/packages/gofish-graphics/src/tests/encloseWire.test.ts
++++ b/packages/gofish-graphics/src/tests/encloseWire.test.ts
+@@ -260,13 +260,11 @@ console.log("# what each node value is written as");
+   const b = await circle({ r: 5 }).name("b")([{}]);
+   const unnamed = await circle({ r: 5 })([{}]);
+   const ir = async (avoiding: unknown) => {
+-    // The combinator builds its node at once; only its IR is read here, so
+-    // a build that fails (as an invalid avoiding does) is caught, not left
+-    // unhandled.
++    // The combinator builds its node at once, in the call; only its IR is
++    // read here.
+     const built = enclose({ shape: Shape.spine(), avoiding } as any, [
+       ref("a"),
+     ]);
+-    built.catch(() => {});
+     const doc = await chart([{}])
+       .mark(layer([circle({ r: 5 }).name("a"), built]))
+       .toJSON();
+diff --git a/packages/gofish-graphics/src/tests/syncLayout.test.ts b/packages/gofish-graphics/src/tests/syncLayout.test.ts
+new file mode 100644
+index 000000000..a23b20395
+--- /dev/null
++++ b/packages/gofish-graphics/src/tests/syncLayout.test.ts
+@@ -0,0 +1,189 @@
++/**
++ * Construction and the layout core are synchronous: a node tree built from
++ * existing nodes is there in the call that builds it, and a function called
++ * from inside a node's layout step can build an arrangement with the public
++ * operators and lay it out on the spot, with no `await` anywhere.
++ *
++ * Run: `tsx src/tests/syncLayout.test.ts` (wired as `pnpm test:sync-layout`).
++ */
++import { Rect } from "../ast/shapes/rect";
++import { spread, Constraint } from "../lib";
++import { layer as layerMark } from "../ast/marks/chart";
++import { layer } from "../ast/graphicalOperators/layer";
++import { GoFishNode, placeUnplacedChild } from "../ast/_node";
++import { LayerContext, resolveMarkResult } from "../ast/marks/markResult";
++import { resolveReferences } from "../ast/_ref";
++import { toDisplayList } from "../ast/displayList/toDisplayList";
++import { isThenable, now } from "../util";
++import { value as v } from "../ast/data";
++import type { GoFishAST } from "../ast/_ast";
++import type { MarkChild } from "../ast/types";
++import { check, items, report } from "./testHelpers";
++
++declare const process: { exit(code: number): never };
++
++const box = (w: number, h: number, fill: string) =>
++  Rect({ w, h, fill }) as GoFishNode;
++
++/** Resolve what a mark position holds, in the call. */
++const build = (m: MarkChild): GoFishNode =>
++  now(resolveMarkResult(m, new LayerContext()), "build");
++
++/**
++ * A node whose arrangement is a user function of its children, called in
++ * its layout step: `body(children)` returns an arrangement built with the
++ * ordinary operators, which is resolved, made a child of this node, and laid
++ * out in the room this node is given, in that call. A test of the engine, not
++ * the API a user would write (`layout(children, body)`).
++ */
++function userLayout(
++  children: GoFishNode[],
++  body: (children: GoFishNode[]) => MarkChild
++): GoFishNode {
++  const calls: string[] = [];
++  const node: GoFishNode = new GoFishNode(
++    {
++      type: "user-layout",
++      // The arrangement does not exist before layout, so this node reports
++      // the type its children have side by side: none on either axis
++      // (pixel sizes only, which is what this test lays out).
++      resolveUnderlyingSpace: (spaces) => spaces[0],
++      layout: (size, scales, _children, self) => {
++        calls.push("layout");
++        // 1. Build: the public operators over existing nodes, resolved now.
++        const arranged = build(body(children));
++        // 2. What a render root does for a fresh tree, for this subtree:
++        //    the session, the axis-scope hooks (spread installs its
++        //    constraints here), refs, and the type walk.
++        arranged.setRenderSession(self.getRenderSession());
++        arranged.resolveAliases();
++        resolveReferences(arranged);
++        arranged.resolveUnderlyingSpace();
++        arranged.resolveEmbedding();
++        self.children = [arranged];
++        arranged.parent = self;
++        // 3. Lay it out, here, in this node's room.
++        const placed = arranged.layout(size, scales);
++        placeUnplacedChild(placed);
++        return {
++          intrinsicDims: placed.dims.map(({ min, size }) => ({ min, size })),
++          transform: { translate: [undefined, undefined] },
++        } as any;
++      },
++    },
++    children as GoFishAST[]
++  );
++  (node as any).__calls = calls;
++  return node;
++}
++
++async function main() {
++  console.log("# construction from nodes is synchronous");
++  {
++    const a = box(20, 10, "red");
++    const b = box(30, 10, "blue");
++    // The node-level operator over nodes returns the node.
++    const direct = layer([a, b]);
++    check("layer([a, b]) is a node, not a promise", direct instanceof GoFishNode);
++    // The public combinator is a mark; resolving it over nodes is a node too.
++    const c = box(20, 10, "red");
++    const d = box(30, 10, "blue");
++    const m = spread({ dir: "x", spacing: 5 }, [c, d]);
++    const r = resolveMarkResult(m, new LayerContext());
++    check("spread({ dir }, [a, b]) resolves in the call", !isThenable(r));
++    check("…to a node", r instanceof GoFishNode);
++    // `.relate()` with constraints only, on a public layer, also in the call.
++    const e = box(10, 10, "green");
++    const f = box(10, 10, "green");
++    const rel = resolveMarkResult(
++      layerMark([e.name("e") as any, f.name("f") as any]).relate(
++        ({ e, f }: any) => [Constraint.distribute({ dir: "y" }, [e, f])]
++      ),
++      new LayerContext()
++    );
++    check("layer([...]).relate(...) resolves in the call", !isThenable(rel));
++  }
++
++  console.log("# a function called inside a node's layout step lays out a spread");
++  {
++    const a = box(20, 10, "red");
++    const b = box(30, 10, "blue");
++    let bodyCalls = 0;
++    const node = userLayout([a, b], ([x, y]) => {
++      bodyCalls++;
++      return spread({ dir: "x", spacing: 5 }, [x, y]);
++    });
++    const dl = await toDisplayList(node, { w: 200, h: 100 });
++    const rects = items(dl).filter((i) => i.kind === "rect");
++    const red = rects.find((i) => (i as any).style?.fill === "red");
++    const blue = rects.find((i) => (i as any).style?.fill === "blue");
++    check("the body ran once, in layout", bodyCalls === 1, bodyCalls);
++    check("both children are drawn", red !== undefined && blue !== undefined, {
++      rects,
++    });
++    check(
++      "the spread placed them side by side, 5 px apart",
++      red !== undefined &&
++        blue !== undefined &&
++        Math.abs(blue.x! - (red.x! + red.w!) - 5) < 1e-6,
++      { red, blue }
++    );
++    check(
++      "the spread aligned them (same y)",
++      red !== undefined && blue !== undefined && red.y === blue.y,
++      { red, blue }
++    );
++  }
++
++  console.log("# the body can nest operators: a column of a row and a bar");
++  {
++    const a = box(20, 10, "red");
++    const b = box(30, 10, "blue");
++    const c = box(50, 4, "black");
++    const node = userLayout([a, b, c], ([x, y, z]) =>
++      spread({ dir: "y", spacing: 0 }, [spread({ dir: "x" }, [x, y]), z])
++    );
++    const dl = await toDisplayList(node, { w: 200, h: 100 });
++    const rects = items(dl).filter((i) => i.kind === "rect");
++    const red = rects.find((i) => (i as any).style?.fill === "red");
++    const black = rects.find((i) => (i as any).style?.fill === "black");
++    check(
++      "the bar sits right against the row",
++      red !== undefined &&
++        black !== undefined &&
++        (Math.abs(black.y! + black.h! - red.y!) < 1e-6 ||
++          Math.abs(red.y! + red.h! - black.y!) < 1e-6),
++      { red, black }
++    );
++  }
++
++  console.log("# data-sized children: the arrangement maps their data");
++  {
++    // Bars of data heights 10 and 30 under the user layout, in a 100 px
++    // tall render: the arrangement is new, but the children's keyed
++    // domain was built from the root, which already held them.
++    const a = Rect({ w: 20, h: v(10), fill: "red" }) as GoFishNode;
++    const b = Rect({ w: 20, h: v(30), fill: "blue" }) as GoFishNode;
++    const node = userLayout([a, b], ([x, y]) =>
++      spread({ dir: "x", spacing: 5, alignment: "start" }, [x, y])
++    );
++    const dl = await toDisplayList(node, { w: 200, h: 100 });
++    const rects = items(dl).filter((i) => i.kind === "rect");
++    const red = rects.find((i) => (i as any).style?.fill === "red");
++    const blue = rects.find((i) => (i as any).style?.fill === "blue");
++    check(
++      "the taller bar is three times the shorter",
++      red !== undefined &&
++        blue !== undefined &&
++        Math.abs(blue.h! - 3 * red.h!) < 1e-6,
++      { red, blue }
++    );
++  }
++
++  report();
++}
++
++main().catch((e) => {
++  console.error(e);
++  process.exit(1);
++});
+diff --git a/packages/gofish-graphics/src/util.ts b/packages/gofish-graphics/src/util.ts
+index e4c35613d..cd9e30549 100644
+--- a/packages/gofish-graphics/src/util.ts
++++ b/packages/gofish-graphics/src/util.ts
+@@ -12,6 +12,73 @@ export const isThenable = <T>(v: T | PromiseLike<T>): v is PromiseLike<T> =>
+   (typeof v === "object" || typeof v === "function") &&
+   typeof (v as PromiseLike<T>).then === "function";
+ 
++/**
++ * A value, or a promise of it. Building a node is synchronous; it becomes a
++ * promise only where something under it is truly asynchronous: a Python
++ * callback over the bridge, an image whose size is not known yet, a `derive`
++ * that awaits. The helpers below compose such values without adding a step
++ * where there is none, so a build over plain values and nodes runs to the
++ * end in the call that started it.
++ */
++export type MaybePromise<T> = T | PromiseLike<T>;
++
++/** `f` of the value of `x`: now when `x` is a value, after it when it is a
++ *  promise. */
++export function andThen<T, U>(
++  x: MaybePromise<T>,
++  f: (value: T) => MaybePromise<U>
++): MaybePromise<U> {
++  return isThenable(x) ? Promise.resolve(x).then(f) : f(x);
++}
++
++/** The values of `xs`, as `Promise.all` gives them: now when none is a
++ *  promise. */
++export function allOf<T>(xs: readonly MaybePromise<T>[]): MaybePromise<T[]> {
++  return xs.some(isThenable) ? Promise.all(xs) : (xs as T[]);
++}
++
++/** `f` over `items` one at a time, each after the one before it has its
++ *  value (an effect of one, such as a name it registers, is there for the
++ *  next): now when every call returns a value. */
++export function mapInOrder<T, U>(
++  items: readonly T[],
++  f: (item: T, i: number) => MaybePromise<U>
++): MaybePromise<U[]> {
++  const out: U[] = [];
++  const from = (start: number): MaybePromise<U[]> => {
++    for (let i = start; i < items.length; i++) {
++      const r = f(items[i], i);
++      if (isThenable(r))
++        return Promise.resolve(r).then((v) => {
++          out.push(v);
++          return from(i + 1);
++        });
++      out.push(r);
++    }
++    return out;
++  };
++  return from(0);
++}
++
++/**
++ * The value of a step the synchronous core runs (resolution, chrome, layout,
++ * placement). The core never waits: whatever is asynchronous is resolved
++ * before it starts (a chart's data, its `derive` calls and Python callbacks,
++ * fonts, images). A step that still reaches something asynchronous is an
++ * error, named by `where`.
++ */
++export function now<T>(x: MaybePromise<T>, where: string): T {
++  if (!isThenable(x)) return x;
++  // Nobody waits for it: keep its own failure from surfacing as unhandled.
++  x.then(undefined, () => {});
++  throw new Error(
++    `${where} reached an asynchronous step (a Python callback, an image ` +
++      `load, an async function) inside the synchronous layout core. ` +
++      `Resolve it before rendering: build the node first (await it), then ` +
++      `use the node.`
++  );
++}
++
+ /** Read a dev-gate flag from `globalThis.<name>` or `process.env.<name>` (truthy
+  *  = on). Zero-cost when off; the single reader for the #39 dev gates
+  *  (`GOFISH_CONFLICT_CHECK`, `GOFISH_DUMP_SCOPES`, `GOFISH_DUMP_SHARING`). */

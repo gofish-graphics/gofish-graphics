@@ -8,6 +8,8 @@ This tab has two parts. The first part shows what is open now: the GoTree polar 
 
 ### Open now
 
+> The layout protocol prototype is on the next tab. It defines `spread`, `stack`, `tile` and user layouts with one public call, `defineLayout`, and has three forks of its own.
+
 #### GoTree polar stories against the GoTree gallery
 
 Each card puts one GoTree story beside the picture in the GoTree gallery that it ports (BIT-VIS/gotree, `gallery/<Name>/tree.png`). Changed stories show three panels: the reference, the branch before this round (38a79eac3), and the branch now. The cause of each difference is one of four kinds. **(a)** The port's spec was wrong. **(b)** The engine has a bug. **(c)** GoFish cannot write it yet. **(d)** Cosmetic, such as different data. The first round found no engine bug. The second round, on the coordinate systems, found one, shown on the icicle card.
@@ -1786,6 +1788,1517 @@ chart(rows, { coord: Coord.clock(), w: 320, h: 320 })
 
 _RowPinned. The ends are one rigid group, 160 px apart, and the middle box's minimum gaps leave it and come back._
 
+## Layout protocol prototype
+
+### What this is
+
+The maintainer set the goal in two sentences. "I think we can treat constraints as the lowest level of layout (and position is a kind of "escape-hatch" constraint) and then we can think of the layout/measure API as being a form of "macro expansion" that bottoms out at the constraints." And: "we should be able to write _everything_ including our stdlib against it". This tab shows a prototype of that frame. A layout operator is defined with one public call, `defineLayout`, whose body returns constraints among the operator's children, so each use of the operator expands into constraints that its layer's solver reads, and `Constraint.position` stays the escape hatch that pins a child by hand. The prototype lives in a throwaway copy of the repository at commit fac08ebd7, not on this branch. In that copy the built-in `spread`, `stack` and `tile` are rebuilt on the public call, all 751 existing stories render the same normalized DOM as at fac08ebd7, and the unit tests pass.
+
+The full 751-story comparison ran before the renames on this tab. After them, the prototype's own stories were rendered again and their normalized DOM is byte-identical to before, the type check is clean, and the unit tests pass. Every picture on this tab is a render of the code under it, made in the copy today.
+
+#### Words used on this tab
+
+- **Operator.** A function that takes children and arranges them, e.g., `spread` or `tile`.
+- **Constraint.** A fact about the children's positions that the solver keeps, e.g., `Constraint.align` (these line up at their start) or `Constraint.distribute` (these follow one another with a gap). `Constraint.position` pins a child at a point or between two edges, and it is the escape hatch.
+- **Expansion.** The constraints an operator's body returns for its actual children.
+- **Bounds.** The rectangle, in pixels, that a parent gives a child to lay itself out in. SwiftUI uses the same word for the argument of `placeSubviews(in:)`. A child's bounds are a box `{ x, y, w, h }` or a **polygon** `{ points }`, the same shape the `polygon` mark takes.
+- **Scale, written σ.** Pixels per data unit. The solver picks σ so that the visualization fits the size it is given.
+- **Scope.** A group of nodes that share one scale.
+- **Glue.** What `stack` does and `spread` does not. Glued children add up into one data space, so the stack's length is the sum of theirs, with no gap.
+- **Size request.** What a node asks its parent for on each axis, as a function of σ. A bar 3 data units wide asks for 3σ pixels.
+- **Length.** A size that may depend on σ, e.g., 9σ + 6, written before σ is known.
+- **Claim walk.** The pass that works out each node's size request. The word appears in the prototype's doc comments.
+
+The prototype first called the bounds a "room" and a polygon a "ring", and both words were replaced because neither has precedent outside GoFish. Issue \#1410 checks every layout engine term against what other layout systems call it and proposes renames, and "bounds" is its first row.
+
+### Defining and using a custom layout
+
+Each card shows the picture, the definition in full, the use, what the use expands into for its actual children, and the numbers that show it works. The code is copied from the copy's stories file, `LayoutProtocol.stories.tsx` in `stories/_proposals`. A definition has one of two bodies. `relate` returns constraints. `arrange` returns each child's bounds once the operator's own bounds are known. The section on the definition call below says why there are two.
+
+#### A row pitched by its widest child (prototype)
+
+Each child starts the same distance after the one before it. That distance, the pitch, is the widest child's width plus a gap. The top row is eight words and the bottom row is eight 6 px squares, each a `pitched` row.
+
+![Eight words spaced evenly, and eight small squares below](img/lp-pitched-labels.png)
+
+_Story **PitchedLabels**. The words start every 56.6035 px and the squares every 14 px._
+
+**Definition**
+
+```ts
+// Every child starts the same distance after the one before it: the widest
+// child's width plus `gap`. The distance is a length read off the children,
+// so the row's size request is derived by the solver, in the scale.
+const pitched = defineLayout<{ gap?: number }>({
+  name: "pitched",
+  options: ["gap"],
+  relate: (children, { gap = 8 }, { measure }) => {
+    const pitch = maxLength(...children.map((c) => measure(c).w)).add(gap);
+    return {
+      relations: [
+        Constraint.align({ y: "start" }, children),
+        Constraint.distribute(
+          { dir: "x", spacing: Spacing.pitch(pitch, { at: "start" }) },
+          children
+        ),
+      ],
+      orientation: 0,
+    };
+  },
+});
+```
+
+The body reads each child's width as a length with `measure(c).w`, takes the largest with `maxLength`, adds the gap, and hands the result to `Spacing.pitch`. It returns two constraints and never sees a pixel.
+
+`measure(child)` is the prototype's spelling, and the name is open, because "measure" already means a unit of measure in GoFish. The design note suggests `size(child)`.
+
+**Use**
+
+```ts
+const words = ["a", "row", "of", "labels", "pitched", "by", "the", "widest"];
+
+const container = initializeContainer();
+layer([
+  spread({ dir: "y", spacing: 6, alignment: "start" }, [
+    pitched(
+      { gap: 8 },
+      words.map((t) => text({ text: t, fontSize: 14 }))
+    ),
+    pitched(
+      { gap: 8 },
+      words.map(() => rect({ w: 6, h: 6, fill: "#4190c5" }))
+    ),
+  ]),
+]).render(container, { axes: false });
+```
+
+**What it expands into**
+
+```js
+// texts: the eight texts "a", "row", "of", "labels", "pitched", "by", "the"
+// and "widest". A text's width does not change with the scale.
+Constraint.align({ y: "start" }, texts);
+Constraint.distribute(
+  { dir: "x", spacing: Spacing.pitch(pitch, { at: "start" }) },
+  texts
+);
+// pitch = the widest word's width + 8 = 48.6035 + 8 = 56.6035 px
+// The second row's children are 6 px squares: pitch = 6 + 8 = 14 px.
+```
+
+The words start at x = 0, 56.6035, 113.207 and so on. The pitch is the widest word's width, 48.6035, plus the gap of 8. The squares start at x = 0, 14, 28 and so on.
+
+#### The same row over data widths, fit to 400 px (prototype)
+
+Here the children are bars whose widths are data. A bar's width in pixels depends on σ, so the pitch does too, and the solver must find σ with the pitch inside the row's size request. This is why `measure` returns a length and not a number of pixels.
+
+![Eight yellow bars of different widths, evenly pitched across 400 px](img/lp-pitched-bars-fit.png)
+
+_Story **PitchedBarsFit**. The last bar ends at 400.0000 px._
+
+**Definition**
+
+The same `pitched` as in the card above.
+
+**Use**
+
+```ts
+const widths = [3, 1, 4, 1, 5, 9, 2, 6];
+
+const container = initializeContainer();
+countRuns(
+  container,
+  layer({ w: 400, h: 120 }, [
+    pitched(
+      { gap: 6 },
+      widths.map((w) => rect({ w: v(w), h: 100, fill: "#f2cf57" }))
+    ),
+  ]).render(container, { axes: false })
+);
+```
+
+**What it expands into**
+
+```js
+// bars: eight rects 100 px tall whose widths are data, 3, 1, 4, 1, 5, 9, 2
+// and 6. σ is the scale, in pixels per data unit.
+Constraint.align({ y: "start" }, bars);
+Constraint.distribute(
+  { dir: "x", spacing: Spacing.pitch(pitch, { at: "start" }) },
+  bars
+);
+// pitch = max(3σ, 1σ, 4σ, 1σ, 5σ, 9σ, 2σ, 6σ) + 6 = 9σ + 6
+// width of the row = 7 pitches + the last bar = 7(9σ + 6) + 6σ = 69σ + 42
+// The layer is 400 px wide: 69σ + 42 = 400, so σ = 358 / 69 = 5.1884.
+```
+
+- The solver finds σ = 5.1884 for 400 px.
+- The first bar is 15.5652 px wide, which is 3σ, and the bars start every 52.6957 px, which is 9σ + 6.
+- The last bar starts at 368.8696 and is 31.1304 px wide, which is 6σ, so it ends at 400.0000.
+- The render ran the layout pipeline once. The story counts the runs and prints the count under the picture.
+
+#### A squarified treemap that reads its bounds (prototype)
+
+The squarify rule needs the treemap's own width and height, in pixels, to decide where each row of cells ends. So this definition uses the second body, `arrange`, which runs once the treemap's bounds are known and returns each child's bounds. The built-in beside it is `tile` with `Tiling.squarify`.
+
+![Squarified treemap of 20 countries, written by a user](img/lp-user-squarify.png)
+
+_Story **UserSquarify**, the user's **squarified**._
+
+![Squarified treemap of 20 countries, built-in tile](img/lp-builtin-squarify.png)
+
+_Story **BuiltinSquarify**, the built-in **tile**._
+
+**Definition**
+
+```ts
+const box = ([x0, y0, x1, y1]: Rect) => ({
+  x: x0,
+  y: y0,
+  w: x1 - x0,
+  h: y1 - y0,
+});
+
+// The whole layout definition: no size request (it fills its bounds), and
+// once its bounds are known, each child's bounds.
+const squarified = defineLayout<{ weights: number[] }>({
+  name: "squarified",
+  options: ["weights"],
+  arrange: ({ w, h }, _children, { weights }) => ({
+    bounds: squarify(weights, [w, h]).map(box),
+  }),
+});
+```
+
+**The `squarify` helper, 58 lines of plain TypeScript with no GoFish imports**
+
+```ts
+type Rect = [number, number, number, number]; // x0, y0, x1, y1
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+// The squarify rule (Bruls et al. 2000) as d3's `squarifyRatio` runs it:
+// add items to a row while its worst aspect ratio does not get worse, lay
+// the row along the box's shorter side, and go on in what is left.
+function squarify(weights: number[], [w, h]: [number, number]): Rect[] {
+  const out: Rect[] = [];
+  let [x0, y0, x1, y1] = [0, 0, w, h];
+  let value = sum(weights);
+  let i0 = 0;
+  while (i0 < weights.length) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    let i1 = i0;
+    let rowSum = weights[i1++];
+    let lo = rowSum;
+    let hi = rowSum;
+    const alpha = Math.max(dy / dx, dx / dy) / (value * PHI);
+    let beta = rowSum * rowSum * alpha;
+    let best = Math.max(hi / beta, beta / lo);
+    for (; i1 < weights.length; i1++) {
+      const wv = weights[i1];
+      const s = rowSum + wv;
+      beta = s * s * alpha;
+      const ratio = Math.max(Math.max(hi, wv) / beta, beta / Math.min(lo, wv));
+      if (ratio > best) break;
+      rowSum = s;
+      lo = Math.min(lo, wv);
+      hi = Math.max(hi, wv);
+      best = ratio;
+    }
+    if (dx < dy) {
+      // A row along x at the top.
+      const ry1 = value ? y0 + (dy * rowSum) / value : y1;
+      let x = x0;
+      for (let i = i0; i < i1; i++) {
+        const nx = x + (weights[i] * dx) / rowSum;
+        out[i] = [x, y0, nx, ry1];
+        x = nx;
+      }
+      y0 = ry1;
+    } else {
+      // A column along y at the left.
+      const rx1 = value ? x0 + (dx * rowSum) / value : x1;
+      let y = y0;
+      for (let i = i0; i < i1; i++) {
+        const ny = y + (weights[i] * dy) / rowSum;
+        out[i] = [x0, y, rx1, ny];
+        y = ny;
+      }
+      x0 = rx1;
+    }
+    value -= rowSum;
+    i0 = i1;
+  }
+  return out;
+}
+```
+
+`squarify` is the squarify rule as d3's `squarifyRatio` runs it, with the golden ratio, written from scratch. It returns one rectangle `[x0, y0, x1, y1]` per weight, and `box` turns each into a box.
+
+**Use**
+
+```ts
+const cell = (d: Country) =>
+  rect({ fill: v(d.continent), stroke: "white", strokeWidth: 1 });
+
+const userTreemap = (rows: Country[]) =>
+  squarified({ weights: rows.map((d) => d.pop) }, rows.map(cell));
+
+const builtinTreemap = (rows: Country[]) =>
+  tile(
+    { size: rows.map((d) => v(d.pop)), tiling: Tiling.squarify, round: false },
+    rows.map(cell)
+  );
+
+// How many times the render ran the layout pipeline (a prototype counter
+// in gofish.tsx), written under the picture.
+const countRuns = (container: HTMLElement, rendered: Promise<unknown>) => {
+  const g = globalThis as { __gofishLayoutRuns?: number };
+  g.__gofishLayoutRuns = 0;
+  rendered.then(() => {
+    const p = document.createElement("pre");
+    p.textContent = `pipeline runs: ${g.__gofishLayoutRuns}`;
+    container.appendChild(p);
+  });
+};
+
+const alone = (node: () => any) => () => {
+  const container = initializeContainer();
+  countRuns(
+    container,
+    layer({ w: 360, h: 300 }, [node()]).render(container, { axes: false })
+  );
+  return container;
+};
+
+export const UserSquarify: StoryObj = {
+  render: alone(() => userTreemap(countries)),
+};
+export const BuiltinSquarify: StoryObj = {
+  render: alone(() => builtinTreemap(countries)),
+};
+```
+
+**What it returns**
+
+```js
+// The body runs once, with bounds { w: 360, h: 300 }, and returns one box
+// per child, in child order (the 20 largest countries, largest first).
+[
+  { x: 0, y: 0, w: 182.9656, h: 150.9514 }, // India
+  { x: 0, y: 150.9514, w: 182.9656, h: 149.0486 }, // China
+  { x: 182.9656, y: 0, w: 69.6086, h: 93.0808 }, // United States
+  { x: 252.5742, y: 0, w: 57.557, h: 93.0808 }, // Indonesia
+  // ... 16 more
+];
+```
+
+This body returns bounds, not constraints, so its use does not yet expand into constraints. The card "The second body is not constraints yet" below says why, and shows the treemap written with a constraint instead.
+
+- The normalized DOM of the two stories is byte for byte identical.
+- The drawn rectangles are the boxes above moved half a pixel right and down, e.g., India's is at x = 0.5, y = 0.5 with width 182.9656. The built-in draws the same numbers, so the user layout adds no shift of its own.
+- Neither story writes a layout warning.
+- Each render ran the layout pipeline once.
+
+#### The treemap inside a larger visualization (prototype)
+
+The same treemap under a title in a `spread`, with an arrow from the title to China's cell. The treemap's bounds are what the spread leaves it. The arrow reads the cell from outside the treemap, by name.
+
+![Title China above a treemap, with an arrow toward China's cell](img/lp-user-in-spread.png)
+
+_Story **UserInSpread**, the user's **squarified**._
+
+![The same picture with the built-in tile](img/lp-builtin-in-spread.png)
+
+_Story **BuiltinInSpread**, the built-in **tile**._
+
+```ts
+const panelWithArrow = (treemap: (rows: Country[]) => any) => () => {
+  const container = initializeContainer();
+  const cells = countries.map((d) =>
+    d.country === "China" ? cell(d).name("china") : cell(d)
+  );
+  const tm =
+    treemap === userTreemap
+      ? squarified({ weights: countries.map((d) => d.pop) }, cells)
+      : tile(
+          {
+            size: countries.map((d) => v(d.pop)),
+            tiling: Tiling.squarify,
+            round: false,
+          },
+          cells
+        );
+  countRuns(
+    container,
+    layer({ w: 400, h: 320 }, [
+      spread({ dir: "y", spacing: 24, alignment: "start" }, [
+        text({ text: "China", fontSize: 13 }).name("title"),
+        tm,
+      ]),
+    ])
+      .relate(() => [arrow({}, [ref("title"), ref("china")])])
+      .render(container, { axes: false })
+  );
+  return container;
+};
+
+export const UserInSpread: StoryObj = { render: panelWithArrow(userTreemap) };
+export const BuiltinInSpread: StoryObj = {
+  render: panelWithArrow(builtinTreemap),
+};
+```
+
+The normalized DOM of the two stories is identical, and each render ran the layout pipeline once. China's cell is the large one at the lower left. The arrow ends a little above that cell's top edge, at the same point for both treemaps. Whether that gap is the arrow's intended padding was not checked.
+
+The same treemap under `Coord.polar()`:
+
+![The treemap warped into a disk by a polar coordinate space](img/lp-user-polar.png)
+
+_Story **UserPolar**._
+
+![The built-in tile warped the same way](img/lp-builtin-polar.png)
+
+_Story **BuiltinPolar**._
+
+```ts
+const polar = (treemap: (rows: Country[]) => any) => () => {
+  const container = initializeContainer();
+  layer({ coord: Coord.polar(), w: 300, h: 300 }, [treemap(countries)]).render(
+    container,
+    { axes: false }
+  );
+  return container;
+};
+export const UserPolar: StoryObj = { render: polar(userTreemap) };
+export const BuiltinPolar: StoryObj = { render: polar(builtinTreemap) };
+```
+
+The normalized DOM of the two stories is identical. An `arrange` body works in its own flat frame, and the coordinate space warps the result, as it does for the built-in.
+
+#### A `spread` written by a user (prototype)
+
+The built-in `spread` is nothing special. This `row` is a `relate` definition of 15 lines that aligns its children across `dir` and distributes them along it. `axes.axis(dir, ...)` turns an axis name into axis 0 or 1, so `dir: "theta"` works under a polar coordinate space.
+
+![Eight blue bars in a row](img/lp-user-row.png)
+
+_Story **UserRow**, the user's **row**._
+
+![The same eight bars](img/lp-builtin-row.png)
+
+_Story **BuiltinRow**, the built-in **spread**._
+
+![Eight wedges of different lengths around a center](img/lp-user-row-polar.png)
+
+_Story **UserRowPolar**, **row** along theta._
+
+![The same eight wedges](img/lp-builtin-row-polar.png)
+
+_Story **BuiltinRowPolar**, **spread** along theta._
+
+**Definition**
+
+```ts
+const row = defineLayout<{ dir?: string; spacing?: number }>({
+  name: "row",
+  options: ["dir", "spacing"],
+  relate: (children, { dir = "x", spacing = 8 }, axes) => {
+    const along = axes.axis(dir, "row({ dir })");
+    const [alongName, acrossName] = along === 0 ? ["x", "y"] : ["y", "x"];
+    return {
+      relations: [
+        Constraint.align({ [acrossName]: "start" }, children),
+        Constraint.distribute({ dir: alongName, spacing }, children),
+      ],
+      orientation: along,
+    };
+  },
+});
+```
+
+**Use**
+
+```ts
+const heights = [3, 1, 4, 1, 5, 9, 2, 6];
+const bars = () =>
+  heights.map((h) => rect({ w: 24, h: v(h), fill: "#4190c5" }));
+const inBox = (node: () => any, coord?: any) => () => {
+  const container = initializeContainer();
+  layer(coord ? { coord, w: 240, h: 240 } : { w: 300, h: 160 }, [
+    node(),
+  ]).render(container, { axes: false });
+  return container;
+};
+
+export const UserRow: StoryObj = {
+  render: inBox(() => row({ spacing: 8 }, bars())),
+};
+export const BuiltinRow: StoryObj = {
+  render: inBox(() =>
+    spread({ dir: "x", spacing: 8, alignment: "start" }, bars())
+  ),
+};
+// Under polar, along `theta`: equal data widths, so each bar is a wedge.
+const wedges = () =>
+  heights.map((h) =>
+    rect({ w: v(1), h: v(h), fill: "#4190c5", stroke: "white" })
+  );
+export const UserRowPolar: StoryObj = {
+  render: inBox(
+    () => row({ dir: "theta", spacing: 0 }, wedges()),
+    Coord.polar()
+  ),
+};
+export const BuiltinRowPolar: StoryObj = {
+  render: inBox(
+    () => spread({ dir: "theta", spacing: 0, alignment: "start" }, wedges()),
+    Coord.polar()
+  ),
+};
+```
+
+**What it expands into**
+
+```js
+// UserRow: dir "x" is axis 0, so the row aligns on y and distributes on x.
+Constraint.align({ y: "start" }, bars);
+Constraint.distribute({ dir: "x", spacing: 8 }, bars);
+
+// UserRowPolar: under Coord.polar(), dir "theta" is axis 0 too, so the
+// constraints name the same axes, and axis 0 is the angle.
+Constraint.align({ y: "start" }, wedges);
+Constraint.distribute({ dir: "x", spacing: 0 }, wedges);
+```
+
+The normalized DOM of **UserRow** and **BuiltinRow** is identical, and so is that of **UserRowPolar** and **BuiltinRowPolar**.
+
+#### What a wrong definition does (prototype)
+
+Three wrong definitions, each rendered. The prototype checks one mistake in each body and leaves others unchecked.
+
+An `arrange` body that returns bounds for 19 of its 20 children:
+
+```ts
+// An `arrange` body that leaves out the first child's bounds.
+const squarifiedMissingOne = defineLayout<{ weights: number[] }>({
+  name: "squarified",
+  options: ["weights"],
+  arrange: ({ w, h }, _children, { weights }) => ({
+    bounds: squarify(weights, [w, h]).map(box).slice(1),
+  }),
+});
+export const ErrorBoundsCount: StoryObj = {
+  render: failing(() =>
+    squarifiedMissingOne(
+      { weights: countries.map((d) => d.pop) },
+      countries.map(cell)
+    )
+  ),
+};
+```
+
+The render fails with this message:
+
+```text
+squarified: its arrangement gives bounds for 19 children, but it has 20. Give each child its bounds.
+```
+
+A `relate` body that asks for the pixels of a length the scale changes, here the width of a data bar:
+
+```ts
+// A `relate` body that asks for the pixels of a length the scale changes.
+const pitchedInPixels = defineLayout<{ gap?: number }>({
+  name: "pitched",
+  options: ["gap"],
+  relate: (children, { gap = 8 }, { measure }) => {
+    const widest = Math.max(...children.map((c) => measure(c).w.pixels));
+    return {
+      relations: [
+        Constraint.align({ y: "start" }, children),
+        Constraint.distribute(
+          { dir: "x", spacing: Spacing.pitch(widest + gap, { at: "start" }) },
+          children
+        ),
+      ],
+      orientation: 0,
+    };
+  },
+});
+export const ErrorPixelsOfScaledLength: StoryObj = {
+  render: failing(() =>
+    pitchedInPixels(
+      { gap: 6 },
+      widths.map((w) => rect({ w: v(w), h: 100, fill: "#f2cf57" }))
+    )
+  ),
+};
+```
+
+The render fails with this message:
+
+```text
+a measured length changes with the scale, so it has no pixels before the scale is solved. Compose it with add, sub, times and maxLength, and give it to a relation.
+```
+
+The message does not name the operator, because it comes from the length, which does not know which definition read it. Both errors are thrown during layout, after `render` has returned, so they reach the page as unhandled errors and the promise `render` returns does not reject. The stories catch them with a window listener to print them.
+
+A `relate` body that leaves its first child (red) out of every constraint. Nothing checks this. The red bar lands at the layer's origin, under the first bar the constraints place:
+
+![Seven blue bars in a row, with a red bar partly hidden under the first](img/lp-unchecked-dropped-child.png)
+
+_Story **UncheckedDroppedChild**. No error and no warning._
+
+```ts
+// A `relate` body that leaves the first child (red) out of its relations.
+// It is not checked: the red bar lands at the layer's origin, under the
+// first bar the relations place.
+const dropsOne = defineLayout<{}>({
+  name: "dropsOne",
+  options: [],
+  relate: (children) => ({
+    relations: [
+      Constraint.align({ y: "start" }, children.slice(1)),
+      Constraint.distribute({ dir: "x", spacing: 8 }, children.slice(1)),
+    ],
+    orientation: 0,
+  }),
+});
+export const UncheckedDroppedChild: StoryObj = {
+  render: failing(() =>
+    dropsOne({}, [
+      rect({ w: 24, h: v(heights[0]), fill: "#d1495b" }),
+      ...bars().slice(1),
+    ])
+  ),
+};
+```
+
+A `relate` body cannot create or remove a child, because it returns constraints and not nodes. Naming a child in two constraints on the same axis is how constraints normally combine, so it is not a mistake the protocol can see.
+
+### The standard library on the same call
+
+The built-in `spread`, `stack` and `tile` are defined with `defineLayout` in the copy. The line counts are these. `tile.tsx` went from 466 to 278 lines, because the engine code it held moved into `layoutProtocol.ts`. `spread.tsx` went from 371 to 413 lines. `layoutProtocol.ts` is new and has 415 lines. Before the renames on this tab the counts were 273 and 391. The renames added the `Box` and `Polygon` types and the code that turns them into the engine's outlines.
+
+#### `spread` (prototype)
+
+The key lines of its `relate` body, with comments removed (`spread.tsx` lines 235 to 263 in the copy):
+
+```ts
+return {
+  relations: [
+    Constraint.align({ [alignAxis]: alignment }, refs),
+    Constraint.distribute(
+      {
+        dir: stackAxis,
+        spacing,
+        glue,
+        order: reverse ? "reverse" : "forward",
+        baseline:
+          baseline?.kind === "at"
+            ? { ...baseline, part: refs[baseline.part] }
+            : baseline,
+        hasMidpoint,
+        measure: axisMeasures?.[dir],
+        hasOrder,
+      },
+      refs
+    ),
+  ],
+  orientation: stackDir,
+};
+```
+
+**The whole implementation in the copy, spread.tsx lines 36 to 266**
+
+```ts
+/**
+ * `Spread` arranges its children along `dir` with spacing and aligns them on the
+ * cross axis. It **elaborates to `layer + distribute + align`**: #547 proved the
+ * space fold, budget, and auto-fit are identical to the bespoke spread, and #549
+ * made the scale handling match (fresh child array, no parent mutation). `stack` is
+ * `spread({ glue: true })`; `spreadX`/`spreadY` fix `dir`. The IR keeps `spread`/
+ * `stack` (the fluent operator wrapper's `serialize` tag), so this elaboration is below the IR.
+ *
+ * `size` (per-entry stack-axis extent, #700 Phase 2) wraps each child in its
+ * own sized layer BEFORE the align/distribute elaboration below: `layer({ [w|h]:
+ * size[i] }, [child])` on the stack axis. A prop-less child (e.g. a rect with
+ * only `fill`) fills its wrapper's proposed size, so the usual mark stays
+ * unchanged; only the wrapping is added. `size: field(<name>).normalize()`
+ * computes each entry's share of the window (see fieldExpr.ts's
+ * `applyWindowMaps`) as a data-driven size claim on the wrapper, whose
+ * content layer.tsx nests in the wrapper's box as a sized node: the general
+ * rule that a data-valued size nests its content.
+ */
+export const Spread = createNodeOperator(
+  async (
+    {
+      key,
+      dir,
+      spacing,
+      alignment = "baseline",
+      reverse = false,
+      glue = false,
+      baseline,
+      hasMidpoint,
+      hasOrder,
+      size,
+      axes,
+      axisMeasures,
+      ...fancyDims
+    }: {
+      key?: string;
+      /** The axis to spread along: `x`/`y`, a name the enclosing coordinate
+       *  space declares (`theta`, `lon`, ...), or an axis index. */
+      dir: AxisName | Direction;
+      /** How far apart neighbors are: a {@link Spacing} strategy, or a bare
+       *  amount, which is `Spacing.box(amount)`. */
+      spacing?: Gap | Spacing;
+      alignment?: Alignment;
+      reverse?: boolean;
+      // When true, treat as a stack: glue children together, summing their
+      // sizes into a POSITION at this level. `spacing` is ignored.
+      glue?: boolean;
+      /** Where the spread or stack puts its own 0 (`Baseline`), the part of
+       *  an `at` a child index. Omitted: a stack's is `Baseline.start()`,
+       *  and a spread's 0 is its start. In a flow the split sets it from
+       *  the `baseline` option, whose `at` part is a value of the `by`
+       *  column, or from a `HasMidpoint` column (`stackBaseline` in
+       *  schema.ts). A spread takes every baseline but `wiggle`, and only
+       *  for placement: its type stays a sequence of separate spaces. */
+      baseline?: StackBaseline<number>;
+      /** The `by` column's order has a midpoint (`HasMidpoint`), which set
+       *  `baseline`: the split sets it, and the stack checks that each part
+       *  is a nonnegative amount. Ignored without `glue`. */
+      hasMidpoint?: boolean;
+      /** The `by` column's values have an order (`HasOrder`, from the chart's
+       *  `schema`): the split sets it, and the ORDINAL space this spread
+       *  folds carries it, so its axis knows its keys are ordered. */
+      hasOrder?: boolean;
+      /** Per-entry stack-axis extent — one value per child, in child order.
+       *  Wraps each child in a sized layer on the stack axis before the
+       *  align/distribute elaboration. See the doc comment above. */
+      size?: MaybeValue<number>[];
+      /** Override axis rendering for this node. true/false applies to both
+       * dims; object form controls x/y independently. */
+      axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
+      /** Resolved grouping field per axis name, injected by createOperator (the
+       *  `by` field keyed by `dir`, e.g. `{ x: "lake" }`). Stamped onto the
+       *  ORDINAL space the stack distribute builds so a category axis names
+       *  itself off its own space. */
+      axisMeasures?: Record<string, string | undefined>;
+    } & FancyDims<MaybeValue<number>>,
+    children: GoFishAST[] | Collection<GoFishAST>
+  ) => {
+    if ((fancyDims as any).normalize !== undefined) {
+      throw new Error(
+        "spread/stack: `normalize: true` was removed — use " +
+          "`size: field(<field-name>).normalize()` instead (#700 Phase 2)."
+      );
+    }
+
+    children = unwrapLodashArray(children);
+    // An axis index is the same axis as its scope-free name (0 is `x`), so
+    // every use below can key by name.
+    const dirName: AxisName = typeof dir === "number" ? axisName(dir) : dir;
+
+    let childList = children as GoFishAST[];
+
+    if (size !== undefined) {
+      if (size.length !== childList.length) {
+        throw new Error(
+          `spread/stack: \`size\` has ${size.length} entries but there are ` +
+            `${childList.length} children — one size value is required per child.`
+        );
+      }
+      // The wrapper's size is on the `dir` axis, named the same way `dir`
+      // names it, so it resolves in the same scope pass as `dir` itself.
+      childList = await Promise.all(
+        childList.map(async (child, i) => {
+          const wrapped = (await layer(
+            { dims: { [dirName]: { size: size[i] } } } as any,
+            [child]
+          )) as GoFishNode;
+          // Copy split identity onto the wrapper so downstream ordinal-axis
+          // labeling / resolve()-by-key see the same key/datum the unwrapped
+          // child would have — the wrapper is purely a sizing shim.
+          if (child instanceof GoFishNode) {
+            wrapped.setKey(child.key ?? "");
+            wrapped._syntheticKey = child._syntheticKey;
+            wrapped.keyCell = child.keyCell;
+            wrapped.keyBy = child.keyBy;
+            (wrapped as any).__splitBy = (child as any).__splitBy;
+            wrapped.datum = child.datum;
+          }
+          return wrapped;
+        })
+      );
+    }
+
+    return SpreadLayout(
+      {
+        key,
+        dir: dirName,
+        spacing,
+        alignment,
+        reverse,
+        glue,
+        baseline,
+        hasMidpoint,
+        hasOrder,
+        axisMeasures,
+        axes,
+        ...fancyDims,
+      } as any,
+      childList
+    );
+  }
+);
+
+type SpreadRelateProps = {
+  dir: AxisName;
+  spacing?: Gap | Spacing;
+  alignment: Alignment;
+  reverse: boolean;
+  glue: boolean;
+  baseline?: StackBaseline<number>;
+  hasMidpoint?: boolean;
+  hasOrder?: boolean;
+  axisMeasures?: Record<string, string | undefined>;
+};
+
+/**
+ * The layout of `spread` and `stack` (`defineLayout` with `relate`): an
+ * align across `dir` and a distribute along it, among the children, in the
+ * one solve of the layer the spread is. Its arrangement does not depend on
+ * its bounds, so the solver derives its size request.
+ */
+const SpreadLayout = defineLayout<SpreadRelateProps>({
+  name: "spread",
+  options: [
+    "dir",
+    "spacing",
+    "alignment",
+    "reverse",
+    "glue",
+    "baseline",
+    "hasMidpoint",
+    "hasOrder",
+    "axisMeasures",
+  ],
+  relate: (
+    refs,
+    {
+      dir,
+      spacing,
+      alignment,
+      reverse,
+      glue,
+      baseline,
+      hasMidpoint,
+      hasOrder,
+      axisMeasures,
+    },
+    axes
+  ) => {
+    const stackDir = axes.axis(dir, `spread({ dir })`);
+    const alignAxis = axisName((1 - stackDir) as Direction);
+    const stackAxis = axisName(stackDir);
+    // In the combinator form the part of an `at` is a child index.
+    if (baseline?.kind === "at" && refs[baseline.part] === undefined)
+      throw new Error(
+        `${glue ? "stack" : "spread"}: its baseline is ` +
+          `\`Baseline.at(${baseline.part}, ...)\`, a child index, but it ` +
+          `has ${refs.length} ${refs.length === 1 ? "child" : "children"}.`
+      );
+    return {
+      relations: [
+        // The cross-axis align: it shares the frame (unions the children's
+        // domain) and, for free children (bars), commits a baseline. A
+        // self-positioned child (a scatter facet) is left alone by `align`
+        // automatically: the placement solver reads the child's abstract
+        // placement, so no guard flag.
+        Constraint.align({ [alignAxis]: alignment }, refs),
+        Constraint.distribute(
+          {
+            dir: stackAxis,
+            spacing,
+            glue,
+            order: reverse ? "reverse" : "forward",
+            baseline:
+              baseline?.kind === "at"
+                ? { ...baseline, part: refs[baseline.part] }
+                : baseline,
+            hasMidpoint,
+            // The grouping field for this (stack) axis: the ORDINAL space's
+            // measure, so a spread-by-category axis titles itself off its
+            // space.
+            measure: axisMeasures?.[dir],
+            hasOrder,
+          },
+          refs
+        ),
+      ],
+      orientation: stackDir,
+    };
+  },
+});
+```
+
+**Before, at fac08ebd7: the lines that built the constraints, 65 of the operator's 172**
+
+```ts
+// Its constraints refer to the children by slot (`SlotOperand`), so no
+// name is looked up and none is given.
+
+// Elaborate to a layer carrying the cross-axis align + the stack distribute.
+// `fancyDims` (explicit w/h) flow to the layer, which is then a sized
+// node: it maps its keyed domain into that size.
+const node = (await layer(
+  {
+    key,
+    ...fancyDims,
+  } as any,
+  childList
+)) as GoFishNode;
+// `dir` names an axis in the scope of the spread's children: `x`/`y`, or a
+// name the enclosing coordinate space declares (`theta`, `lon`, ...). The
+// spread is built before that space exists, so the constraints, which need
+// the axis, are installed by the resolveAliases pass, after the layer's
+// own `dims` hook (if the spread was given `dims`).
+const layerDims = node._elaborateInAxisScope;
+node._elaborateInAxisScope = async (outer, inner) => {
+  await layerDims?.(outer, inner);
+  const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
+  const alignAxis = axisName((1 - stackDir) as Direction);
+  const stackAxis = axisName(stackDir);
+  const refs = childSlots(node);
+  // In the combinator form the part of an `at` is a child index.
+  if (baseline?.kind === "at" && refs[baseline.part] === undefined)
+    throw new Error(
+      `${glue ? "stack" : "spread"}: its baseline is ` +
+        `\`Baseline.at(${baseline.part}, ...)\`, a child index, but it ` +
+        `has ${refs.length} ${refs.length === 1 ? "child" : "children"}.`
+    );
+  // The cross-axis align: it shares the frame (unions the children's
+  // domain) and, for free children (bars), commits a baseline. A
+  // self-positioned child (a scatter facet) is left alone by `align`
+  // automatically — the placement solver reads the child's abstract
+  // placement, so no guard flag.
+  await node.INTERNAL_relate([
+    Constraint.align({ [alignAxis]: alignment }, refs),
+    Constraint.distribute(
+      {
+        dir: stackAxis,
+        spacing,
+        glue,
+        order: reverse ? "reverse" : "forward",
+        baseline:
+          baseline?.kind === "at"
+            ? { ...baseline, part: refs[baseline.part] }
+            : baseline,
+        hasMidpoint,
+        // The grouping field for this (stack) axis → the ORDINAL
+        // space's measure, so a spread-by-category axis titles itself
+        // off its space.
+        measure: axisMeasures?.[dirName],
+        hasOrder,
+      },
+      refs
+    ),
+  ]);
+  // Tag with stack direction so coord can map axis overrides to polar dims.
+  node.axisDir = stackDir;
+};
+
+if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
+return node;
+```
+
+The definition returns an align across `dir` and a distribute along it, the same two constraints the old code installed by hand. From the protocol it needed `axes.axis`, to turn `dir` into an axis inside the coordinate space, and the `orientation` field, which replaces writing the node's private `axisDir`. The file grew by 42 lines because the options are now passed twice, once into the definition and once destructured in its body, and because the definition has its own option type, its list of option names and a doc comment.
+
+It still reaches for these, which a user could not write:
+
+- Four options of `Constraint.distribute` that are not in the IR: `baseline`, `hasMidpoint`, `measure` and `hasOrder` (spread.tsx 249 to 258). A JS user can pass them, but they are not documented and do not cross to Python (gofish-ir `descriptors.ts` 2999).
+- The wrapper around the definition, which handles the `size` option, wraps each child in a `layer` and copies private node fields onto the wrapper (`_syntheticKey`, `keyCell`, `keyBy`, `__splitBy`, `datum`, spread.tsx 139 to 153).
+- The internal helper `axisName` (spread.tsx 18, 226 and 227) and `createNodeOperator` (spread.tsx 54).
+
+#### `stack` (prototype)
+
+`stack` did not change. It is `spread` with `glue: true`, so it runs the same definition, and the distribute it returns adds the children's data sizes in one data space instead of spacing them.
+
+**Its code in the copy, spread.tsx lines 373 to 413, unchanged**
+
+```ts
+/** A stack adds its children's data amounts: each part starts where the one
+ * before it ends, in one data space, so there is no spacing or anchor to
+ * set. Every part needs a data size along `dir` (`distributeSpaceFold`);
+ * parts that only touch are a `spread({ spacing: 0 })`. */
+export type StackOptions<T = any> = Omit<
+  SpreadOptions<T>,
+  "spacing" | "glue" | "anchor"
+>;
+
+export function stack(
+  opts: StackOptions,
+  marks: MarkChild[]
+): ReturnType<typeof spread>;
+export function stack(opts: StackOptions): Operator<any[], any[]>;
+export function stack(
+  opts: StackOptions,
+  marks?: MarkChild[]
+): ReturnType<typeof spread> | Operator<any[], any[]> {
+  // A stack has no spacing, so it takes no length there: checked against
+  // its own descriptor, not the spread's it forwards to.
+  checkLengths(
+    Frontend.acceptedFields("operator", "stack"),
+    "stack",
+    opts as Record<string, unknown>
+  );
+  const stackOpts: SpreadOptions = { ...opts, glue: true };
+  const result =
+    marks !== undefined ? spread(stackOpts, marks) : spread(stackOpts);
+  // Stack is `spread({glue: true})` under the hood, but the IR wire format
+  // discriminates them by type. Re-tag the produced operator/mark so the
+  // frontend-IR emitter sees `{ type: "stack", ...stripped-opts }` instead
+  // of `{ type: "spread", glue: true, ... }`. Preserve `__combinator` and
+  // `children` when present (combinator form) — dropping them would make
+  // toJSON emit a leaf-shaped node missing its children.
+  const tag = wireOf(result);
+  if (tag) {
+    const { glue: _glue, ...stackPayload } = tag.opts;
+    withWire(result, { ...tag, type: "stack", opts: stackPayload });
+  }
+  return result;
+}
+```
+
+#### `tile` (prototype)
+
+The key lines, its `arrange` body with comments removed (`tile.tsx` lines 211 to 250 in the copy):
+
+```ts
+arrange: (
+  { w, h, shape },
+  children,
+  {
+    spacing = 0,
+    padding = 0,
+    round = true,
+    tiling = squarify(),
+    sort = "desc",
+    size: sizeChannel,
+  }
+) => {
+  Frontend.checkStrategy("Tiling", tiling, "tile({ tiling })");
+  const leafData: LeafDatum[] = children.map((_child, i) => ({
+    i,
+    weight: resolveWeight(sizeChannel, i),
+  }));
+  const total = leafData.reduce((acc, d) => acc + d.weight, 0);
+  if (total <= 0) for (const d of leafData) d.weight = 1;
+  if (sort !== "none")
+    leafData.sort((a, b) =>
+      sort === "asc" ? a.weight - b.weight : b.weight - a.weight
+    );
+  const cells = cellsOf(tiling)(
+    shape?.points,
+    leafData.map((d) => d.weight),
+    { spacing, padding, round, size: [w, h], where: where(children) }
+  );
+  return {
+    bounds: byChild(
+      leafData.map((d) => d.i),
+      cells.map((points) => ({ points }))
+    ),
+  };
+},
+```
+
+**The whole definition in the copy, tile.tsx lines 180 to 251**
+
+```ts
+/** A `tile` operator as an error message names it: by the field its children are
+ *  split by, which each child records (`keyBy`). */
+const where = (children: readonly Child[]): string => {
+  const by = children[0]?.by;
+  return by === undefined ? "tile" : `tile (by "${by}")`;
+};
+
+/**
+ * `tile` is a layout that reads its bounds (`defineLayout` with `arrange`):
+ * it asks for no size of its own, and once its bounds are known it cuts
+ * them into one cell per child, each with its weight's share of the area,
+ * and gives each child its cell as its bounds.
+ */
+const TileNode = defineLayout<TileProps>({
+  name: "tile",
+  options: ["spacing", "padding", "round", "tiling", "sort", "size"],
+  check: ({ spacing = 0, padding = 0, size }) => {
+    // Its spacing and padding are one number d3 applies on both axes, so a
+    // percent has no one size to be a percent of.
+    // TODO(#1176): a percent `tile` spacing needs the axis it is of (the
+    // smaller side, or each axis on its own), a design question.
+    rejectLength("tile's spacing", spacing);
+    rejectLength("tile's padding", padding);
+    // A tile's area is its entry's share of the total, so the operator adds
+    // its entries: their unit must add up (`checkSummable`, #1197). It is
+    // checked once here, so the layout below sums the weights as they are.
+    checkSummable(
+      size?.map(getQuantity).find((q) => q !== undefined),
+      "tile({ size })"
+    );
+  },
+  arrange: (
+    { w, h, shape },
+    children,
+    {
+      spacing = 0,
+      padding = 0,
+      round = true,
+      tiling = squarify(),
+      sort = "desc",
+      size: sizeChannel,
+    }
+  ) => {
+    Frontend.checkStrategy("Tiling", tiling, "tile({ tiling })");
+    // The weights, one per child.
+    const leafData: LeafDatum[] = children.map((_child, i) => ({
+      i,
+      weight: resolveWeight(sizeChannel, i),
+    }));
+    // Ensure total > 0 so the tiling doesn't produce NaNs.
+    const total = leafData.reduce((acc, d) => acc + d.weight, 0);
+    if (total <= 0) for (const d of leafData) d.weight = 1;
+    // The order the tiling lays the children out in. The sort is stable,
+    // so equal weights keep their child order.
+    if (sort !== "none")
+      leafData.sort((a, b) =>
+        sort === "asc" ? a.weight - b.weight : b.weight - a.weight
+      );
+    // One cell per child, in the operator's frame, in weight order.
+    const cells = cellsOf(tiling)(
+      shape?.points,
+      leafData.map((d) => d.weight),
+      { spacing, padding, round, size: [w, h], where: where(children) }
+    );
+    return {
+      bounds: byChild(
+        leafData.map((d) => d.i),
+        cells.map((points) => ({ points }))
+      ),
+    };
+  },
+});
+```
+
+Before, at fac08ebd7, `tile` was a node of its own of 223 lines (tile.tsx 217 to 439). It declared its own scope rules, its own size request, the box it fills, the weights and the tiling, and it laid out and placed each child in its cell by hand. Now the definition is 59 lines. It returns each child's cell as a polygon, and the protocol does the rest, with the same engine code the old node had.
+
+It still reaches for these, which a user could not write:
+
+- `cellsOf`, the internal code of the `Tiling` strategies (tile.tsx 239).
+- Two internal checks, `Frontend.checkStrategy` (tile.tsx 223) and `checkSummable` (tile.tsx 206).
+- `byChild`, which puts the cells back in child order. It is exported from `layoutProtocol.ts` but not from the library (tile.tsx 245).
+
+#### What the protocol itself reaches for
+
+The call is written inside the engine, so it uses engine internals that a definition does not see. These are the ones that would stay if the call became public.
+
+- A `relate` definition is built as a `layer`, and its body runs in the pass that gives axis names their meaning, by replacing the layer's private `_elaborateInAxisScope` hook (layoutProtocol.ts 191 to 197).
+- The one `await` in the protocol is around `INTERNAL_relate` (layoutProtocol.ts 221), because drawing clauses in `.relate` are marks that are built asynchronously today. Constraints alone need nothing asynchronous.
+- `INTERNAL_relate` runs `requireLayer`, a check on the node's type by name (\_node.ts 3708 and 3740), and four passes check `type === "coord"` (\_node.ts 2410 and 2484, axisDirection.ts 105, gofish.tsx 1135). \#1279 accepts both as special cases of the domain.
+- The orientation and the `axes` option are written to the private fields `axisDir` and `_axisOverride` (layoutProtocol.ts 222, 224 and 385).
+- `defineLayout` picks the `relate` path or the `arrange` path by the shape of the definition (layoutProtocol.ts 175). That is a second path, and it goes away if the second body becomes constraints.
+
+### The definition call
+
+These are the public types in `layoutProtocol.ts` in the copy, lines 50 to 156, and the call itself, lines 170 to 179. The library exports `defineLayout` and `maxLength`, and the types `LayoutDefinition`, `RelateDefinition`, `ArrangeDefinition`, `LayoutChild`, `Bounds`, `Box`, `Polygon`, `Arrangement` and `Relations`.
+
+```ts
+/** Options every layout operator takes, whatever its definition: its key,
+ *  its own box (`w`, `h`, `x`, `y`, `dims`, ...), and its axes. */
+export type BoxOptions = {
+  key?: string;
+  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
+  [box: string]: unknown;
+};
+
+/** How a definition names an axis: `x`/`y`, or a name the enclosing
+ *  coordinate space declares (`theta`, `r`), resolved once that space is
+ *  known. `what` says where the name came from, for the error when no
+ *  space declares it. */
+export type Axes = {
+  axis(name: AxisName | Direction, what: string): 0 | 1;
+  /** A child's size request on each axis, as a length (stage 2): a value
+   *  in the scale of the scope the child is in, read when the claim walk
+   *  asks for it. Lengths compose with `add`, `sub`, `times` and
+   *  `maxLength`, and a relation takes them as its gaps; their `pixels`
+   *  exist only for a length the scale does not change. */
+  measure(child: ConstraintRef): { w: LengthValue; h: LengthValue };
+};
+
+/** What a `relate` definition returns. */
+export type Relations = {
+  /** Relations among the children, for the layer's solve. */
+  relations: ConstraintSpec[];
+  /** The axis the children are laid out along, if there is one (SwiftUI's
+   *  `layoutProperties.stackOrientation`): what an axis override under a
+   *  coordinate space, and the check of flexible parts, read. */
+  orientation?: 0 | 1;
+};
+
+/** A child as an `arrange` definition sees it. */
+export type Child = {
+  readonly index: number;
+  /** What the child asks for on `axis` before the scale is known, in
+   *  pixels: a text's width, a rect's literal size. Undefined when it asks
+   *  for nothing there and fills the bounds it is given (a rect with no
+   *  size, or content its own scale fits to its bounds). */
+  request(axis: 0 | 1): number | undefined;
+  /** Whether it fills the bounds it is given on `axis`. */
+  fillsBounds(axis: 0 | 1): boolean;
+  /** The field the flow split it by, for messages. */
+  readonly by?: string;
+};
+
+/** A rectangle in pixels, in the operator's frame: its corner at `x`, `y`
+ *  and its size `w` by `h`. */
+export type Box = { x: number; y: number; w: number; h: number };
+
+/** A convex polygon in pixels, in the operator's frame: its corners in
+ *  order, with no repeated closing point, as the `polygon` mark takes its
+ *  `points`. */
+export type Polygon = { points: readonly (readonly [number, number])[] };
+
+/** The bounds an `arrange` definition is given, in pixels, in its own
+ *  frame: the box `[0, w] × [0, h]`, and the shape it was offered inside
+ *  that box when that is not the whole box (a Voronoi cell). */
+export type Bounds = { w: number; h: number; shape?: Polygon };
+
+/** What an `arrange` definition returns: each child's bounds, by child
+ *  index, a box or a convex polygon in the operator's frame. A child is
+ *  laid out in the box that holds its bounds, with a polygon as its shape,
+ *  centered on that box on an axis where it fills its bounds, else on the
+ *  polygon's centroid. Bounds with no area hold a child of no size at
+ *  their center (the operator's center, for a polygon with no points). */
+export type Arrangement = { bounds: (Box | Polygon)[] };
+
+type Common<O> = {
+  /** The operator's name, for messages. */
+  name: string;
+  /** The keys of the options that are the definition's own. Every other
+   *  option is a {@link BoxOptions} key. */
+  options: readonly (keyof O & string)[];
+  /** Checks on the options and children, run once when the operator is
+   *  called. */
+  check?: (opts: O, children: readonly GoFishAST[]) => void;
+};
+
+export type RelateDefinition<O> = Common<O> & {
+  /** The relations among `children` (handles for `Constraint` calls), once
+   *  the axis names have their meaning. Runs once per node. */
+  relate: (children: ConstraintRef[], opts: O, axes: Axes) => Relations;
+};
+
+export type ArrangeDefinition<O> = Common<O> & {
+  /** Its size request on each axis before the scale is known, in pixels,
+   *  from its children's ({@link Child.request}). Undefined on an axis: it
+   *  asks for nothing and fills the bounds it is given. Omitted: it fills
+   *  on both. Runs once per claim walk. */
+  request?: (
+    children: Child[],
+    opts: O
+  ) => [number | undefined, number | undefined];
+  /** Each child's bounds once its own bounds are known. Runs once per
+   *  layout. Must not create marks: it returns bounds, not nodes. */
+  arrange: (bounds: Bounds, children: Child[], opts: O) => Arrangement;
+};
+
+export type LayoutDefinition<O> = RelateDefinition<O> | ArrangeDefinition<O>;
+
+/** The operator a definition defines: a combinator over a child list, as
+ *  `spread(opts, children)` and `tile(opts, children)` are. */
+export type LayoutOperator<O> = (
+  opts: O & BoxOptions,
+  children?: unknown
+) => PromiseWithRender<GoFishNode>;
+
+/** Define a layout operator (see the module comment). */
+export function defineLayout<O>(def: LayoutDefinition<O>): LayoutOperator<O> {
+  return createNodeOperator((opts: O & BoxOptions, children: GoFishAST[]) => {
+    const { own, box } = split(def, opts);
+    def.check?.(own, children);
+    return "relate" in def
+      ? relateNode(def, own, box, children)
+      : arrangeNode(def, own, box, children);
+  }) as unknown as LayoutOperator<O>;
+}
+```
+
+Two names are open. `defineLayout` may instead be part of `defineOperator`, the public call \#692 plans beside `defineMark`. `measure(child)` may become `size(child)`. The callout below gives a recommendation.
+
+| Body                        | Returns                               | Knows when it runs                                                | Takes part in fitting                                | A ref from outside can reach a child                                      | Shares a scale with its children     |
+| --------------------------- | ------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------ |
+| `relate`, without `measure` | constraints                           | the children as handles, the axis names                           | yes                                                  | yes                                                                       | yes                                  |
+| `relate`, with `measure`    | constraints whose numbers are lengths | also the children's sizes, as lengths                             | yes                                                  | yes                                                                       | yes                                  |
+| `arrange`                   | each child's bounds                   | also its own bounds in pixels, and each child's request in pixels | no, it fills its bounds or asks for a size in pixels | yes, after layout, as the arrow shows, but not while sizes are worked out | no, each child is a scope of its own |
+
+A `relate` body asks a child one thing, `measure(child)`, which gives its width and height as lengths. A length supports four operations, and asking it for pixels throws when the scale changes it, with the message shown in example (f):
+
+- `a.add(b)`, where `b` is a length or pixels.
+- `a.sub(b)`.
+- `a.times(k)`, for a number `k`.
+- `maxLength(a, b, ...)`, the larger at every σ.
+
+<!-- end list -->
+
+```ts
+export class LengthValue {
+  // ... its percent, pixel and fr fields, and its wire form
+
+  /** This length plus another, or plus pixels. Only a measured length
+   *  composes this way; a percent takes `offset`. */
+  add(other: LengthValue | number): LengthValue {
+    return measured(() => Pwl.add(readOf(this), readOf(other)));
+  }
+  /** This length less another, or less pixels. */
+  sub(other: LengthValue | number): LengthValue {
+    return measured(() => Pwl.add(readOf(this), Pwl.negate(readOf(other))));
+  }
+  /** This length times `k`. */
+  times(k: number): LengthValue {
+    return measured(() => Pwl.scale(k, readOf(this)));
+  }
+  /** Its pixels: only for a length with no scale in it, read once the
+   *  claims exist. A comparison needs pixels, so a decision made on a
+   *  length that the scale changes is an error. */
+  get pixels(): number {
+    const v = readOf(this);
+    if (!Pwl.isConstant(v))
+      throw new Error(
+        "a measured length changes with the scale, so it has no pixels " +
+          "before the scale is solved. Compose it with add, sub, times " +
+          "and maxLength, and give it to a relation."
+      );
+    return Pwl.at(v, 0);
+  }
+}
+```
+
+```ts
+/** A measured length: `read` gives its value in σ once the claims exist. */
+export const measured = (read: () => Pwl.Value): LengthValue =>
+  new LengthValue(undefined, undefined, undefined, read);
+
+/** The value in σ of a measured length or of pixels. A percent or an `fr`
+ *  is a share of the bounds or the scope it is laid out in, so it does not
+ *  compose with one. */
+const readOf = (v: LengthValue | number): Pwl.Value => {
+  if (typeof v === "number") return Pwl.constant(v);
+  if (v.read === undefined)
+    throw new Error(
+      `${printLength(v)} does not compose with a measured length: a percent ` +
+        `or an fr is a share of the bounds or the scope it is laid out in.`
+    );
+  return v.read();
+};
+
+/** The larger of lengths, at every scale. */
+export const maxLength = (...ls: (LengthValue | number)[]): LengthValue =>
+  measured(() => Pwl.envelope(ls.map(readOf)));
+```
+
+An `arrange` body asks each child `request(axis)`, its size in pixels before σ is known, and `fillsBounds(axis)`, whether it fills the bounds it is given.
+
+> **Fork: the names.** (a) Keep `defineLayout`, which says what the body does but adds a second definition call beside \#692's. (b) Make a layout a kind of operator under `defineOperator` (\#692), so one registration path covers layouts and other operators and a user layout gets a descriptor that can cross to Python. For the child query, (a) `measure(child)` as in the prototype, or (b) `size(child)`, which reads as what it returns and does not collide with GoFish's units of measure. For the constraint the next section proposes, the naming survey recommends `Constraint.cell`, and the card there gives the alternatives. None of these names is decided.  
+> Recommended: `defineOperator` with a `relate` body, and `size(child)`.
+
+### Where it falls short
+
+#### The second body is not constraints yet (proposed, not built)
+
+The squarified treemap in example (c) returns bounds, not constraints. A layer reads its constraints three times before its own bounds exist. It reads them to decide which children share a scale, to decide which children are pinned in a coordinate space, and to work out its size request. A body that needs the bounds cannot have its constraints there in time, so the prototype gives such a body a node kind of its own, the `arrange` path. That is a declared shortcut.
+
+The fix is a bottom-level constraint that lays a child out inside a box, whose kind is known early and whose numbers come once the bounds are known. The three early readers learn what they need from its kind. The child is a scope of its own, it is not pinned, and it asks its parent for nothing. With it, a definition has one body, `relate`:
+
+```js
+// A sketch that did not run: Constraint.cell does not exist, and its name
+// is not chosen. The constraint takes a function of the bounds, so its kind
+// is known before the bounds are, and its numbers come once they are.
+const squarified = defineLayout({
+  name: "squarified",
+  options: ["weights"],
+  relate: (children, { weights }) => ({
+    relations: [
+      Constraint.cell(
+        (bounds) =>
+          squarify(weights, [bounds.w, bounds.h]).map(([x0, y0, x1, y1]) => ({
+            x: [x0, x1],
+            y: [y0, y1],
+          })),
+        children
+      ),
+    ],
+  }),
+});
+```
+
+Beside it, the `arrange` body that ran:
+
+```ts
+const box = ([x0, y0, x1, y1]: Rect) => ({
+  x: x0,
+  y: y0,
+  w: x1 - x0,
+  h: y1 - y0,
+});
+
+// The whole layout definition: no size request (it fills its bounds), and
+// once its bounds are known, each child's bounds.
+const squarified = defineLayout<{ weights: number[] }>({
+  name: "squarified",
+  options: ["weights"],
+  arrange: ({ w, h }, _children, { weights }) => ({
+    bounds: squarify(weights, [w, h]).map(box),
+  }),
+});
+```
+
+The naming survey for this constraint is done, and its result is not decided. It recommends `Constraint.cell({ x: [x0, x1], y: [y0, y1] }, [child])`, and `{ points }` for a polygon cell. The public `tile` and `partition` docs already say each child is handed "its cell", and CSS Grid's "grid cell" and d3-delaunay's `cellPolygon` are precedent outside GoFish. The two alternatives are these:
+
+- `Constraint.frame`. SwiftUI's `.frame` does this for one child, so it is the best match outside, but GoFish uses "frame" for a node's coordinate frame about 860 times in the source.
+- `Constraint.place`. It is the common verb, but every system that uses it places a child at a point, and it collides with the public `Placement` family.
+
+`Constraint.position` already has a hidden internal form for this, its `region` option, which is how `partition` gives each child its cell. The new constraint would take over that form, and `position` would go back to meaning only "pin this point or these edges".
+
+> **Fork: should the second body become constraints?** (a) Keep two bodies, `relate` and `arrange`. (b) Add the bottom-level constraint above, so a definition has one body that returns constraints, and `arrange` is either removed or kept as a short way to write a `relate` body that returns one such constraint. Two questions come with (b). Does a cell always make its child a scope of its own? `tile`'s children are, and `partition`'s data cells may not be. And should the constraint take an alignment, as SwiftUI's `.frame` does? It always centers today.  
+> Recommended: (b), named `Constraint.cell`. It is the frame the maintainer set, and it removes the second path in `defineLayout`. It was not built because it changes how a layer reads `position`'s region form, which `partition` and `scatter` share.
+
+#### A child of the second body is asked only for pixels (not built)
+
+Each child of an `arrange` body is a scope of its own, so a child whose size is data asks its parent for nothing, and `request(axis)` returns no size for it. A body that wants its children's sizes in σ cannot have them. This is the same limit \#967 found for `pack`. The fix is the constraint in the card above, together with `measure` in a `relate` body.
+
+#### No layout whose height depends on its width (not built)
+
+A flow of words that wraps into lines has a height that depends on the width it is given. A size request is one function of σ per axis, and `request` in `arrange` returns pixels per axis, so a wrapping row inside a layout that fits to it cannot be written. This is the same limit the `choose` proposal found for wrapping at a solved width.
+
+#### A measured length has no wire form (not built)
+
+A length from `measure` is a function inside the engine, and its `toJSON` throws. The IR's `Length` type cannot say "the width of child 3", so a definition that uses `measure` cannot cross to Python. A Python `relate` body would also have to run as a callback, as `derive` lambdas do. The prototype also checks a measured spacing as 0 px when it validates a spacing strategy (`distribute.ts` 205), which is a declared shortcut marked in the code. The fix is an IR `Length` member for a measured length.
+
+#### Built-ins that are not expansions into constraints
+
+These do not arrange children, so they stay outside the protocol, and that is fine for each:
+
+- `coord` gives axis names their meaning and warps its children after layout.
+- `connect`, `line`, `ribbon`, `arrow` and `enclose` draw from other nodes' positions after layout.
+- `cut` clips its child.
+- The compositing operators (`union`, `intersect` and the rest) combine the regions of their children.
+- Axes, legends and titles are layers that the library adds around a visualization, so they are already constraints.
+- Marks have a size request and no children to place.
+
+One is not fine. `pack` arranges children and is still a node of its own that places circles by a procedure in pixels. `scatter`, `partition` and `table` already build a layer with constraints, but they were not moved onto `defineLayout`.
+
+#### Operators are built asynchronously (separate prototype)
+
+A separate prototype makes building an operator synchronous. Its patch touches 23 files. With it, 748 of the 751 stories render the same normalized DOM, and the other three are byte-identical after a one-line fix. This prototype does not include it. With it, the one `await` in `defineLayout` goes away, and no definition changes.
+
+> **Fork: landing order.** (a) Land the layout protocol first and the synchronous building after. (b) Land the synchronous building first, as its own change, and then the layout protocol on top of it.  
+> Recommended: (b). It is a refactor that changes no output, and the protocol is then written without the `await` from the start.
+
+### How this compares with SwiftUI
+
+SwiftUI's custom layout is the `Layout` protocol ([Apple's documentation](https://developer.apple.com/documentation/swiftui/layout), and the WWDC22 session [Compose custom layouts with SwiftUI](https://developer.apple.com/videos/play/wwdc2022/10056/)). A layout writes [`sizeThatFits`](<https://developer.apple.com/documentation/swiftui/layout/sizethatfits(proposal:subviews:cache:)>), which returns its size for a proposed size, and `placeSubviews(in:)`, which places each child with `place(at:)`. The prototype differs in four ways:
+
+- **The size request.** A SwiftUI layout writes its own. In the prototype the solver derives it from the constraints a `relate` body returns.
+- **Asking a child its size.** A SwiftUI layout asks a child ([`LayoutSubview`](https://developer.apple.com/documentation/swiftui/layoutsubview)) for its size in points, as many times as it likes. A `relate` body reads each child once, as a length in σ.
+- **Placing.** A SwiftUI layout calls `place(at:)` for each child. A `relate` body returns constraints as data, and the solver places.
+- **Choosing between layouts.** SwiftUI has `ViewThatFits`. GoFish would have `choose`, which is proposed and not built.
+
+The reason is one. A SwiftUI size is a number, so asking a child its size is cheap and exact. A GoFish size depends on σ, which is solved for a whole scope at once, so a body cannot ask a child for pixels before the solve. No public statement by a SwiftUI engineer about a more declarative layout was found, so none is cited here.
+
+A row or a column, whichever fits, in SwiftUI as a custom layout:
+
+```swift
+struct RowOrColumn: Layout {
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+    let rowWidth = sizes.map(\.width).reduce(0, +)
+    if rowWidth <= (proposal.width ?? .infinity) {
+      return CGSize(width: rowWidth, height: sizes.map(\.height).max() ?? 0)
+    }
+    return CGSize(width: sizes.map(\.width).max() ?? 0, height: sizes.map(\.height).reduce(0, +))
+  }
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+    let asRow = sizes.map(\.width).reduce(0, +) <= bounds.width
+    var p = bounds.origin
+    for (s, size) in zip(subviews, sizes) {
+      s.place(at: p, proposal: .unspecified)
+      if asRow { p.x += size.width } else { p.y += size.height }
+    }
+  }
+}
+```
+
+In GoFish with `choose`, as a sketch. It is one choice between two expansions, and the engine already has each one's size request, so nothing is measured twice and nothing is placed by hand.
+
+```js
+// A sketch that did not run: `choose` is not built.
+choose([
+  spread({ dir: "x", spacing: 0 }, children),
+  spread({ dir: "y", spacing: 0 }, children),
+]);
+```
+
+### `choose` and what stays procedural
+
+Each studied layout makes some decisions that depend on its bounds or on sizes. The table sorts those decisions into four kinds:
+
+- (a) none,
+- (b) a small fixed set of alternatives, which `choose` covers,
+- (c) a large family of alternatives with a cost to compare them,
+- (d) a procedure.
+
+| Layout                          | Kind                              | Reason                                                                                                                           |
+| ------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| spread, stack                   | (a)                               | The order and gaps are fixed, and σ is solved.                                                                                   |
+| pie, sunburst, icicle           | (a)                               | Stacks and partitions under a coordinate space.                                                                                  |
+| treemap slice, dice, slice-dice | (a)                               | A stack of `fr` shares along one axis, alternating by depth.                                                                     |
+| treemap binary                  | (b) per split                     | Each split chooses x or y by the shape of its bounds.                                                                            |
+| treemap squarify, strip         | (c)                               | Where each row ends and which way it runs, scored by aspect ratio.                                                               |
+| tidy tree                       | (a)                               | Separations are maxima of contour lengths, which compose with `maxLength` once `measure` returns contours.                       |
+| dendrogram                      | (a)                               | Leaves are a spread, and each parent sits at the middle of its children.                                                         |
+| sankey columns                  | (a) for layout, (d) for order     | Columns come from data. The order heuristic repeats, but reads only data, so it runs in `derive`.                                |
+| layered graph ranks             | (a) for layout, (d) for crossings | Ranks and crossing reduction read only the graph. Coordinates are a linear program, which is constraints.                        |
+| wrap, flow                      | (c), or (b) per break             | Each possible line break chooses to break or not. The first fit at each break is the greedy flow, and a cost gives the best one. |
+| row or column                   | (b)                               | Two alternatives.                                                                                                                |
+| circle pack                     | (d), independent of its bounds    | A chain of circles placed in turn. Without padding it is a multiple of σ, so it expands to positions in lengths.                 |
+| Voronoi                         | (d), needs its bounds             | Cells come from the sites and the shape of its bounds.                                                                           |
+| force                           | (d), needs its bounds             | It repeats its steps in a fixed box.                                                                                             |
+
+Squarify both ways. The `arrange` body that ran is in example (c). As a `choose` with a cost, as a sketch:
+
+```js
+// A sketch that did not run: `choose.seams`, `Cost.worstAspect` and
+// `dir: "short"` do not exist. Each row is a stack of fr shares along the
+// short side, and the rows are a stack along the long side.
+const squarifiedByChoice = (items) =>
+  choose.seams(items, {
+    row: (run) =>
+      stack(
+        { dir: "short", spacing: 0 },
+        run.map((d) => cell(d).w(fr(d.w)))
+      ),
+    rest: (row, rest) => stack({ dir: "long", spacing: 0 }, [row, rest]),
+    cost: Cost.worstAspect(), // the d3 rule, read at the solved bounds
+    ranking: "first fit per seam", // greedy: add while the cost does not get worse
+  });
+```
+
+The `choose` form needs an axis named by the shape of the bounds (`dir: "short"`), a cost read from placed cells, and a choice at each break. All three read the bounds, so the decision still happens after σ is solved. For squarify the `choose` form gains nothing over the body that ran, because a treemap fills its bounds and asks for nothing. For flow and for row or column it gains a lot, because there the choice changes the size request.
+
+Deriving size requests from constraints is cheap today. A scratch script in the copy (`src/tests/unfoldCost.scratch.ts`) timed the claim walk, the pass that works out each node's size request. Each node is worked out once, at about 0.04 ms per node, and the claim walk is 36 to 43 percent of layout for visualizations made of spreads and stacks. A definition that wrote its own size request would save only its own part of that 0.04 ms, because placement reads its children's requests anyway. So the protocol has no way to write a size request by hand except in `arrange`, and it should add one only if a profile shows the claim walk is the bottleneck.
+
 ## The design
 
 - A layout algorithm has two parts. Its **decisions** are discrete: an order, a grouping into rows, which side a dot goes on. Its **relations** say how positions and sizes depend on each other once the decisions are made. A **solver** turns relations into positions.
@@ -1867,6 +3380,8 @@ Across a scope boundary, solvers share no unknowns. What crosses is small and th
 This is the same boundary a `layout` function needs (below), and it is what issue \#806 calls cooperating layout theories. A geometry scope inside a chart is a child with a size. A chart inside a geometry scope is a shape to be placed. The symbolic solver asks one more thing of a scope that wants to take part in fitting a chart to its room: its size must be a function of the scale that never shrinks when the scale grows. Circle packing gives one when all its radii come from data, because the whole packing grows with the scale. That is what d3 does.
 
 ### Writing the decisions
+
+The Layout protocol prototype tab builds this as one call, `defineLayout`, and shows two things this section does not know: the function that calls `measure` ran with lengths, and `layout(children, body)` (there an `arrange` body) needed no second run, because its children are laid out in the same run.
 
 #### Three ways, by when the structure is known
 
@@ -2787,8 +4302,8 @@ Not proposed: a geometry or optimizing solver now, a constraint that iterates, o
 
 #### Three forks
 
-- **The names `layout` and `measure`**, or a second argument to `createMark`. Shown with the API on the first tab.
-- **What spacing means in a tiling:** d3's inset or a stack's gap. Shown with the treemap on the second tab. It decides whether the built-in tilings can become presets with no pixel change.
+- **The names `layout` and `measure`**, or a second argument to `createMark`. Shown with the API on The design tab. The Layout protocol prototype tab has a newer form of this fork.
+- **What spacing means in a tiling:** d3's inset or a stack's gap. Shown with the treemap on the Every d3 layout tab. It decides whether the built-in tilings can become presets with no pixel change.
 - **The spelling of the minimum gap and its slack rule.** (decided) The slack rule is an option of `Spacing.atLeast`. Linked gaps share one rule, and two that disagree are an error. The slack rule tab keeps the four spellings it compared.
 
 #### Hard parts

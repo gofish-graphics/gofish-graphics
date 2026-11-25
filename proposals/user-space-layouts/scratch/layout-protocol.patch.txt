@@ -1,0 +1,1658 @@
+diff --git a/packages/gofish-graphics/src/ast/_node.ts b/packages/gofish-graphics/src/ast/_node.ts
+index 34968863d..6ba05bd15 100644
+--- a/packages/gofish-graphics/src/ast/_node.ts
++++ b/packages/gofish-graphics/src/ast/_node.ts
+@@ -1637,6 +1637,10 @@ export class GoFishNode {
+ 
+   /** One run of {@link resolveExtent}. */
+   private claimOnce(): Size<Extent | undefined> {
++    // PROTOTYPE (user-space layouts): count claims for the unfolding cost
++    // story. Not for main.
++    (globalThis as { __gofishClaims?: number }).__gofishClaims =
++      ((globalThis as { __gofishClaims?: number }).__gofishClaims ?? 0) + 1;
+     const spaces = this.resolveUnderlyingSpace();
+     const childSpaces = this.children.map((c) => c.resolveUnderlyingSpace());
+     const childExtents = this.children.map((c) => c.resolveExtent());
+diff --git a/packages/gofish-graphics/src/ast/constraints/distribute.ts b/packages/gofish-graphics/src/ast/constraints/distribute.ts
+index 39dbf8330..d2bf98b6a 100644
+--- a/packages/gofish-graphics/src/ast/constraints/distribute.ts
++++ b/packages/gofish-graphics/src/ast/constraints/distribute.ts
+@@ -62,7 +62,7 @@ import type { Arith } from "../solver/arith";
+ import * as Interval from "../../util/interval";
+ import * as Pwl from "../solver/pwl";
+ import type { EndsOf, Gap, GapOf } from "./gap";
+-import { isLength } from "../length";
++import { isLength, type LengthValue } from "../length";
+ import { Frontend } from "gofish-ir";
+ import type { Spacing } from "../../families/spacing";
+ 
+@@ -202,7 +202,19 @@ export function spacingOf(spacing: Gap | Spacing): Spacing {
+       `[gofish] spacing: expected a number, a length (percent(n) or fr(k)) ` +
+         `or a Spacing strategy, got ${strategy === null ? "null" : typeof strategy}.`
+     );
+-  Frontend.checkStrategy("Spacing", strategy, "spacing");
++  // SHORTCUT (user-space layouts, stage 2): the check walks the strategy as
++  // wire data, and a measured length (`measure` in layoutProtocol.ts) is
++  // engine data with no wire form, so its amount is checked as 0 pixels.
++  // The right fix is a type for it in the IR's `Length`, or a check of
++  // lengths by `isLength` on the JS side.
++  const amount = spacingAmount(strategy as Spacing);
++  const checked =
++    isLength(amount) && (amount as LengthValue).read !== undefined
++      ? (strategy as Spacing).kind === "pitch"
++        ? { ...(strategy as object), distance: 0 }
++        : { ...(strategy as object), gap: 0 }
++      : strategy;
++  Frontend.checkStrategy("Spacing", checked, "spacing");
+   return strategy as Spacing;
+ }
+ 
+diff --git a/packages/gofish-graphics/src/ast/gofish.tsx b/packages/gofish-graphics/src/ast/gofish.tsx
+index 8ac42990d..0672b6e37 100644
+--- a/packages/gofish-graphics/src/ast/gofish.tsx
++++ b/packages/gofish-graphics/src/ast/gofish.tsx
+@@ -446,6 +446,11 @@ export async function layout(
+   legendFields: ReadonlySet<string>;
+   warnings: LayoutWarning[];
+ }> {
++  // PROTOTYPE (user-space layouts): count pipeline runs, so a story can
++  // show how many runs a render took. Not for main.
++  (globalThis as { __gofishLayoutRuns?: number }).__gofishLayoutRuns =
++    ((globalThis as { __gofishLayoutRuns?: number }).__gofishLayoutRuns ?? 0) +
++    1;
+   child = await child;
+   // The render's size is the outermost room: pixels only (a size from the
+   // HTML container is a separate feature).
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx
+index 6e85fd879..30a355f05 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx
+@@ -1,9 +1,9 @@
+-import { axisOverrideOf, GoFishNode } from "../_node";
++import { GoFishNode } from "../_node";
+ import { checkLengths, type LengthValue } from "../length";
+ import { Frontend } from "gofish-ir";
+ import type { AxisOptions } from "../gofish";
+ import { fieldNameOf, MaybeValue } from "../data";
+-import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
++import { AxisName, Direction, FancyDims } from "../dims";
+ import { Collection } from "lodash";
+ import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
+ import { isField } from "../data";
+@@ -15,7 +15,8 @@ import { createNodeOperator } from "../withGoFish";
+ import { Alignment } from "./alignment";
+ import { layer } from "./layer";
+ import { Constraint } from "../constraints";
+-import { axisName, childSlots } from "../constraints/shared";
++import { axisName } from "../constraints/shared";
++import { defineLayout } from "../layoutProtocol";
+ import type { Spacing } from "../../families/spacing";
+ import type { Gap } from "../constraints/gap";
+ import { createOperator } from "../marks/createOperator";
+@@ -155,44 +156,89 @@ export const Spread = createNodeOperator(
+       );
+     }
+ 
+-    // Its constraints refer to the children by slot (`SlotOperand`), so no
+-    // name is looked up and none is given.
+-
+-    // Elaborate to a layer carrying the cross-axis align + the stack distribute.
+-    // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
+-    // node: it maps its keyed domain into that size.
+-    const node = (await layer(
++    return SpreadLayout(
+       {
+         key,
++        dir: dirName,
++        spacing,
++        alignment,
++        reverse,
++        glue,
++        baseline,
++        hasMidpoint,
++        hasOrder,
++        axisMeasures,
++        axes,
+         ...fancyDims,
+       } as any,
+       childList
+-    )) as GoFishNode;
+-    // `dir` names an axis in the scope of the spread's children: `x`/`y`, or a
+-    // name the enclosing coordinate space declares (`theta`, `lon`, ...). The
+-    // spread is built before that space exists, so the constraints, which need
+-    // the axis, are installed by the resolveAliases pass, after the layer's
+-    // own `dims` hook (if the spread was given `dims`).
+-    const layerDims = node._elaborateInAxisScope;
+-    node._elaborateInAxisScope = async (outer, inner) => {
+-      await layerDims?.(outer, inner);
+-      const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
+-      const alignAxis = axisName((1 - stackDir) as Direction);
+-      const stackAxis = axisName(stackDir);
+-      const refs = childSlots(node);
+-      // In the combinator form the part of an `at` is a child index.
+-      if (baseline?.kind === "at" && refs[baseline.part] === undefined)
+-        throw new Error(
+-          `${glue ? "stack" : "spread"}: its baseline is ` +
+-            `\`Baseline.at(${baseline.part}, ...)\`, a child index, but it ` +
+-            `has ${refs.length} ${refs.length === 1 ? "child" : "children"}.`
+-        );
+-      // The cross-axis align: it shares the frame (unions the children's
+-      // domain) and, for free children (bars), commits a baseline. A
+-      // self-positioned child (a scatter facet) is left alone by `align`
+-      // automatically — the placement solver reads the child's abstract
+-      // placement, so no guard flag.
+-      await node.INTERNAL_relate([
++    );
++  }
++);
++
++type SpreadRelateProps = {
++  dir: AxisName;
++  spacing?: Gap | Spacing;
++  alignment: Alignment;
++  reverse: boolean;
++  glue: boolean;
++  baseline?: StackBaseline<number>;
++  hasMidpoint?: boolean;
++  hasOrder?: boolean;
++  axisMeasures?: Record<string, string | undefined>;
++};
++
++/**
++ * The layout of `spread` and `stack` (`defineLayout` with `relate`): an
++ * align across `dir` and a distribute along it, among the children, in the
++ * one solve of the layer the spread is. Its arrangement does not depend on
++ * its bounds, so the solver derives its size request.
++ */
++const SpreadLayout = defineLayout<SpreadRelateProps>({
++  name: "spread",
++  options: [
++    "dir",
++    "spacing",
++    "alignment",
++    "reverse",
++    "glue",
++    "baseline",
++    "hasMidpoint",
++    "hasOrder",
++    "axisMeasures",
++  ],
++  relate: (
++    refs,
++    {
++      dir,
++      spacing,
++      alignment,
++      reverse,
++      glue,
++      baseline,
++      hasMidpoint,
++      hasOrder,
++      axisMeasures,
++    },
++    axes
++  ) => {
++    const stackDir = axes.axis(dir, `spread({ dir })`);
++    const alignAxis = axisName((1 - stackDir) as Direction);
++    const stackAxis = axisName(stackDir);
++    // In the combinator form the part of an `at` is a child index.
++    if (baseline?.kind === "at" && refs[baseline.part] === undefined)
++      throw new Error(
++        `${glue ? "stack" : "spread"}: its baseline is ` +
++          `\`Baseline.at(${baseline.part}, ...)\`, a child index, but it ` +
++          `has ${refs.length} ${refs.length === 1 ? "child" : "children"}.`
++      );
++    return {
++      relations: [
++        // The cross-axis align: it shares the frame (unions the children's
++        // domain) and, for free children (bars), commits a baseline. A
++        // self-positioned child (a scatter facet) is left alone by `align`
++        // automatically: the placement solver reads the child's abstract
++        // placement, so no guard flag.
+         Constraint.align({ [alignAxis]: alignment }, refs),
+         Constraint.distribute(
+           {
+@@ -205,23 +251,19 @@ export const Spread = createNodeOperator(
+                 ? { ...baseline, part: refs[baseline.part] }
+                 : baseline,
+             hasMidpoint,
+-            // The grouping field for this (stack) axis → the ORDINAL
+-            // space's measure, so a spread-by-category axis titles itself
+-            // off its space.
+-            measure: axisMeasures?.[dirName],
++            // The grouping field for this (stack) axis: the ORDINAL space's
++            // measure, so a spread-by-category axis titles itself off its
++            // space.
++            measure: axisMeasures?.[dir],
+             hasOrder,
+           },
+           refs
+         ),
+-      ]);
+-      // Tag with stack direction so coord can map axis overrides to polar dims.
+-      node.axisDir = stackDir;
++      ],
++      orientation: stackDir,
+     };
+-
+-    if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
+-    return node;
+-  }
+-);
++  },
++});
+ 
+ export type SpreadOptions<T = any> = {
+   by?: SplitBy;
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/tile.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/tile.tsx
+index f7c0d91af..78c9f2847 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/tile.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/tile.tsx
+@@ -11,28 +11,11 @@ import {
+   treemapSquarify,
+ } from "d3-hierarchy";
+ 
+-import { GoFishNode, nestEach } from "../_node";
+ import { GoFishAST } from "../_ast";
+-import { createNodeOperator } from "../withGoFish";
+-import {
+-  FancyDims,
+-  Size,
+-  Direction,
+-  MARK_DIMS,
+-  elaborateOwnDims,
+-} from "../dims";
+-import {
+-  fieldNameOf,
+-  getQuantity,
+-  getValue,
+-  isValue,
+-  MaybeValue,
+-} from "../data";
+-import { computeAesthetic, computeSize } from "../../util";
+-import { posFn, pxOf } from "../domain";
+-import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
+-import * as Pwl from "../solver/pwl";
++import { FancyDims, Size, MARK_DIMS } from "../dims";
++import { getQuantity, getValue, isValue, MaybeValue } from "../data";
+ import { rejectLength, type LengthValue } from "../length";
++import { byChild, defineLayout, type Child } from "../layoutProtocol";
+ import { createOperator } from "../marks/createOperator";
+ import { SplitBy, splitEntries } from "../datumProjection";
+ import type { FieldExpr } from "../fieldExpr";
+@@ -41,14 +24,7 @@ import { checkSummable } from "../measure";
+ import { squarify, type Tiling } from "../../families/tiling";
+ import { Frontend } from "gofish-ir";
+ import { insetConvex, isConvex } from "../geometry/clip";
+-import {
+-  boxRing,
+-  hasArea,
+-  inItsBox,
+-  isWholeBox,
+-  ringCentroid,
+-  type Ring,
+-} from "../geometry/ring";
++import { boxRing, hasArea, isWholeBox, type Ring } from "../geometry/ring";
+ import { voronoiTiling } from "../geometry/voronoiTiling";
+ 
+ /** What a strategy's cells read from the `tile` operator: its options, the
+@@ -162,12 +138,6 @@ const voronoiCells =
+     return voronoiTiling(insetConvex(whole, padding)!, weights, seed, spacing);
+   };
+ 
+-/** The center of the box that holds a ring. */
+-const boxCenter = (ring: Ring): [number, number] => {
+-  const { at, size } = inItsBox(ring);
+-  return [at[0] + size[0] / 2, at[1] + size[1] / 2];
+-};
+-
+ /** The cells a `Tiling` strategy makes. */
+ const cellsOf = (strategy: Tiling): CellsFn =>
+   strategy.kind === "voronoi"
+@@ -209,30 +179,23 @@ function resolveWeight(
+ 
+ /** A `tile` operator as an error message names it: by the field its children are
+  *  split by, which each child records (`keyBy`). */
+-const where = (children: readonly GoFishAST[]): string => {
+-  const by = fieldNameOf((children[0] as GoFishNode | undefined)?.keyBy);
++const where = (children: readonly Child[]): string => {
++  const by = children[0]?.by;
+   return by === undefined ? "tile" : `tile (by "${by}")`;
+ };
+ 
+-const TileNode = createNodeOperator(
+-  (opts: TileProps, children: GoFishAST[]) => {
+-    const {
+-      key,
+-      spacing = 0,
+-      padding = 0,
+-      round = true,
+-      tiling = squarify(),
+-      sort = "desc",
+-      size: sizeChannel,
+-      ...fancyDims
+-    } = opts;
+-
+-    // A length for its own size (`w: percent(50)`, `w: fr(2)`) is laid out
+-    // in the room it is given, once it is in its tree (#1176 step 6).
+-    const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+-    const { dims } = own;
++/**
++ * `tile` is a layout that reads its bounds (`defineLayout` with `arrange`):
++ * it asks for no size of its own, and once its bounds are known it cuts
++ * them into one cell per child, each with its weight's share of the area,
++ * and gives each child its cell as its bounds.
++ */
++const TileNode = defineLayout<TileProps>({
++  name: "tile",
++  options: ["spacing", "padding", "round", "tiling", "sort", "size"],
++  check: ({ spacing = 0, padding = 0, size }) => {
+     // Its spacing and padding are one number d3 applies on both axes, so a
+-    // percent has no one room to be a percent of.
++    // percent has no one size to be a percent of.
+     // TODO(#1176): a percent `tile` spacing needs the axis it is of (the
+     // smaller side, or each axis on its own), a design question.
+     rejectLength("tile's spacing", spacing);
+@@ -241,202 +204,51 @@ const TileNode = createNodeOperator(
+     // its entries: their unit must add up (`checkSummable`, #1197). It is
+     // checked once here, so the layout below sums the weights as they are.
+     checkSummable(
+-      sizeChannel?.map(getQuantity).find((q) => q !== undefined),
++      size?.map(getQuantity).find((q) => q !== undefined),
+       "tile({ size })"
+     );
+-
+-    const node = new GoFishNode(
+-      {
+-        type: "tile",
+-        args: {
+-          key,
+-          spacing,
+-          padding,
+-          round,
+-          tiling,
+-          sort,
+-          size: sizeChannel,
+-          dims,
+-        },
+-        key,
+-        // The operator sizes each child from data into a tile of its own, so
+-        // on both axes each child is detached from the others and nested in
+-        // its tile, as a grid cell is.
+-        resolveSharing: nestEach,
+-        resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
+-          // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
+-          // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed
+-          // to a Value), emit SIZE so the parent faceting spread can co-solve a
+-          // scale shared across sibling `tile` operators. Otherwise the
+-          // operator orders nothing along the axis by data: it has no axis
+-          // there and fills the slot it is given.
+-          const axisSpace = (i: Direction): UnderlyingSpace => {
+-            const size = own.dataSize(i);
+-            return isValue(size) ? magnitude(size) : UNDEFINED;
+-          };
+-          return [axisSpace(0), axisSpace(1)];
+-        },
+-        layout: (size, scales, childAsts, node, shape) => {
+-          const xPos = computeAesthetic(
+-            dims[0].min,
+-            posFn(scales?.[0]?.map),
+-            undefined
+-          );
+-          const yPos = computeAesthetic(
+-            dims[1].min,
+-            posFn(scales?.[1]?.map),
+-            undefined
+-          );
+-
+-          // Re-solve a local scale factor from this node's own size claim,
+-          // mirroring Spread.computeScaleFactor (spread.tsx:242-259). Used as a
+-          // fallback for the standalone (non-faceted) data-driven case.
+-          const myExtent = node.resolveExtent();
+-          const localScaleFactor = (dir: Direction): number | undefined => {
+-            const extent = myExtent[dir];
+-            if (extent !== undefined) {
+-              return Pwl.solve(extent.width, size[dir]) ?? 0;
+-            }
+-            return undefined;
+-          };
+-
+-          // The box size per axis (the [w, h] handed to d3-treemap):
+-          //  - no size      -> fill the slot the parent gave (size[dir]), as a
+-          //    length that is a share of its scope does (`fixedSize`).
+-          //  - numeric size -> that many px (computeSize literal branch), as a
+-          //    length whose room is known is.
+-          //  - data-driven  -> if a shared posScale exists on this axis (the
+-          //    faceting parent composed POSITION[0,maxV] across siblings), map
+-          //    the value through it so all facets share one scale; otherwise
+-          //    solve our own factor and multiply.
+-          const resolveAxisSize = (dir: Direction): number => {
+-            const declared = node.fixedSize(dir);
+-            if (declared === undefined) return size[dir];
+-            if (!isValue(declared)) {
+-              return computeSize(
+-                declared,
+-                scales?.[dir]?.sigma ?? 1,
+-                size[dir]
+-              ) as number;
+-            }
+-            const v = getValue(declared)!;
+-            const map = scales?.[dir]?.map;
+-            if (map) return pxOf(map, v) - pxOf(map, 0);
+-            const sf = scales?.[dir]?.sigma ?? localScaleFactor(dir) ?? 1;
+-            return v * sf;
+-          };
+-
+-          const resolvedSize: Size = [resolveAxisSize(0), resolveAxisSize(1)];
+-
+-          Frontend.checkStrategy("Tiling", tiling, "tile({ tiling })");
+-          if (childAsts.length === 0) {
+-            return {
+-              intrinsicDims: {
+-                0: { min: 0, size: 0 },
+-                1: { min: 0, size: 0 },
+-              },
+-              transform: { translate: { 0: undefined, 1: undefined } },
+-            };
+-          }
+-
+-          // Build weights (single level: the passed-in children).
+-          const leafData: LeafDatum[] = childAsts.map((_child, i) => ({
+-            i,
+-            weight: resolveWeight(sizeChannel, i),
+-          }));
+-
+-          // Ensure total > 0 so the tiling doesn't produce NaNs.
+-          const total = leafData.reduce((acc, d) => acc + d.weight, 0);
+-          if (total <= 0) {
+-            for (const d of leafData) d.weight = 1;
+-          }
+-
+-          // The shape it fills (#1222, `geometry/ring.ts`): the shape it is
+-          // handed, when it has no size of its own and so fills its space,
+-          // else its box.
+-          const fills =
+-            node.fixedSize(0) === undefined && node.fixedSize(1) === undefined;
+-          const region = fills ? shape : undefined;
+-
+-          // The order the tiling lays the children out in. The sort is
+-          // stable, so equal weights keep their child order.
+-          if (sort !== "none")
+-            leafData.sort((a, b) =>
+-              sort === "asc" ? a.weight - b.weight : b.weight - a.weight
+-            );
+-
+-          // One cell per child, in the operator's frame, in weight order.
+-          const cells = cellsOf(tiling)(
+-            region,
+-            leafData.map((d) => d.weight),
+-            {
+-              spacing,
+-              padding,
+-              round,
+-              size: resolvedSize,
+-              where: where(childAsts),
+-            }
+-          );
+-
+-          // Each child is laid out in its cell's box, with its cell as its
+-          // shape. On an axis where it fills that room it spans the box, so
+-          // it is centered on the box; on an axis where it does not (a text,
+-          // a circle, a sized rect) it is centered on the cell's centroid,
+-          // which is inside the cell. For a box cell the two are one point.
+-          leafData.forEach(({ i }, k) => {
+-            const ring = cells[k];
+-            const child = childAsts[i];
+-            const fills = (axis: Direction) =>
+-              child instanceof GoFishNode && child.fillsRoom(axis);
+-            if (!hasArea(ring)) {
+-              // A cell with no area (a tile rounded to no width, a cell its
+-              // spacing ate, or no cell at all) holds a child of no size, at
+-              // the cell's center, or the region's center when it has none.
+-              const center =
+-                ring.length > 0
+-                  ? boxCenter(ring)
+-                  : ringCentroid(
+-                      region ?? boxRing(resolvedSize[0], resolvedSize[1])
+-                    );
+-              const placeable = child.layout([0, 0], scales);
+-              placeable.place(0, center[0], "center");
+-              placeable.place(1, center[1], "center");
+-              return;
+-            }
+-            const box = inItsBox(ring);
+-            const centroid = ringCentroid(ring);
+-            const placeable = child.layout(box.size, scales, box.ring);
+-            for (const axis of [0, 1] as const)
+-              placeable.place(
+-                axis,
+-                fills(axis)
+-                  ? box.at[axis] + box.size[axis] / 2
+-                  : centroid[axis],
+-                "center"
+-              );
+-          });
+-
+-          // Its box is the region it was given, `[0, w] × [0, h]`, whatever
+-          // the tiling. The padding is an inset at the operator's own edge,
+-          // inside that box, and the box is the frame its shape is in, so a
+-          // parent that centers it there centers its shape.
+-          return {
+-            intrinsicDims: {
+-              0: { min: 0, size: resolvedSize[0] },
+-              1: { min: 0, size: resolvedSize[1] },
+-            },
+-            transform: { translate: { 0: xPos, 1: yPos } },
+-          };
+-        },
+-      },
+-      children
++  },
++  arrange: (
++    { w, h, shape },
++    children,
++    {
++      spacing = 0,
++      padding = 0,
++      round = true,
++      tiling = squarify(),
++      sort = "desc",
++      size: sizeChannel,
++    }
++  ) => {
++    Frontend.checkStrategy("Tiling", tiling, "tile({ tiling })");
++    // The weights, one per child.
++    const leafData: LeafDatum[] = children.map((_child, i) => ({
++      i,
++      weight: resolveWeight(sizeChannel, i),
++    }));
++    // Ensure total > 0 so the tiling doesn't produce NaNs.
++    const total = leafData.reduce((acc, d) => acc + d.weight, 0);
++    if (total <= 0) for (const d of leafData) d.weight = 1;
++    // The order the tiling lays the children out in. The sort is stable,
++    // so equal weights keep their child order.
++    if (sort !== "none")
++      leafData.sort((a, b) =>
++        sort === "asc" ? a.weight - b.weight : b.weight - a.weight
++      );
++    // One cell per child, in the operator's frame, in weight order.
++    const cells = cellsOf(tiling)(
++      shape?.points,
++      leafData.map((d) => d.weight),
++      { spacing, padding, round, size: [w, h], where: where(children) }
+     );
+-    // The operator's own box is named by axis in `dims` like a mark's; `bind`
+-    // defers it to the resolveAliases pass.
+-    own.bind(node);
+-    return node;
+-  }
+-);
++    return {
++      bounds: byChild(
++        leafData.map((d) => d.i),
++        cells.map((points) => ({ points }))
++      ),
++    };
++  },
++});
+ 
+ export type TileOptions<T = any> = Omit<TileProps, "size"> & {
+   /** Field to partition rows by (like `spread`/`group`); also accepts a
+@@ -452,7 +264,7 @@ export type TileOptions<T = any> = Omit<TileProps, "size"> & {
+ 
+ export const tile = createOperator<any, TileOptions>(
+   ((props: TileProps, children: GoFishAST[]) =>
+-    TileNode(props, children)) as any,
++    TileNode(props as any, children)) as any,
+   {
+     split: ({ by }, d) => splitEntries(by, d),
+     channels: {
+diff --git a/packages/gofish-graphics/src/ast/layoutProtocol.ts b/packages/gofish-graphics/src/ast/layoutProtocol.ts
+new file mode 100644
+index 000000000..c974a6de9
+--- /dev/null
++++ b/packages/gofish-graphics/src/ast/layoutProtocol.ts
+@@ -0,0 +1,415 @@
++// PROTOTYPE (user-space layouts): the public layout protocol. One call,
++// `defineLayout`, defines a layout operator in one of two ways, and the
++// built-in `spread`, `stack` and `tile` are defined with it. See
++// /Users/jmp/.claude/jobs/a4ed3dcc/tmp/layout-protocol-out/protocol.md.
++//
++// The two ways differ in one thing: whether the arrangement depends on the
++// bounds the operator is given (the rectangle its parent lays it out in).
++//
++// - `relate`: the arrangement does not depend on the bounds. The definition
++//   returns relations among its children (`Constraint.align`,
++//   `Constraint.distribute`, ...). The operator is a `layer`, and the
++//   relations join the layer's one solve: the solver derives the size
++//   request, shares the scale of the scope with the children, and places
++//   them. A ref from outside can reach into it before layout.
++// - `arrange`: the arrangement depends on the bounds. The definition states
++//   its size request in pixels (or none: it fills its bounds), and, once
++//   its bounds are known, gives each child bounds of its own, a box or a
++//   polygon. Each child is in a scope of its own, so no scale is shared
++//   across the boundary.
++
++import { axisOverrideOf, GoFishNode, nestEach } from "./_node";
++import type { GoFishAST } from "./_ast";
++import { createNodeOperator, type PromiseWithRender } from "./withGoFish";
++import {
++  elaborateOwnDims,
++  resolveAxisName,
++  type AxisName,
++  type Direction,
++  type Size,
++} from "./dims";
++import { fieldNameOf, getValue, isValue, type MaybeValue } from "./data";
++import { computeAesthetic, computeSize } from "../util";
++import { posFn, pxOf } from "./domain";
++import { UNDEFINED, magnitude, type UnderlyingSpace } from "./underlyingSpace";
++import { Extent, impliedExtents } from "./extent";
++import * as Pwl from "./solver/pwl";
++import { layer } from "./graphicalOperators/layer";
++import { axisName, childSlots, type ConstraintRef } from "./constraints/shared";
++import { measured, type LengthValue } from "./length";
++import type { ConstraintSpec } from "./constraints";
++import type { AxesOptions, AxisOptions } from "./gofish";
++import {
++  boxRing,
++  hasArea,
++  inItsBox,
++  ringCentroid,
++  type Ring,
++} from "./geometry/ring";
++
++/** Options every layout operator takes, whatever its definition: its key,
++ *  its own box (`w`, `h`, `x`, `y`, `dims`, ...), and its axes. */
++export type BoxOptions = {
++  key?: string;
++  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
++  [box: string]: unknown;
++};
++
++/** How a definition names an axis: `x`/`y`, or a name the enclosing
++ *  coordinate space declares (`theta`, `r`), resolved once that space is
++ *  known. `what` says where the name came from, for the error when no
++ *  space declares it. */
++export type Axes = {
++  axis(name: AxisName | Direction, what: string): 0 | 1;
++  /** A child's size request on each axis, as a length (stage 2): a value
++   *  in the scale of the scope the child is in, read when the claim walk
++   *  asks for it. Lengths compose with `add`, `sub`, `times` and
++   *  `maxLength`, and a relation takes them as its gaps; their `pixels`
++   *  exist only for a length the scale does not change. */
++  measure(child: ConstraintRef): { w: LengthValue; h: LengthValue };
++};
++
++/** What a `relate` definition returns. */
++export type Relations = {
++  /** Relations among the children, for the layer's solve. */
++  relations: ConstraintSpec[];
++  /** The axis the children are laid out along, if there is one (SwiftUI's
++   *  `layoutProperties.stackOrientation`): what an axis override under a
++   *  coordinate space, and the check of flexible parts, read. */
++  orientation?: 0 | 1;
++};
++
++/** A child as an `arrange` definition sees it. */
++export type Child = {
++  readonly index: number;
++  /** What the child asks for on `axis` before the scale is known, in
++   *  pixels: a text's width, a rect's literal size. Undefined when it asks
++   *  for nothing there and fills the bounds it is given (a rect with no
++   *  size, or content its own scale fits to its bounds). */
++  request(axis: 0 | 1): number | undefined;
++  /** Whether it fills the bounds it is given on `axis`. */
++  fillsBounds(axis: 0 | 1): boolean;
++  /** The field the flow split it by, for messages. */
++  readonly by?: string;
++};
++
++/** A rectangle in pixels, in the operator's frame: its corner at `x`, `y`
++ *  and its size `w` by `h`. */
++export type Box = { x: number; y: number; w: number; h: number };
++
++/** A convex polygon in pixels, in the operator's frame: its corners in
++ *  order, with no repeated closing point, as the `polygon` mark takes its
++ *  `points`. */
++export type Polygon = { points: readonly (readonly [number, number])[] };
++
++/** The bounds an `arrange` definition is given, in pixels, in its own
++ *  frame: the box `[0, w] × [0, h]`, and the shape it was offered inside
++ *  that box when that is not the whole box (a Voronoi cell). */
++export type Bounds = { w: number; h: number; shape?: Polygon };
++
++/** What an `arrange` definition returns: each child's bounds, by child
++ *  index, a box or a convex polygon in the operator's frame. A child is
++ *  laid out in the box that holds its bounds, with a polygon as its shape,
++ *  centered on that box on an axis where it fills its bounds, else on the
++ *  polygon's centroid. Bounds with no area hold a child of no size at
++ *  their center (the operator's center, for a polygon with no points). */
++export type Arrangement = { bounds: (Box | Polygon)[] };
++
++type Common<O> = {
++  /** The operator's name, for messages. */
++  name: string;
++  /** The keys of the options that are the definition's own. Every other
++   *  option is a {@link BoxOptions} key. */
++  options: readonly (keyof O & string)[];
++  /** Checks on the options and children, run once when the operator is
++   *  called. */
++  check?: (opts: O, children: readonly GoFishAST[]) => void;
++};
++
++export type RelateDefinition<O> = Common<O> & {
++  /** The relations among `children` (handles for `Constraint` calls), once
++   *  the axis names have their meaning. Runs once per node. */
++  relate: (children: ConstraintRef[], opts: O, axes: Axes) => Relations;
++};
++
++export type ArrangeDefinition<O> = Common<O> & {
++  /** Its size request on each axis before the scale is known, in pixels,
++   *  from its children's ({@link Child.request}). Undefined on an axis: it
++   *  asks for nothing and fills the bounds it is given. Omitted: it fills
++   *  on both. Runs once per claim walk. */
++  request?: (
++    children: Child[],
++    opts: O
++  ) => [number | undefined, number | undefined];
++  /** Each child's bounds once its own bounds are known. Runs once per
++   *  layout. Must not create marks: it returns bounds, not nodes. */
++  arrange: (bounds: Bounds, children: Child[], opts: O) => Arrangement;
++};
++
++export type LayoutDefinition<O> = RelateDefinition<O> | ArrangeDefinition<O>;
++
++/** The operator a definition defines: a combinator over a child list, as
++ *  `spread(opts, children)` and `tile(opts, children)` are. */
++export type LayoutOperator<O> = (
++  opts: O & BoxOptions,
++  children?: unknown
++) => PromiseWithRender<GoFishNode>;
++
++const split = <O>(
++  def: Common<O>,
++  opts: O & BoxOptions
++): { own: O; box: BoxOptions } => {
++  const own: Record<string, unknown> = {};
++  const box: BoxOptions = {};
++  const mine = new Set<string>(def.options);
++  for (const [k, v] of Object.entries(opts ?? {}))
++    (mine.has(k) ? own : box)[k] = v;
++  return { own: own as O, box };
++};
++
++/** Define a layout operator (see the module comment). */
++export function defineLayout<O>(def: LayoutDefinition<O>): LayoutOperator<O> {
++  return createNodeOperator((opts: O & BoxOptions, children: GoFishAST[]) => {
++    const { own, box } = split(def, opts);
++    def.check?.(own, children);
++    return "relate" in def
++      ? relateNode(def, own, box, children)
++      : arrangeNode(def, own, box, children);
++  }) as unknown as LayoutOperator<O>;
++}
++
++// ─────────────────────────────────────────────────────────────────────────
++// `relate`: a layer with the definition's relations
++// ─────────────────────────────────────────────────────────────────────────
++
++async function relateNode<O>(
++  def: RelateDefinition<O>,
++  own: O,
++  { axes, ...box }: BoxOptions,
++  children: GoFishAST[]
++): Promise<GoFishNode> {
++  const node = (await layer(box as any, children)) as GoFishNode;
++  // The relations name axes, which have a meaning only inside the
++  // coordinate space around the node, so they are installed in the pass
++  // that gives names their meaning, after the box's own `dims`.
++  const boxDims = node._elaborateInAxisScope;
++  node._elaborateInAxisScope = async (outer, inner) => {
++    await boxDims?.(outer, inner);
++    const slots = childSlots(node);
++    const { relations, orientation } = def.relate(slots, own, {
++      axis: (name, what) =>
++        typeof name === "number" ? name : resolveAxisName(inner, name, what),
++      measure: (ref) => {
++        const on = (axis: 0 | 1) =>
++          measured(() => {
++            const [child] = ref.means(node);
++            const width = child?.resolveExtent()[axis]?.width;
++            if (width === undefined)
++              throw new Error(
++                `${def.name}: measure(${ref.name}) on ${axisName(axis)}: it ` +
++                  `asks for no size there (it fills the bounds it is given), ` +
++                  `so it has no length to read.`
++              );
++            return width;
++          });
++        return { w: on(0), h: on(1) };
++      },
++    });
++    // ASYNC: `INTERNAL_relate` resolves drawing clauses (marks), which are
++    // built asynchronously today (#1334). Relations alone need nothing
++    // asynchronous; this await is the only one in the protocol.
++    await node.INTERNAL_relate(relations);
++    if (orientation !== undefined) node.axisDir = orientation;
++  };
++  if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
++  return node;
++}
++
++// ─────────────────────────────────────────────────────────────────────────
++// `arrange`: a node that gives each child bounds of its own
++// ─────────────────────────────────────────────────────────────────────────
++
++const childrenOf = (node: GoFishNode): Child[] =>
++  node.children.map((c, index) => ({
++    index,
++    request: (axis) => {
++      const width = c.resolveExtent()[axis]?.width;
++      return width !== undefined && Pwl.isConstant(width)
++        ? Pwl.at(width, 0)
++        : undefined;
++    },
++    fillsBounds: (axis) => c instanceof GoFishNode && c.fillsRoom(axis),
++    by: fieldNameOf((c as GoFishNode).keyBy),
++  }));
++
++function arrangeNode<O>(
++  def: ArrangeDefinition<O>,
++  opts: O,
++  { key, axes, ...fancyDims }: BoxOptions,
++  children: GoFishAST[]
++): GoFishNode {
++  // Its own box, named by axis like a mark's (`dims`), bound in the pass
++  // that gives names their meaning.
++  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
++  const { dims } = own;
++  const node: GoFishNode = new GoFishNode(
++    {
++      type: def.name,
++      args: { key, ...opts, dims },
++      key,
++      // Each child is laid out in a room of its own, so on both axes each
++      // is in a set of its own, nested in its room.
++      resolveSharing: nestEach,
++      // It orders nothing along an axis by data: it has no axis there. A
++      // data size of its own (`h: "fare"`) is a magnitude in its parent's
++      // unit, which a parent can share a scale over.
++      resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
++        const axisSpace = (i: Direction): UnderlyingSpace => {
++          const size = own.dataSize(i);
++          return isValue(size) ? magnitude(size) : UNDEFINED;
++        };
++        return [axisSpace(0), axisSpace(1)];
++      },
++      // Its request, in pixels, on an axis with no size of its own.
++      resolveExtent: (_ce, _cs, spaces): Size<Extent | undefined> => {
++        const implied = impliedExtents(spaces);
++        if (def.request === undefined) return implied;
++        const asked = def.request(childrenOf(node), opts);
++        return ([0, 1] as const).map((axis) =>
++          node.fixedSize(axis) === undefined && asked[axis] !== undefined
++            ? Extent(Pwl.constant(asked[axis]!))
++            : implied[axis]
++        ) as Size<Extent | undefined>;
++      },
++      layout: (size, scales, childAsts, node, shape) => {
++        const at = (axis: 0 | 1) =>
++          computeAesthetic(
++            dims[axis].min,
++            posFn(scales?.[axis]?.map),
++            undefined
++          );
++        // Its box per axis: its own size where it has one (pixels, or a data
++        // size mapped through the scale its parent hands it), else its
++        // request, else the room it is given.
++        const myExtent = node.resolveExtent();
++        const boxOn = (axis: 0 | 1): number => {
++          const declared = node.fixedSize(axis);
++          if (declared === undefined) {
++            const width = myExtent[axis]?.width;
++            return def.request !== undefined &&
++              width !== undefined &&
++              Pwl.isConstant(width)
++              ? Pwl.at(width, 0)
++              : size[axis];
++          }
++          if (!isValue(declared))
++            return computeSize(
++              declared,
++              scales?.[axis]?.sigma ?? 1,
++              size[axis]
++            ) as number;
++          const v = getValue(declared)!;
++          const map = scales?.[axis]?.map;
++          if (map) return pxOf(map, v) - pxOf(map, 0);
++          const extent = myExtent[axis];
++          const sf =
++            scales?.[axis]?.sigma ??
++            (extent !== undefined
++              ? (Pwl.solve(extent.width, size[axis]) ?? 0)
++              : 1);
++          return v * sf;
++        };
++        const room: Size = [boxOn(0), boxOn(1)];
++        if (childAsts.length === 0)
++          return {
++            intrinsicDims: { 0: { min: 0, size: 0 }, 1: { min: 0, size: 0 } },
++            transform: { translate: { 0: undefined, 1: undefined } },
++          };
++        // The shape it fills: the shape it is handed when it has no size of
++        // its own, else its box.
++        const fills =
++          node.fixedSize(0) === undefined && node.fixedSize(1) === undefined;
++        const region = fills ? shape : undefined;
++        const { bounds } = def.arrange(
++          {
++            w: room[0],
++            h: room[1],
++            shape: region === undefined ? undefined : { points: region },
++          },
++          childrenOf(node),
++          opts
++        );
++        if (bounds.length !== childAsts.length)
++          throw new Error(
++            `${def.name}: its arrangement gives bounds for ` +
++              `${bounds.length} children, but it has ${childAsts.length}. ` +
++              `Give each child its bounds.`
++          );
++        bounds.map(ringOf).forEach((ring, i) => {
++          const child = childAsts[i];
++          if (!hasArea(ring)) {
++            const center =
++              ring.length > 0
++                ? boxCenter(ring)
++                : ringCentroid(region ?? boxRing(room[0], room[1]));
++            const placeable = child.layout([0, 0], scales);
++            placeable.place(0, center[0], "center");
++            placeable.place(1, center[1], "center");
++            return;
++          }
++          const box = inItsBox(ring);
++          const centroid = ringCentroid(ring);
++          const placeable = child.layout(box.size, scales, box.ring);
++          for (const axis of [0, 1] as const)
++            placeable.place(
++              axis,
++              child instanceof GoFishNode && child.fillsRoom(axis)
++                ? box.at[axis] + box.size[axis] / 2
++                : centroid[axis],
++              "center"
++            );
++        });
++        // Its box is its room, `[0, w] × [0, h]`, whatever the rooms.
++        return {
++          intrinsicDims: {
++            0: { min: 0, size: room[0] },
++            1: { min: 0, size: room[1] },
++          },
++          transform: { translate: { 0: at(0), 1: at(1) } },
++        };
++      },
++    },
++    children
++  );
++  own.bind(node);
++  if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
++  return node;
++}
++
++/** A child's bounds as the engine's ring: a box's four corners, or a
++ *  polygon's points. */
++const ringOf = (b: Box | Polygon): Ring =>
++  "points" in b
++    ? b.points
++    : [
++        [b.x, b.y],
++        [b.x + b.w, b.y],
++        [b.x + b.w, b.y + b.h],
++        [b.x, b.y + b.h],
++      ];
++
++/** The center of the box that holds a ring. */
++const boxCenter = (ring: Ring): [number, number] => {
++  const { at, size } = inItsBox(ring);
++  return [at[0] + size[0] / 2, at[1] + size[1] / 2];
++};
++
++/** A tiling's bounds in its children's order from bounds in another
++ *  order: `order[k]` is the child index of `bounds[k]`. */
++export const byChild = <T>(order: readonly number[], bounds: readonly T[]) => {
++  const out: T[] = new Array(bounds.length);
++  order.forEach((i, k) => (out[i] = bounds[k]));
++  return out;
++};
++
++export type { AxesOptions };
+diff --git a/packages/gofish-graphics/src/ast/length.ts b/packages/gofish-graphics/src/ast/length.ts
+index 16816fd13..d891d552a 100644
+--- a/packages/gofish-graphics/src/ast/length.ts
++++ b/packages/gofish-graphics/src/ast/length.ts
+@@ -28,12 +28,51 @@ export class LengthValue {
+     /** Pixels added to the percent (`percent(n).offset(px)`). */
+     public readonly px?: number,
+     /** A weight: `fr` shares of the σ of the nearest scope. */
+-    public readonly fr?: number
+-  ) {}
++    public readonly fr?: number,
++    read?: () => Pwl.Value
++  ) {
++    // Not an own enumerable field, so a percent or fr keeps exactly its
++    // wire fields (the IR check walks them).
++    if (read !== undefined)
++      Object.defineProperty(this, "read", { value: read, enumerable: false });
++  }
++  /** PROTOTYPE (user-space layouts, stage 2): a length read off children
++   *  (`measure` in `layoutProtocol.ts`), as a value in the σ of their
++   *  scope, read when the claim walk asks for it. It is written before
++   *  the children's claims exist, and its arithmetic stays symbolic. */
++  declare readonly read?: () => Pwl.Value;
++
++  /** This length plus another, or plus pixels. Only a measured length
++   *  composes this way; a percent takes `offset`. */
++  add(other: LengthValue | number): LengthValue {
++    return measured(() => Pwl.add(readOf(this), readOf(other)));
++  }
++  /** This length less another, or less pixels. */
++  sub(other: LengthValue | number): LengthValue {
++    return measured(() => Pwl.add(readOf(this), Pwl.negate(readOf(other))));
++  }
++  /** This length times `k`. */
++  times(k: number): LengthValue {
++    return measured(() => Pwl.scale(k, readOf(this)));
++  }
++  /** Its pixels: only for a length with no scale in it, read once the
++   *  claims exist. A comparison needs pixels, so a decision made on a
++   *  length that the scale changes is an error. */
++  get pixels(): number {
++    const v = readOf(this);
++    if (!Pwl.isConstant(v))
++      throw new Error(
++        "a measured length changes with the scale, so it has no pixels " +
++          "before the scale is solved. Compose it with add, sub, times " +
++          "and maxLength, and give it to a relation."
++      );
++    return Pwl.at(v, 0);
++  }
+ 
+   /** This percent plus `px` pixels (CSS `calc(30% + 10px)`). An `fr`
+    *  weight takes no offset. */
+   offset(px: number): LengthValue {
++    if (this.read !== undefined) return this.add(px);
+     if (this.fr !== undefined)
+       throw new Error(
+         `fr(${this.fr}).offset(...): an fr weight takes no offset.`
+@@ -46,6 +85,11 @@ export class LengthValue {
+   }
+ 
+   toJSON(): Length {
++    if (this.read !== undefined)
++      throw new Error(
++        "a measured length is read off children inside the engine, so it " +
++          "has no wire form."
++      );
+     return this.fr !== undefined
+       ? { type: "length", fr: this.fr }
+       : this.px === undefined || this.px === 0
+@@ -54,6 +98,27 @@ export class LengthValue {
+   }
+ }
+ 
++/** A measured length: `read` gives its value in σ once the claims exist. */
++export const measured = (read: () => Pwl.Value): LengthValue =>
++  new LengthValue(undefined, undefined, undefined, read);
++
++/** The value in σ of a measured length or of pixels. A percent or an `fr`
++ *  is a share of the bounds or the scope it is laid out in, so it does not
++ *  compose with one. */
++const readOf = (v: LengthValue | number): Pwl.Value => {
++  if (typeof v === "number") return Pwl.constant(v);
++  if (v.read === undefined)
++    throw new Error(
++      `${printLength(v)} does not compose with a measured length: a percent ` +
++        `or an fr is a share of the bounds or the scope it is laid out in.`
++    );
++  return v.read();
++};
++
++/** The larger of lengths, at every scale. */
++export const maxLength = (...ls: (LengthValue | number)[]): LengthValue =>
++  measured(() => Pwl.envelope(ls.map(readOf)));
++
+ /** The wire form of a {@link LengthValue}. */
+ export type Length = Frontend.LengthIR;
+ 
+@@ -93,6 +158,7 @@ export const isFr = (v: Length | LengthValue): boolean =>
+ /** `v` as it is written: `percent(30)`, `percent(30).offset(10)`,
+  *  `fr(2)`. */
+ export const printLength = (v: Length | LengthValue): string => {
++  if ((v as LengthValue).read !== undefined) return "a measured length";
+   const { percent: p, px, fr: k } = v as LengthFields;
+   if (k !== undefined) return `fr(${k})`;
+   return px === undefined || px === 0
+@@ -111,6 +177,8 @@ export const lengthIn = (
+   room: () => Pwl.Value
+ ): Pwl.Value => {
+   if (typeof v === "number") return Pwl.constant(v);
++  const read = (v as LengthValue).read;
++  if (read !== undefined) return read();
+   const { percent: p, px, fr: k } = v as LengthFields;
+   if (k !== undefined) return Pwl.affine(k, 0);
+   return Pwl.addConstant(Pwl.scale((p ?? 0) / 100, room()), px ?? 0);
+diff --git a/packages/gofish-graphics/src/lib.ts b/packages/gofish-graphics/src/lib.ts
+index 034fdba2e..b9e2f0c57 100644
+--- a/packages/gofish-graphics/src/lib.ts
++++ b/packages/gofish-graphics/src/lib.ts
+@@ -221,6 +221,20 @@ export { spreadY } from "./ast/graphicalOperators/spreadY";
+ export * as Curve from "./families/curve";
+ export * as Baseline from "./families/baseline";
+ export { tile } from "./ast/graphicalOperators/tile";
++// PROTOTYPE (user-space layouts): the public layout protocol.
++export { defineLayout } from "./ast/layoutProtocol";
++export type {
++  LayoutDefinition,
++  RelateDefinition,
++  ArrangeDefinition,
++  Child as LayoutChild,
++  Bounds,
++  Box,
++  Polygon,
++  Arrangement,
++  Relations,
++} from "./ast/layoutProtocol";
++export { maxLength } from "./ast/length";
+ export * as Tiling from "./families/tiling";
+ export type { TileOptions } from "./ast/graphicalOperators/tile";
+ export { pack } from "./ast/graphicalOperators/pack";
+diff --git a/packages/gofish-graphics/src/tests/unfoldCost.scratch.ts b/packages/gofish-graphics/src/tests/unfoldCost.scratch.ts
+new file mode 100644
+index 000000000..fd43ae55b
+--- /dev/null
++++ b/packages/gofish-graphics/src/tests/unfoldCost.scratch.ts
+@@ -0,0 +1,63 @@
++// PROTOTYPE scratch (user-space layouts): how long the claim walk takes
++// against the whole layout. Run: `npx tsx src/tests/unfoldCost.scratch.ts`.
++import { spread, stack, rect, v, layer, tile, Tiling } from "../lib";
++import { runLayout } from "../ast/gofish";
++import { layer as layerNode } from "../ast/graphicalOperators/layer";
++
++const g = globalThis as any;
++
++const bars = (groups: number, stacks: number) =>
++  spread(
++    { dir: "x", spacing: 4, alignment: "end" },
++    Array.from({ length: groups }, (_, gi) =>
++      stack(
++        { dir: "y", spacing: 0 },
++        Array.from({ length: stacks }, (_, s) =>
++          rect({ w: 8, h: v(1 + ((gi * 7 + s * 3) % 11)), fill: "#4190c5" })
++        )
++      )
++    )
++  );
++const nested = (depth: number, fan: number): any =>
++  depth === 0
++    ? rect({ w: v(1), h: v(1), fill: "#f2cf57" })
++    : spread(
++        { dir: depth % 2 ? "x" : "y", spacing: 2, alignment: "start" },
++        Array.from({ length: fan }, () => nested(depth - 1, fan))
++      );
++const treemap = (n: number) =>
++  tile(
++    {
++      size: Array.from({ length: n }, (_, i) => v(1 + (i % 13))),
++      tiling: Tiling.squarify,
++      round: false,
++    },
++    Array.from({ length: n }, () => rect({ fill: "#4190c5" }))
++  );
++
++const cases: [string, () => any][] = [
++  ["stacked bars 10 x 5", () => bars(10, 5)],
++  ["stacked bars 40 x 25", () => bars(40, 25)],
++  ["stacked bars 100 x 50", () => bars(100, 50)],
++  ["nested spreads, 4 deep, fan 4", () => nested(4, 4)],
++  ["nested spreads, 6 deep, fan 3", () => nested(6, 3)],
++  ["tile, 1000 cells", () => treemap(1000)],
++];
++
++for (const [name, make] of cases) {
++  const rows: number[][] = [];
++  for (let i = 0; i < 5; i++) {
++    g.__GOFISH_PERF__ = { enabled: true, current: null };
++    g.__gofishClaims = 0;
++    const t0 = performance.now();
++    await runLayout({ w: 600, h: 300 }, (layerNode as any)({ w: 600, h: 300 }, [make()]));
++    const total = performance.now() - t0;
++    const labels = g.__GOFISH_PERF__.current?.labels ?? {};
++    const counts = g.__GOFISH_PERF__.current?.counts ?? {};
++    rows.push([counts.nodes ?? NaN, g.__gofishClaims, labels.claims ?? NaN, labels.solve ?? NaN, total]);
++  }
++  const avg = (k: number) => rows.slice(2).reduce((a, r) => a + r[k], 0) / 3;
++  console.log(
++    `${name} | ${avg(0)} | ${avg(1)} | ${avg(2).toFixed(1)} | ${avg(3).toFixed(1)} | ${avg(4).toFixed(1)}`
++  );
++}
+diff --git a/packages/gofish-graphics/stories/_proposals/LayoutProtocol.stories.tsx b/packages/gofish-graphics/stories/_proposals/LayoutProtocol.stories.tsx
+new file mode 100644
+index 000000000..ab1e02c81
+--- /dev/null
++++ b/packages/gofish-graphics/stories/_proposals/LayoutProtocol.stories.tsx
+@@ -0,0 +1,413 @@
++import type { Meta, StoryObj } from "@storybook/html";
++import { initializeContainer } from "../helper";
++import { countryPopulations } from "../../src/data/countryPopulations";
++import {
++  arrow,
++  Constraint,
++  Coord,
++  defineLayout,
++  layer,
++  maxLength,
++  rect,
++  ref,
++  Spacing,
++  spread,
++  text,
++  tile,
++  Tiling,
++  v,
++} from "../../src/lib";
++
++// Prototype for the user-space layouts effort: layouts written against the
++// public layout protocol (`defineLayout`), with only public API. Throwaway;
++// not gallery-tagged.
++const meta: Meta = { title: "Proposals/Layout Protocol" };
++export default meta;
++
++type Country = (typeof countryPopulations)[number];
++const countries: Country[] = [...countryPopulations]
++  .sort((a, b) => b.pop - a.pop)
++  .slice(0, 20);
++const sum = (ws: number[]) => ws.reduce((a, b) => a + b, 0);
++
++// ─────────────────────────────────────────────────────────────────────────
++// Stage 3: a squarified treemap that reads its bounds
++// ─────────────────────────────────────────────────────────────────────────
++
++type Rect = [number, number, number, number]; // x0, y0, x1, y1
++const PHI = (1 + Math.sqrt(5)) / 2;
++
++// The squarify rule (Bruls et al. 2000) as d3's `squarifyRatio` runs it:
++// add items to a row while its worst aspect ratio does not get worse, lay
++// the row along the box's shorter side, and go on in what is left.
++function squarify(weights: number[], [w, h]: [number, number]): Rect[] {
++  const out: Rect[] = [];
++  let [x0, y0, x1, y1] = [0, 0, w, h];
++  let value = sum(weights);
++  let i0 = 0;
++  while (i0 < weights.length) {
++    const dx = x1 - x0;
++    const dy = y1 - y0;
++    let i1 = i0;
++    let rowSum = weights[i1++];
++    let lo = rowSum;
++    let hi = rowSum;
++    const alpha = Math.max(dy / dx, dx / dy) / (value * PHI);
++    let beta = rowSum * rowSum * alpha;
++    let best = Math.max(hi / beta, beta / lo);
++    for (; i1 < weights.length; i1++) {
++      const wv = weights[i1];
++      const s = rowSum + wv;
++      beta = s * s * alpha;
++      const ratio = Math.max(Math.max(hi, wv) / beta, beta / Math.min(lo, wv));
++      if (ratio > best) break;
++      rowSum = s;
++      lo = Math.min(lo, wv);
++      hi = Math.max(hi, wv);
++      best = ratio;
++    }
++    if (dx < dy) {
++      // A row along x at the top.
++      const ry1 = value ? y0 + (dy * rowSum) / value : y1;
++      let x = x0;
++      for (let i = i0; i < i1; i++) {
++        const nx = x + (weights[i] * dx) / rowSum;
++        out[i] = [x, y0, nx, ry1];
++        x = nx;
++      }
++      y0 = ry1;
++    } else {
++      // A column along y at the left.
++      const rx1 = value ? x0 + (dx * rowSum) / value : x1;
++      let y = y0;
++      for (let i = i0; i < i1; i++) {
++        const ny = y + (weights[i] * dy) / rowSum;
++        out[i] = [x0, y, rx1, ny];
++        y = ny;
++      }
++      x0 = rx1;
++    }
++    value -= rowSum;
++    i0 = i1;
++  }
++  return out;
++}
++
++const box = ([x0, y0, x1, y1]: Rect) => ({
++  x: x0,
++  y: y0,
++  w: x1 - x0,
++  h: y1 - y0,
++});
++
++// The whole layout definition: no size request (it fills its bounds), and
++// once its bounds are known, each child's bounds.
++const squarified = defineLayout<{ weights: number[] }>({
++  name: "squarified",
++  options: ["weights"],
++  arrange: ({ w, h }, _children, { weights }) => ({
++    bounds: squarify(weights, [w, h]).map(box),
++  }),
++});
++
++const cell = (d: Country) =>
++  rect({ fill: v(d.continent), stroke: "white", strokeWidth: 1 });
++
++const userTreemap = (rows: Country[]) =>
++  squarified({ weights: rows.map((d) => d.pop) }, rows.map(cell));
++
++const builtinTreemap = (rows: Country[]) =>
++  tile(
++    { size: rows.map((d) => v(d.pop)), tiling: Tiling.squarify, round: false },
++    rows.map(cell)
++  );
++
++// How many times the render ran the layout pipeline (a prototype counter
++// in gofish.tsx), written under the picture.
++const countRuns = (container: HTMLElement, rendered: Promise<unknown>) => {
++  const g = globalThis as { __gofishLayoutRuns?: number };
++  g.__gofishLayoutRuns = 0;
++  rendered.then(() => {
++    const p = document.createElement("pre");
++    p.textContent = `pipeline runs: ${g.__gofishLayoutRuns}`;
++    container.appendChild(p);
++  });
++};
++
++const alone = (node: () => any) => () => {
++  const container = initializeContainer();
++  countRuns(
++    container,
++    layer({ w: 360, h: 300 }, [node()]).render(container, { axes: false })
++  );
++  return container;
++};
++
++export const UserSquarify: StoryObj = {
++  render: alone(() => userTreemap(countries)),
++};
++export const BuiltinSquarify: StoryObj = {
++  render: alone(() => builtinTreemap(countries)),
++};
++
++// Inside a spread with a title: its bounds are what the spread leaves it. An
++// arrow from the title to China's cell reads the cell from outside.
++const panelWithArrow = (treemap: (rows: Country[]) => any) => () => {
++  const container = initializeContainer();
++  const cells = countries.map((d) =>
++    d.country === "China" ? cell(d).name("china") : cell(d)
++  );
++  const tm =
++    treemap === userTreemap
++      ? squarified({ weights: countries.map((d) => d.pop) }, cells)
++      : tile(
++          {
++            size: countries.map((d) => v(d.pop)),
++            tiling: Tiling.squarify,
++            round: false,
++          },
++          cells
++        );
++  countRuns(
++    container,
++    layer({ w: 400, h: 320 }, [
++      spread({ dir: "y", spacing: 24, alignment: "start" }, [
++        text({ text: "China", fontSize: 13 }).name("title"),
++        tm,
++      ]),
++    ])
++      .relate(() => [arrow({}, [ref("title"), ref("china")])])
++      .render(container, { axes: false })
++  );
++  return container;
++};
++export const UserInSpread: StoryObj = { render: panelWithArrow(userTreemap) };
++export const BuiltinInSpread: StoryObj = {
++  render: panelWithArrow(builtinTreemap),
++};
++
++// Under a polar coordinate space.
++const polar = (treemap: (rows: Country[]) => any) => () => {
++  const container = initializeContainer();
++  layer({ coord: Coord.polar(), w: 300, h: 300 }, [treemap(countries)]).render(
++    container,
++    { axes: false }
++  );
++  return container;
++};
++export const UserPolar: StoryObj = { render: polar(userTreemap) };
++export const BuiltinPolar: StoryObj = { render: polar(builtinTreemap) };
++
++// ─────────────────────────────────────────────────────────────────────────
++// Stage 2: a row pitched by its widest child, written with `measure`
++// ─────────────────────────────────────────────────────────────────────────
++
++// Every child starts the same distance after the one before it: the widest
++// child's width plus `gap`. The distance is a length read off the children,
++// so the row's size request is derived by the solver, in the scale.
++const pitched = defineLayout<{ gap?: number }>({
++  name: "pitched",
++  options: ["gap"],
++  relate: (children, { gap = 8 }, { measure }) => {
++    const pitch = maxLength(...children.map((c) => measure(c).w)).add(gap);
++    return {
++      relations: [
++        Constraint.align({ y: "start" }, children),
++        Constraint.distribute(
++          { dir: "x", spacing: Spacing.pitch(pitch, { at: "start" }) },
++          children
++        ),
++      ],
++      orientation: 0,
++    };
++  },
++});
++
++const words = ["a", "row", "of", "labels", "pitched", "by", "the", "widest"];
++export const PitchedLabels: StoryObj = {
++  render: () => {
++    const container = initializeContainer();
++    layer([
++      spread({ dir: "y", spacing: 6, alignment: "start" }, [
++        pitched(
++          { gap: 8 },
++          words.map((t) => text({ text: t, fontSize: 14 }))
++        ),
++        pitched(
++          { gap: 8 },
++          words.map(() => rect({ w: 6, h: 6, fill: "#4190c5" }))
++        ),
++      ]),
++    ]).render(container, { axes: false });
++    return container;
++  },
++};
++
++// Bars whose widths are data, pitched by the widest bar, fit to 400 px:
++// the pitch is σ·max + 6, so the solver finds σ with the pitch in it.
++const widths = [3, 1, 4, 1, 5, 9, 2, 6];
++export const PitchedBarsFit: StoryObj = {
++  render: () => {
++    const container = initializeContainer();
++    countRuns(
++      container,
++      layer({ w: 400, h: 120 }, [
++        pitched(
++          { gap: 6 },
++          widths.map((w) => rect({ w: v(w), h: 100, fill: "#f2cf57" }))
++        ),
++      ]).render(container, { axes: false })
++    );
++    return container;
++  },
++};
++
++// ─────────────────────────────────────────────────────────────────────────
++// Stage 1: a user-written spread, beside the built-in
++// ─────────────────────────────────────────────────────────────────────────
++
++// The built-in `spread` is a definition like this one: an align across
++// `dir` and a distribute along it.
++const row = defineLayout<{ dir?: string; spacing?: number }>({
++  name: "row",
++  options: ["dir", "spacing"],
++  relate: (children, { dir = "x", spacing = 8 }, axes) => {
++    const along = axes.axis(dir, "row({ dir })");
++    const [alongName, acrossName] = along === 0 ? ["x", "y"] : ["y", "x"];
++    return {
++      relations: [
++        Constraint.align({ [acrossName]: "start" }, children),
++        Constraint.distribute({ dir: alongName, spacing }, children),
++      ],
++      orientation: along,
++    };
++  },
++});
++
++const heights = [3, 1, 4, 1, 5, 9, 2, 6];
++const bars = () =>
++  heights.map((h) => rect({ w: 24, h: v(h), fill: "#4190c5" }));
++const inBox = (node: () => any, coord?: any) => () => {
++  const container = initializeContainer();
++  layer(coord ? { coord, w: 240, h: 240 } : { w: 300, h: 160 }, [
++    node(),
++  ]).render(container, { axes: false });
++  return container;
++};
++
++export const UserRow: StoryObj = {
++  render: inBox(() => row({ spacing: 8 }, bars())),
++};
++export const BuiltinRow: StoryObj = {
++  render: inBox(() =>
++    spread({ dir: "x", spacing: 8, alignment: "start" }, bars())
++  ),
++};
++// Under polar, along `theta`: equal data widths, so each bar is a wedge.
++const wedges = () =>
++  heights.map((h) =>
++    rect({ w: v(1), h: v(h), fill: "#4190c5", stroke: "white" })
++  );
++export const UserRowPolar: StoryObj = {
++  render: inBox(
++    () => row({ dir: "theta", spacing: 0 }, wedges()),
++    Coord.polar()
++  ),
++};
++export const BuiltinRowPolar: StoryObj = {
++  render: inBox(
++    () => spread({ dir: "theta", spacing: 0, alignment: "start" }, wedges()),
++    Coord.polar()
++  ),
++};
++
++// ─────────────────────────────────────────────────────────────────────────
++// Wrong definitions: the messages a user sees
++// ─────────────────────────────────────────────────────────────────────────
++
++// Shows the message a render fails with above the picture. The layout runs
++// after `render` returns, so its error reaches the page as an unhandled
++// rejection, not through the promise `render` returns.
++const failing = (node: () => any) => () => {
++  const container = initializeContainer();
++  const p = document.createElement("pre");
++  p.style.whiteSpace = "pre-wrap";
++  p.style.maxWidth = "520px";
++  p.textContent = "no error";
++  container.appendChild(p);
++  const show = (e: unknown) =>
++    (p.textContent = `Error: ${(e as Error)?.message ?? String(e)}`);
++  window.addEventListener("unhandledrejection", (ev) => show(ev.reason));
++  window.addEventListener("error", (ev) => show(ev.error ?? ev.message));
++  layer({ w: 360, h: 120 }, [node()])
++    .render(container, { axes: false })
++    .catch(show);
++  return container;
++};
++
++// An `arrange` body that leaves out the first child's bounds.
++const squarifiedMissingOne = defineLayout<{ weights: number[] }>({
++  name: "squarified",
++  options: ["weights"],
++  arrange: ({ w, h }, _children, { weights }) => ({
++    bounds: squarify(weights, [w, h]).map(box).slice(1),
++  }),
++});
++export const ErrorBoundsCount: StoryObj = {
++  render: failing(() =>
++    squarifiedMissingOne(
++      { weights: countries.map((d) => d.pop) },
++      countries.map(cell)
++    )
++  ),
++};
++
++// A `relate` body that asks for the pixels of a length the scale changes.
++const pitchedInPixels = defineLayout<{ gap?: number }>({
++  name: "pitched",
++  options: ["gap"],
++  relate: (children, { gap = 8 }, { measure }) => {
++    const widest = Math.max(...children.map((c) => measure(c).w.pixels));
++    return {
++      relations: [
++        Constraint.align({ y: "start" }, children),
++        Constraint.distribute(
++          { dir: "x", spacing: Spacing.pitch(widest + gap, { at: "start" }) },
++          children
++        ),
++      ],
++      orientation: 0,
++    };
++  },
++});
++export const ErrorPixelsOfScaledLength: StoryObj = {
++  render: failing(() =>
++    pitchedInPixels(
++      { gap: 6 },
++      widths.map((w) => rect({ w: v(w), h: 100, fill: "#f2cf57" }))
++    )
++  ),
++};
++
++// A `relate` body that leaves the first child (red) out of its relations.
++// It is not checked: the red bar lands at the layer's origin, under the
++// first bar the relations place.
++const dropsOne = defineLayout<{}>({
++  name: "dropsOne",
++  options: [],
++  relate: (children) => ({
++    relations: [
++      Constraint.align({ y: "start" }, children.slice(1)),
++      Constraint.distribute({ dir: "x", spacing: 8 }, children.slice(1)),
++    ],
++    orientation: 0,
++  }),
++});
++export const UncheckedDroppedChild: StoryObj = {
++  render: failing(() =>
++    dropsOne({}, [
++      rect({ w: 24, h: v(heights[0]), fill: "#d1495b" }),
++      ...bars().slice(1),
++    ])
++  ),
++};

@@ -28,6 +28,7 @@ LANG = {
     "js": "javascript",
     "python": "python",
     "text": "plaintext",
+    "swift": "swift",
 }
 blocks = {
     name: (lang, code)
