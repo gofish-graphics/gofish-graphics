@@ -655,16 +655,89 @@
     <h2 class="first">Open now</h2>
     <h3>GoTree polar stories against the GoTree gallery</h3>
     <p>
-      Each card puts one polar GoTree story beside the picture in the GoTree
-      gallery that it ports (BIT-VIS/gotree,
+      Each card puts one GoTree story beside the picture in the GoTree gallery
+      that it ports (BIT-VIS/gotree,
       <code>gallery/&lt;Name&gt;/tree.png</code>). Changed stories show three
       panels: the reference, the branch before this round (38a79eac3), and the
       branch now. The cause of each difference is one of four kinds.
       <b>(a)</b> The port's spec was wrong. <b>(b)</b> The engine has a bug.
       <b>(c)</b> GoFish cannot write it yet. <b>(d)</b> Cosmetic, such as
-      different data. No engine bug turned up in this round; every fix is in a
-      story.
+      different data. The first round found no engine bug. The second round, on
+      the coordinate systems, found one, shown on the icicle card.
     </p>
+    <p>
+      Each gallery story now uses the coordinate system its reference uses. A
+      port never turns a cartesian picture into a polar one or a polar picture
+      into a cartesian one. This is the maintainer's rule: "in general yeah we
+      shouldn't convert between cartesian and polar with the gallery examples."
+      The table checks every gallery story against its picture. The picture
+      decides, not the <code>dsl.json</code>, because the icicle and deep tree
+      folders hold a copy of the sunburst's polar <code>dsl.json</code> under
+      cartesian pictures. Three stories broke the rule. Their cards show the
+      reference, the branch before this round (11ecb7c9d), and the branch now.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Story</th>
+            <th>Reference</th>
+            <th>Port</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              arc-tree, barcodetree, BeamTree, cartesian-deep-tree,
+              CascadedTreemap, cheops, dendrogram, ElasticHierarchy,
+              GardenLayout, HTreeLayout, HVDrawing, IndentedTree, iptp, Jewelry,
+              NodeLinkTree, OrthogonalTree, ReadableTreeLayout, StairTree,
+              Treemap, TreemapOval, treemap-slice, WeaveTree
+            </td>
+            <td>cartesian</td>
+            <td>cartesian</td>
+            <td>same</td>
+          </tr>
+          <tr>
+            <td>
+              ClockTree, ClockTreeWithLink, FlowerTree, HierarchicalSectorChart,
+              MultilevelSilhouetteTree, OakTreeVis, OrthogonalGridEmbedding,
+              outside-in-tree, radial-deep, RadialTree, RadialTreeIncline,
+              RotationTree, SectorTree, SectorTree2, SideTree, SpiralLayout,
+              sunburst, TornadoTree, TornadoTree2, TyreTree, ViolinTree
+            </td>
+            <td>polar</td>
+            <td>polar</td>
+            <td>same</td>
+          </tr>
+          <tr>
+            <td>RadialPhylogeneticTree</td>
+            <td>polar</td>
+            <td>polar, projected to the screen by the story</td>
+            <td>same picture</td>
+          </tr>
+          <tr>
+            <td>icicleplot</td>
+            <td>cartesian</td>
+            <td>polar</td>
+            <td>fixed, now cartesian</td>
+          </tr>
+          <tr>
+            <td>deep-tree</td>
+            <td>cartesian</td>
+            <td>polar</td>
+            <td>fixed, now cartesian</td>
+          </tr>
+          <tr>
+            <td>NestedPieTree</td>
+            <td>polar</td>
+            <td>cartesian</td>
+            <td>fixed, now polar</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div class="gallery">
       <div class="card">
         <h3>Sunburst <span class="ev exact">fixed</span></h3>
@@ -711,48 +784,306 @@ mount({
       </div>
 
       <div class="card">
-        <h3>Polar icicle <span class="ev exact">fixed</span></h3>
+        <h3>Icicle plot <span class="ev exact">fixed, now cartesian</span></h3>
         <div class="natural">
           <figure>
             <img
-              src="img/gt-icicleplot.png"
-              alt="Polar icicle: reference, before, after"
+              src="img/gt2-icicleplot.png"
+              alt="Icicle plot: reference, before, after"
             />
             <figcaption>
-              The rings now sit at even radii. The reference is a cartesian
-              icicle.
+              The story now draws the cartesian icicle in the reference. Before,
+              it drew a polar icicle, the same picture as the sunburst.
             </figcaption>
           </figure>
         </div>
         <p>
-          <b>(a)</b> Siblings were centered on each other, so a shallow subtree
-          beside a deep one moved out by half a ring. GoTree's "align" lines up
-          the sibling nodes, which is the start of each subtree.
+          <b>(a)</b> The reference is a cartesian icicle, and its
+          <code>dsl.json</code> is a byte copy of the sunburst's, so the story
+          had followed the copy. The story is now cartesian. The root is one
+          band across the top, its 19 children sit in the band below, and their
+          leaves in the band below that. Each leaf is as wide as its value, read
+          off the reference. The file is renamed from
+          <code>IciclePlotPolar.stories.tsx</code> to
+          <code>IciclePlot.stories.tsx</code>, and its gallery title from
+          "GoTree: Polar Icicle" to "GoTree: Icicle Plot". Nothing referred to
+          the old id. The node-link IciclePlot story is not a gallery story and
+          stays as it is.
         </p>
-        <div class="callout">
-          The gallery's <code>icicleplot/tree.png</code> is a cartesian icicle,
-          and its <code>dsl.json</code> is a byte copy of the sunburst's. So
-          there is no polar icicle to match. The cartesian picture is the
-          node-link IciclePlot story. Whether this story should stay is the
-          maintainer's call.
-        </div>
+        <p>
+          <b>(b)</b> The bands are pixels, not <code>h: datum(1)</code>. With a
+          data height, a parent at depth 1 is drawn below its own children while
+          the root stays above its children. The four-node repro is below the
+          new code.
+        </p>
         <p class="label">Old code</p>
-        <pre><code class="language-typescript">// GoTree / Gallery / icicleplot, before.
-mount({
-  sibling: combine({
-    x: { kind: &quot;distribute&quot;, spacing: 0 },
-    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
-  }),
-});</code></pre>
+        <pre><code class="language-typescript">// GoTree / Gallery / icicleplot, before (IciclePlotPolar.stories.tsx).
+// A polar picture: the same layout as the sunburst story.
+const node = (d: any) =&gt;
+  d.height === 0
+    ? rect({ w: datum(1), h: bandHeight, fill: byDepth(icicleBlues)(d) })
+    : rect({ h: bandHeight, fill: byDepth(icicleBlues)(d) });
+tree(
+  {
+    node,
+    link: &quot;none&quot;,
+    parentChild: combine({
+      x: { kind: &quot;nest&quot;, pad: 0 },
+      y: { kind: &quot;distribute&quot;, spacing: 0 },
+    }),
+    sibling: combine({
+      x: { kind: &quot;distribute&quot;, spacing: 0 },
+      y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+    }),
+    coord: Coord.clock(),
+  },
+  sampleTree
+).render(container);</code></pre>
         <p class="label prop">New code</p>
-        <pre><code class="language-typescript">// After. GoTree&#x27;s &quot;align&quot; lines up the sibling nodes, which are the first
-// ring of each sibling subtree, so the subtrees start on the same ring.
-mount({
-  sibling: combine({
-    x: { kind: &quot;distribute&quot;, spacing: 0 },
-    y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
-  }),
-});</code></pre>
+        <pre><code class="language-typescript">// After (IciclePlot.stories.tsx). A cartesian icicle, as in the picture.
+// The root&#x27;s 19 children, read off the reference: a number is a leaf with
+// that value, a list is a child whose leaves have those values.
+const branches = [
+  10, [7, 5], [5, 5], 16, 3, [5, 9], [12, 1], 4, 7, 3, [4, 3, 4],
+  [5, 13, 2, 2], 4, [8, 1, 3, 3], 7, [5, 4, 6, 9], 8, 7, [2, 6, 6, 10],
+];
+const bandHeight = 120; // one depth band
+const node = (d: any) =&gt;
+  d.height === 0
+    ? rect({
+        w: datum(d.data.value),
+        h: bandHeight,
+        fill: byDepth(icicleBlues)(d),
+      })
+    : rect({ h: bandHeight, fill: byDepth(icicleBlues)(d) });
+tree(
+  {
+    node,
+    link: &quot;none&quot;,
+    parentChild: combine({
+      x: { kind: &quot;nest&quot;, pad: 0 },
+      y: { kind: &quot;distribute&quot;, spacing: 0 },
+    }),
+    sibling: combine({
+      x: { kind: &quot;distribute&quot;, spacing: 0 },
+      y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+    }),
+  },
+  icicleData
+).render(container, { w: 640 });</code></pre>
+        <p class="label">Engine bug repro</p>
+        <pre><code class="language-typescript">// The engine bug in four nodes. With h: datum(1), the parent A is drawn
+// below its own child a1, while the root stays above A and B. With h: 100,
+// every parent is above its children.
+const data = {
+  name: &quot;root&quot;,
+  children: [{ name: &quot;A&quot;, children: [{ name: &quot;a1&quot; }] }, { name: &quot;B&quot; }],
+};
+tree(
+  {
+    node: (d) =&gt;
+      rect({ w: d.height === 0 ? datum(1) : undefined, h: datum(1) }),
+    link: &quot;none&quot;,
+    parentChild: combine({
+      x: { kind: &quot;nest&quot;, pad: 0 },
+      y: { kind: &quot;distribute&quot;, spacing: 0 },
+    }),
+    sibling: combine({
+      x: { kind: &quot;distribute&quot;, spacing: 0 },
+      y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+    }),
+  },
+  data
+).render(container, { w: 200, h: 300 });
+// Drawn: root y=0, A y=200, a1 y=100.
+// Expected (and drawn with h: 100): root y=0, A y=100, a1 y=200.</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Nested pie tree <span class="ev close">fixed, now polar</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt2-nested-pie-tree.png"
+              alt="Nested pie tree: reference, before, after"
+            />
+            <figcaption>
+              The story now draws a polar nested pie. Before, it drew nested
+              rectangles.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> The reference is polar, and the story was a cartesian
+          treemap. The story now alternates the two GoTree templates by depth
+          under <code>Coord.clock()</code>. The root's children split the angle
+          by value, and their children split the radius by value. A node is
+          sized only along the axis its parent splits, so a wedge with no
+          children runs from the hub to the rim. Nothing is sized in radians.
+          The data is read off the reference: 19 wedges, ten of them split into
+          two to four bands.
+        </p>
+        <p>
+          <b>(c)</b> Two things still differ. First, GoTree fills every wedge to
+          the rim and splits it by value inside. Here the bands of all wedges
+          share one radial scale, so a wedge whose bands add up to less stops
+          short of the rim. Second, the reference has gaps between siblings
+          measured in data units. A gap inside a coord can only be pixels or
+          <code>fr</code>, which warns beside data weights, and a percent is
+          #1238. So the wedges touch, and a white stroke parts them. The story
+          stays in the gallery. It is clearly the reference's kind of picture,
+          and its gallery description now says polar.
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / NestedPieTree, before. A cartesian picture.
+const node = (d: any) =&gt;
+  d.height === 0
+    ? rect({
+        w: 92,
+        h: (d.data.value ?? d.width ?? 1) * 37,
+        fill: byDepth()(d),
+      })
+    : rect({ fill: byDepth()(d), stroke: &quot;#08306b&quot;, strokeWidth: 1 });
+const dice = combine({
+  x: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  y: { kind: &quot;distribute&quot;, spacing: 18 },
+});
+const slice = combine({
+  x: { kind: &quot;distribute&quot;, spacing: 18 },
+  y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+});
+tree(
+  {
+    node,
+    link: &quot;none&quot;,
+    parentChild: combine({
+      x: { kind: &quot;nest&quot;, pad: 14 },
+      y: { kind: &quot;nest&quot;, pad: 14 },
+    }),
+    sibling: alternate([slice, dice]),
+  },
+  sampleTree
+).render(container);</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. A polar picture. A node is sized by its value only along the axis
+// its parent splits (a slice splits the angle, a dice the radius), and it
+// fills its parent on the other axis.
+const wedges = [
+  [3, 2, 2, 1], 4, 5, [3, 2, 1, 1], 3, [3, 2, 2, 1], 1.5, [4, 2, 2],
+  [2, 2], 1, 2, 3, [3, 2], [4, 3], 1.5, 5, [3, 2], [3, 2], 4,
+];
+const node = (d: any) =&gt; {
+  const style = {
+    fill: byDepth(pieBlues)(d),
+    stroke: &quot;white&quot;,
+    strokeWidth: 1.5,
+  };
+  if (d.depth === 0) return rect(style);
+  const value = datum(total(d.data)); // a leaf&#x27;s value, or its leaves&#x27; sum
+  return d.depth % 2 === 1
+    ? rect({ w: value, ...style })
+    : rect({ h: value, ...style });
+};
+const slice = combine({
+  x: { kind: &quot;distribute&quot;, spacing: 0 },
+  y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+});
+const dice = combine({
+  x: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  y: { kind: &quot;distribute&quot;, spacing: 4 },
+});
+tree(
+  {
+    node,
+    link: &quot;none&quot;,
+    parentChild: combine({
+      x: { kind: &quot;nest&quot;, pad: 0 },
+      y: { kind: &quot;nest&quot;, pad: 4 },
+    }),
+    sibling: alternate([slice, dice]),
+    coord: Coord.clock(),
+  },
+  pieData
+).render(container, { w: 520, h: 520 });</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Deep tree <span class="ev exact">fixed, now cartesian</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt2-deep-tree.png"
+              alt="Deep tree: reference, before, after"
+            />
+            <figcaption>
+              The story now draws the cartesian tree in the reference.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> Like the icicle, the reference is cartesian and its
+          <code>dsl.json</code> is a copy of the sunburst's. The story had drawn
+          a polar binary tree with hand-set pitches in radians. It is now a
+          top-down tree with the reference's 19 children and their leaves,
+          bezier links, and thicker links out of the root (the dsl's LinkWidth
+          by depth). It is not a gallery story.
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / deep-tree, before. A polar picture.
+mount(
+  {
+    node: (d) =&gt;
+      circle({ r: 6, fill: byDepth()(d), stroke: &quot;#08306b&quot;, strokeWidth: 1 }),
+    link: { curve: Curve.linear(), stroke: &quot;#5f6b7a&quot;, strokeWidth: 1.5 },
+    parentChild: combine({
+      x: { kind: &quot;nest&quot;, pad: 0 },
+      y: {
+        kind: &quot;distribute&quot;,
+        spacing: Spacing.pitch(151, { at: &quot;middle&quot; }),
+      },
+    }),
+    sibling: combine({
+      x: {
+        kind: &quot;distribute&quot;,
+        spacing: Spacing.pitch((2 * Math.PI) / 10, { at: &quot;middle&quot; }),
+      },
+      y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+    }),
+    coord: Coord.clock(),
+  },
+  {},
+  deepTree // a balanced binary tree, 4 levels
+);</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. A cartesian picture with the reference&#x27;s 19 children.
+const leafCounts = [0, 2, 2, 0, 0, 2, 2, 0, 0, 0, 3, 4, 0, 4, 0, 4, 0, 0, 4];
+const linkWidths = [9, 6]; // LinkWidth=depth
+mount(
+  {
+    node: (d) =&gt;
+      circle({
+        r: 8,
+        fill: byDepth(deepBlues)(d),
+        stroke: &quot;white&quot;,
+        strokeWidth: 2,
+      }),
+    link: (source) =&gt; ({
+      curve: Curve.bezier(),
+      stroke: &quot;#606060&quot;,
+      strokeWidth: linkWidths[source.depth],
+    }),
+    parentChild: combine({
+      x: { kind: &quot;nest&quot;, pad: 0 },
+      y: { kind: &quot;distribute&quot;, spacing: 180 },
+    }),
+    sibling: combine({
+      x: { kind: &quot;distribute&quot;, spacing: 4 },
+      y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+    }),
+  },
+  {},
+  deepTree
+);</code></pre>
       </div>
 
       <div class="card">
@@ -1358,13 +1689,6 @@ rect({ w: datum(1), h: datum(1) /* ... */ }); // NestedPietree leaves</code></pr
             </figcaption>
           </figure>
           <figure>
-            <img src="img/gt-deep-tree.png" alt="Deep tree" />
-            <figcaption>
-              Deep tree. Its reference is cartesian; its dsl.json is a copy of
-              the sunburst's.
-            </figcaption>
-          </figure>
-          <figure>
             <img src="img/gt-flower-tree.png" alt="Flower tree" />
             <figcaption>
               Flower tree. Does not match. Circles nest on one axis, which a
@@ -1386,17 +1710,6 @@ rect({ w: datum(1), h: datum(1) /* ... */ }); // NestedPietree leaves</code></pr
             <figcaption>
               Orthogonal grid embedding. Does not match; orthogonal links are
               drawn straight (c).
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="img/gt-nested-pie-tree.png"
-              alt="Nested pie tree, gallery port"
-            />
-            <figcaption>
-              Nested pie tree (gallery port). The port is cartesian and the
-              reference is polar (a). Its gallery description calls it
-              cartesian, so changing it is the maintainer's call.
             </figcaption>
           </figure>
         </div>
@@ -2551,7 +2864,8 @@ layer([
               Icicle plot in polar. The root now shows as a disc at the center.
               Its reference is a cartesian icicle, whose top band is the root.
               The rings around the root sit at uneven radii, as they do on main.
-              Since fixed: see the GoTree cards above.
+              Since rewritten as the cartesian icicle of its reference; see the
+              GoTree cards above.
             </figcaption>
           </figure>
           <figure>

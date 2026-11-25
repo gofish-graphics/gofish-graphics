@@ -2349,31 +2349,6 @@ mount({
 });
 ```
 
-<!-- id: gt-icicle-old -->
-
-```ts
-// GoTree / Gallery / icicleplot, before.
-mount({
-  sibling: combine({
-    x: { kind: "distribute", spacing: 0 },
-    y: { kind: "align", alignment: "middle" },
-  }),
-});
-```
-
-<!-- id: gt-icicle-new -->
-
-```ts
-// After. GoTree's "align" lines up the sibling nodes, which are the first
-// ring of each sibling subtree, so the subtrees start on the same ring.
-mount({
-  sibling: combine({
-    x: { kind: "distribute", spacing: 0 },
-    y: { kind: "align", alignment: "start" },
-  }),
-});
-```
-
 <!-- id: gt-hsc-old -->
 
 ```ts
@@ -2722,4 +2697,274 @@ rect({ w: NPT_LEAF_W, h: 36 /* ... */ });
 // After. Weights, which the coord fits to the turn and the radius.
 rect({ w: datum(d.width), h: bandHeight /* ... */ });
 rect({ w: datum(1), h: datum(1) /* ... */ }); // NestedPietree leaves
+```
+
+<!-- id: gt2-icicle-old -->
+
+```ts
+// GoTree / Gallery / icicleplot, before (IciclePlotPolar.stories.tsx).
+// A polar picture: the same layout as the sunburst story.
+const node = (d: any) =>
+  d.height === 0
+    ? rect({ w: datum(1), h: bandHeight, fill: byDepth(icicleBlues)(d) })
+    : rect({ h: bandHeight, fill: byDepth(icicleBlues)(d) });
+tree(
+  {
+    node,
+    link: "none",
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: { kind: "distribute", spacing: 0 },
+    }),
+    sibling: combine({
+      x: { kind: "distribute", spacing: 0 },
+      y: { kind: "align", alignment: "start" },
+    }),
+    coord: Coord.clock(),
+  },
+  sampleTree
+).render(container);
+```
+
+<!-- id: gt2-icicle-new -->
+
+```ts
+// After (IciclePlot.stories.tsx). A cartesian icicle, as in the picture.
+// The root's 19 children, read off the reference: a number is a leaf with
+// that value, a list is a child whose leaves have those values.
+const branches = [
+  10,
+  [7, 5],
+  [5, 5],
+  16,
+  3,
+  [5, 9],
+  [12, 1],
+  4,
+  7,
+  3,
+  [4, 3, 4],
+  [5, 13, 2, 2],
+  4,
+  [8, 1, 3, 3],
+  7,
+  [5, 4, 6, 9],
+  8,
+  7,
+  [2, 6, 6, 10],
+];
+const bandHeight = 120; // one depth band
+const node = (d: any) =>
+  d.height === 0
+    ? rect({
+        w: datum(d.data.value),
+        h: bandHeight,
+        fill: byDepth(icicleBlues)(d),
+      })
+    : rect({ h: bandHeight, fill: byDepth(icicleBlues)(d) });
+tree(
+  {
+    node,
+    link: "none",
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: { kind: "distribute", spacing: 0 },
+    }),
+    sibling: combine({
+      x: { kind: "distribute", spacing: 0 },
+      y: { kind: "align", alignment: "start" },
+    }),
+  },
+  icicleData
+).render(container, { w: 640 });
+```
+
+<!-- id: gt2-icicle-bug -->
+
+```ts
+// The engine bug in four nodes. With h: datum(1), the parent A is drawn
+// below its own child a1, while the root stays above A and B. With h: 100,
+// every parent is above its children.
+const data = {
+  name: "root",
+  children: [{ name: "A", children: [{ name: "a1" }] }, { name: "B" }],
+};
+tree(
+  {
+    node: (d) =>
+      rect({ w: d.height === 0 ? datum(1) : undefined, h: datum(1) }),
+    link: "none",
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: { kind: "distribute", spacing: 0 },
+    }),
+    sibling: combine({
+      x: { kind: "distribute", spacing: 0 },
+      y: { kind: "align", alignment: "start" },
+    }),
+  },
+  data
+).render(container, { w: 200, h: 300 });
+// Drawn: root y=0, A y=200, a1 y=100.
+// Expected (and drawn with h: 100): root y=0, A y=100, a1 y=200.
+```
+
+<!-- id: gt2-npt-old -->
+
+```ts
+// GoTree / Gallery / NestedPieTree, before. A cartesian picture.
+const node = (d: any) =>
+  d.height === 0
+    ? rect({
+        w: 92,
+        h: (d.data.value ?? d.width ?? 1) * 37,
+        fill: byDepth()(d),
+      })
+    : rect({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+const dice = combine({
+  x: { kind: "align", alignment: "middle" },
+  y: { kind: "distribute", spacing: 18 },
+});
+const slice = combine({
+  x: { kind: "distribute", spacing: 18 },
+  y: { kind: "align", alignment: "middle" },
+});
+tree(
+  {
+    node,
+    link: "none",
+    parentChild: combine({
+      x: { kind: "nest", pad: 14 },
+      y: { kind: "nest", pad: 14 },
+    }),
+    sibling: alternate([slice, dice]),
+  },
+  sampleTree
+).render(container);
+```
+
+<!-- id: gt2-npt-new -->
+
+```ts
+// After. A polar picture. A node is sized by its value only along the axis
+// its parent splits (a slice splits the angle, a dice the radius), and it
+// fills its parent on the other axis.
+const wedges = [
+  [3, 2, 2, 1],
+  4,
+  5,
+  [3, 2, 1, 1],
+  3,
+  [3, 2, 2, 1],
+  1.5,
+  [4, 2, 2],
+  [2, 2],
+  1,
+  2,
+  3,
+  [3, 2],
+  [4, 3],
+  1.5,
+  5,
+  [3, 2],
+  [3, 2],
+  4,
+];
+const node = (d: any) => {
+  const style = {
+    fill: byDepth(pieBlues)(d),
+    stroke: "white",
+    strokeWidth: 1.5,
+  };
+  if (d.depth === 0) return rect(style);
+  const value = datum(total(d.data)); // a leaf's value, or its leaves' sum
+  return d.depth % 2 === 1
+    ? rect({ w: value, ...style })
+    : rect({ h: value, ...style });
+};
+const slice = combine({
+  x: { kind: "distribute", spacing: 0 },
+  y: { kind: "align", alignment: "start" },
+});
+const dice = combine({
+  x: { kind: "align", alignment: "middle" },
+  y: { kind: "distribute", spacing: 4 },
+});
+tree(
+  {
+    node,
+    link: "none",
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: { kind: "nest", pad: 4 },
+    }),
+    sibling: alternate([slice, dice]),
+    coord: Coord.clock(),
+  },
+  pieData
+).render(container, { w: 520, h: 520 });
+```
+
+<!-- id: gt2-deep-old -->
+
+```ts
+// GoTree / Gallery / deep-tree, before. A polar picture.
+mount(
+  {
+    node: (d) =>
+      circle({ r: 6, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 }),
+    link: { curve: Curve.linear(), stroke: "#5f6b7a", strokeWidth: 1.5 },
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: {
+        kind: "distribute",
+        spacing: Spacing.pitch(151, { at: "middle" }),
+      },
+    }),
+    sibling: combine({
+      x: {
+        kind: "distribute",
+        spacing: Spacing.pitch((2 * Math.PI) / 10, { at: "middle" }),
+      },
+      y: { kind: "align", alignment: "middle" },
+    }),
+    coord: Coord.clock(),
+  },
+  {},
+  deepTree // a balanced binary tree, 4 levels
+);
+```
+
+<!-- id: gt2-deep-new -->
+
+```ts
+// After. A cartesian picture with the reference's 19 children.
+const leafCounts = [0, 2, 2, 0, 0, 2, 2, 0, 0, 0, 3, 4, 0, 4, 0, 4, 0, 0, 4];
+const linkWidths = [9, 6]; // LinkWidth=depth
+mount(
+  {
+    node: (d) =>
+      circle({
+        r: 8,
+        fill: byDepth(deepBlues)(d),
+        stroke: "white",
+        strokeWidth: 2,
+      }),
+    link: (source) => ({
+      curve: Curve.bezier(),
+      stroke: "#606060",
+      strokeWidth: linkWidths[source.depth],
+    }),
+    parentChild: combine({
+      x: { kind: "nest", pad: 0 },
+      y: { kind: "distribute", spacing: 180 },
+    }),
+    sibling: combine({
+      x: { kind: "distribute", spacing: 4 },
+      y: { kind: "align", alignment: "start" },
+    }),
+  },
+  {},
+  deepTree
+);
 ```

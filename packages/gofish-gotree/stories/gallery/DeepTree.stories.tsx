@@ -1,100 +1,83 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, Coord, Curve, Spacing } from "gofish-graphics";
+import { circle, Curve } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
-// GoTree gallery port — deep-tree (a deep radial node-link, sunburst family).
-// dsl: node=circle, color=depth, link=curve; CoordinateSystem polar
-//   (Direction clockwise, PolarAxis y-axis, InnerRadius 0, CentralAngle 1).
-//   Layout AxisIndependent, Mode top-down:
-//     X.Root include  / X.Subtree flatten  → parentChild nest, sibling distribute
-//     Y.Root juxtapose / Y.Subtree align   → parentChild distribute, sibling align
-// Under polar(): x = θ (radians, 0..2π), y = r (radius). So the brief mapping is:
-//   parentChild = (nest θ, distribute r) :
-//     - θ nest  → parent centered over its subtree's angular span (a circle is a
-//       point, so nest only re-centers the parent; it doesn't grow it).
-//     - r distribute → one ring per depth (parent inner, children outward).
-//   sibling = (distribute θ, align r) :
-//     - θ distribute → siblings spread angularly (spacing in radians).
-//     - r align → all siblings share a radius (same ring).
-// Point-like circle nodes ⇒ a middle pitch on every distribute so spacing is read
-// in domain units (radians for θ, r-units for r) and pixel bboxes don't
-// accumulate. Same layout family as the Sunburst / RadialTree stories, deeper.
+// GoTree gallery port — deep-tree (a CARTESIAN top-down node-link tree with
+// thick curved links).
 //
-// NOTES — polar limitations (no hacks; flagged for follow-up):
-//  - Links: the dsl asks for "curve" links with depth-driven width
-//    (LinkWidth=depth). Curved link interpolation isn't wired through the coord
-//    transform yet, so this falls back to fixed-width {curve:"linear"}
-//    (the route→curve link API lands in draft PR #637). Under polar() the
-//    straight segments still bow into arcs through the coord transform, but they
-//    are NOT the dsl's authored curves and ignore LinkWidth/Thickness=depth.
-//  - No angular auto-fit for POINT nodes: sibling θ spacing is a fixed per-level
-//    constant, it does NOT shrink with the number of nodes at a depth. GoTree
-//    allocates angle by subtree leaf-count; here center-mode distribute places
-//    sibling-subtree *centers* a fixed angle apart regardless of how wide each
-//    subtree is, so a genuinely deep/wide tree overflows the 2π budget —
-//    subtrees overlap and the outer rings wrap. Wedge (rect) nodes now auto-fit
-//    angularly via a data-sized θ extent since #622; the gap for point/circle nodes like
-//    these is tracked in #627, and its data-position workaround (leaf-slot box
-//    packing in the data pass) is demonstrated in RadialDeep.stories.tsx. The
-//    tree below is kept modest so the structure stays legible.
-//  - polar() now takes options — { innerRadius, centralAngle, baselineAngle,
-//    direction, center } since #620 — so InnerRadius 0, Direction "clockwise",
-//    CentralAngle 1 and StartAngle 0 are now expressible via polar({ ... })
-//    since #620 (not yet applied here). Still NOT expressible: the PolarAxis
-//    y-axis (θ/r) swap from the dsl, and PolarCenter "bottom" — a polar-space
-//    anchor, which polar's screen-offset `center` does not cover. Absent those,
-//    polar() puts r=0 at the canvas center and sweeps θ counter-clockwise over
-//    the full 0..2π.
+// REFERENCE. The gallery's deep-tree/tree.png is cartesian: the root at the top
+// center, its 19 children on one row below it, and their leaves on a row below
+// that, joined by thick curved links. Its dsl.json is a byte copy of the
+// sunburst entry's (polar), so the picture is the only spec of its own. This
+// port draws the picture, in the picture's cartesian coordinates. The copied
+// dsl's layout and element settings still read right for the picture:
+//   X.Root include   / X.Subtree flatten → parentChild nest x, sibling distribute x
+//   Y.Root juxtapose / Y.Subtree align   → parentChild distribute y, sibling align y
+//   Link curve, LinkWidth depth           → bezier links, thicker near the root
+//
+// MAPPING:
+//   parentChild = (nest x, distribute y)
+//     - nest on x: the parent is centered over its subtree's span (a circle
+//       does not grow, so nest only centers it).
+//     - distribute on y: the parent on its row, the child group on the row
+//       below.
+//   sibling = (distribute x, align y)
+//     - distribute on x: siblings side by side.
+//     - align on y "start": siblings share their top edge, so a childless
+//       depth-1 node stays on its row.
+//
+// NOTES:
+//  - LinkWidth=depth: the link's width is read off the parent's depth.
 const meta: Meta = { title: "GoTree / Gallery / deep-tree" };
 export default meta;
 
-// A deep tree — 4 levels below the root (depth 0..4) so several rings show the
-// "deep" structure. Branching kept low (binary) so the fixed angular budget
-// isn't blown out completely. 16 leaves at the outer ring.
-const deepTree = (() => {
-  const make = (depth: number, prefix: string): any =>
-    depth === 0
-      ? { name: prefix }
+// The root's 19 children and how many leaves each has, read off the reference.
+const leafCounts = [0, 2, 2, 0, 0, 2, 2, 0, 0, 0, 3, 4, 0, 4, 0, 4, 0, 0, 4];
+const deepTree = {
+  name: "root",
+  children: leafCounts.map((n, i) =>
+    n === 0
+      ? { name: `c${i}` }
       : {
-          name: prefix,
-          children: [
-            make(depth - 1, prefix + "a"),
-            make(depth - 1, prefix + "b"),
-          ],
-        };
-  return make(4, "r");
-})();
+          name: `c${i}`,
+          children: Array.from({ length: n }, (_, j) => ({
+            name: `c${i}-${j}`,
+          })),
+        }
+  ),
+};
 
-// circle nodes, depth-colored (dark blue root → light blue leaves).
+// ColorRange #2171b5 → #deebf7 by depth.
+const deepBlues = ["#2171b5", "#84aed8", "#deebf7"];
 const node = (d: any) =>
-  circle({ r: 6, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+  circle({
+    r: 8,
+    fill: byDepth(deepBlues)(d),
+    stroke: "white",
+    strokeWidth: 2,
+  });
+
+// LinkWidth=depth: links out of the root are the thickest.
+const linkWidths = [9, 6];
 
 export const DeepTree: StoryObj = {
   render: () =>
     mount(
       {
         node,
-        // NOTE: dsl wants curve links (LinkWidth=depth); falling back to linear.
-        link: { curve: Curve.linear(), stroke: "#5f6b7a", strokeWidth: 1.5 },
+        link: (source: any) => ({
+          curve: Curve.bezier(),
+          stroke: "#606060",
+          strokeWidth: linkWidths[source.depth],
+        }),
         parentChild: combine({
-          // θ: nest centers the parent circle over its subtree's angular span.
           x: { kind: "nest", pad: 0 },
-          // r: one ring per depth (center mode → spacing in r-units).
-          y: {
-            kind: "distribute",
-            spacing: Spacing.pitch(151, { at: "middle" }),
-          },
+          y: { kind: "distribute", spacing: 180 },
         }),
         sibling: combine({
-          // θ: spread siblings angularly (spacing in radians, center mode).
-          x: {
-            kind: "distribute",
-            spacing: Spacing.pitch((2 * Math.PI) / 10, { at: "middle" }),
-          },
-          // r: all siblings share a radius (same ring).
-          y: { kind: "align", alignment: "middle" },
+          x: { kind: "distribute", spacing: 4 },
+          y: { kind: "align", alignment: "start" },
         }),
-        coord: Coord.clock(),
       },
       {},
       deepTree

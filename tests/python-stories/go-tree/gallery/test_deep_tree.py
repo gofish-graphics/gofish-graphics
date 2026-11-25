@@ -1,27 +1,33 @@
 """Equivalent of gofish-gotree/stories/gallery/DeepTree.stories.tsx."""
 
-import math
-
-from gofish import Coord, Curve, Spacing, circle
+from gofish import Curve, circle
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import by_depth
 
-
-# A balanced binary tree, 4 levels deep.
-def make(depth, prefix):
-    if depth == 0:
-        return {"name": prefix}
-    return {
-        "name": prefix,
-        "children": [make(depth - 1, prefix + "a"), make(depth - 1, prefix + "b")],
-    }
+# The root's 19 children and how many leaves each has, read off the reference.
+LEAF_COUNTS = [0, 2, 2, 0, 0, 2, 2, 0, 0, 0, 3, 4, 0, 4, 0, 4, 0, 0, 4]
 
 
-DEEP_TREE = make(4, "r")
+def child(i, n):
+    if n == 0:
+        return {"name": f"c{i}"}
+    return {"name": f"c{i}", "children": [{"name": f"c{i}-{j}"} for j in range(n)]}
+
+
+DEEP_TREE = {
+    "name": "root",
+    "children": [child(i, n) for i, n in enumerate(LEAF_COUNTS)],
+}
+
+DEEP_BLUES = ["#2171b5", "#84aed8", "#deebf7"]
 
 
 def node(d):
-    return circle(r=6, fill=by_depth()(d), stroke="#08306b", stroke_width=1)
+    return circle(r=8, fill=by_depth(DEEP_BLUES)(d), stroke="white", stroke_width=2)
+
+
+# LinkWidth=depth: links out of the root are the thickest.
+LINK_WIDTHS = [9, 6]
 
 
 def story_deep_tree():
@@ -29,22 +35,19 @@ def story_deep_tree():
         tree(
             DEEP_TREE,
             node=node,
-            link={"curve": Curve.linear(), "stroke": "#5f6b7a", "stroke_width": 1.5},
+            link=lambda source, target: {
+                "curve": Curve.bezier(),
+                "stroke": "#606060",
+                "stroke_width": LINK_WIDTHS[source["depth"]],
+            },
             parent_child=combine(
                 x={"kind": "nest", "pad": 0},
-                y={
-                    "kind": "distribute",
-                    "spacing": Spacing.pitch(151, at="middle"),
-                },
+                y={"kind": "distribute", "spacing": 180},
             ),
             sibling=combine(
-                x={
-                    "kind": "distribute",
-                    "spacing": Spacing.pitch((2 * math.pi) / 10, at="middle"),
-                },
-                y={"kind": "align", "alignment": "middle"},
+                x={"kind": "distribute", "spacing": 4},
+                y={"kind": "align", "alignment": "start"},
             ),
-            coord=Coord.clock(),
         ),
         {},
     )
