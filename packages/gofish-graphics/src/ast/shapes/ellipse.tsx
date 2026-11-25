@@ -4,6 +4,7 @@ import { bandRegion, boxRegion } from "../../bandRegion";
 import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
+import { pinnedAt, placedExtents, rigidPlacement } from "../rigid";
 import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
@@ -186,13 +187,16 @@ export const Ellipse = ({
           };
         };
 
-        // Both dimensions aesthetic — transformed point.
+        // Both dimensions aesthetic — drawn rigid, with its pinned point
+        // on that point's image (`rigid.ts`).
         if (!isXEmbedded && !isYEmbedded) {
-          const center: [number, number] = [
-            (displayDims[0].min ?? 0) + (displayDims[0].size ?? 0) / 2,
-            (displayDims[1].min ?? 0) + (displayDims[1].size ?? 0) / 2,
-          ];
-          const [transformedX, transformedY] = space.transform(center);
+          const [dx, dy] = rigidPlacement(
+            node,
+            space,
+            placedExtents(intrinsicDims, transform)
+          ).shift;
+          const transformedX = displayDims[0].center + dx;
+          const transformedY = displayDims[1].center + dy;
           const width = displayDims[0].size ?? 0;
           const height = displayDims[1].size ?? 0;
           return [
@@ -227,17 +231,23 @@ export const Ellipse = ({
 
           // Nonlinear: a filled band whose half thickness at each point of
           // its midline is the ellipse's (`bandRegion`, as rect.tsx draws).
+          // Its midline runs at the point pinned across it (`rigid.ts`).
+          const pinned = pinnedAt(
+            node,
+            aestheticAxis,
+            space,
+            placedExtents(intrinsicDims, transform)[aestheticAxis]
+          );
           const ends = [displayDims[0], displayDims[1]].map((d, axis) =>
-            axis === aestheticAxis
-              ? [aestheticMid, aestheticMid]
-              : [d.min ?? 0, d.max ?? 0]
+            axis === aestheticAxis ? [pinned, pinned] : [d.min ?? 0, d.max ?? 0]
           );
           const band = bandRegion(
             space,
             [ends[0][0], ends[1][0]],
             [ends[0][1], ends[1][1]],
             (u) =>
-              (thickness / 2) * Math.sqrt(Math.max(0, 1 - (2 * u - 1) ** 2))
+              (thickness / 2) * Math.sqrt(Math.max(0, 1 - (2 * u - 1) ** 2)),
+            aestheticMid - pinned
           );
           return regionItems(regionToPixelSVG(band, toPixel));
         }

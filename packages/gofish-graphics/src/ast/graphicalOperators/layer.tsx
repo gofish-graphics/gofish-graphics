@@ -108,6 +108,7 @@ import { evaluate } from "../solver/formula";
 import { stackPlaces, type StackPlace } from "../constraints/distribute";
 import { isConstant } from "../fun";
 import { plotForms, reachPast } from "../solver/plotForms";
+import { placedExtents, rigidPlacement } from "../rigid";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -1735,16 +1736,28 @@ export const layer = createNodeOperatorSequential(
         // resolved by the shared bake walk exactly as the root bake does. A
         // non-identity scale can't fold into coordinates, so it stays a `group`
         // item wrapping the children.
-        lower: ({ transform, coordinateTransform }, _children, node) => {
+        lower: (
+          { intrinsicDims, transform, coordinateTransform },
+          _children,
+          node
+        ) => {
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
-          const [wrapTx, wrapTy] = displayTranslate(transform);
-          // A `box` is a coordinate-transform barrier: its children render in
-          // linear box-local space (the box positions itself in the parent
-          // coord, but its content does not warp). Mirror the render's
-          // `this.type !== "box" ? coordinateTransform : undefined`.
-          const childCoord =
-            node.type === "box" ? undefined : coordinateTransform;
+          // A `box` is rigid: its children render in linear box-local space
+          // (its content does not warp), and a space it is in draws it whole,
+          // moved so that its pinned point lands on that point's image
+          // (`rigid.ts`).
+          const [dx, dy] =
+            node.rigid && coordinateTransform !== undefined
+              ? rigidPlacement(
+                  node,
+                  coordinateTransform,
+                  placedExtents(intrinsicDims, transform)
+                ).shift
+              : [0, 0];
+          const [tx, ty] = displayTranslate(transform);
+          const [wrapTx, wrapTy] = [tx + dx, ty + dy];
+          const childCoord = node.rigid ? undefined : coordinateTransform;
 
           // Seed the subtree bake at the box's absolute translate only — scale
           // is applied by the group below, not folded into coordinates.
@@ -1771,6 +1784,8 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
+    // A box draws without warping (`rigid.ts`).
+    node.rigid = options.box === true;
     node.claimWalk = {
       ink: inkChildren,
       dressing: dressingChildren,

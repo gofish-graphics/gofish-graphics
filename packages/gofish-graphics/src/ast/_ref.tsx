@@ -15,6 +15,7 @@ import {
   localAnchorOf,
   translateForAnchor,
 } from "./dims";
+import { pinnedAt } from "./rigid";
 import type { AxisScale } from "./domain";
 import { GoFishNode } from "./_node";
 import { GoFishAST } from "./_ast";
@@ -1062,11 +1063,11 @@ export const findLeastCommonAncestor = (
 };
 
 /** Whether `node` draws as ink of a fixed pixel size at one point of a
- *  coordinate space on `axis`: its own `embedded` flag is false there (see
- *  `GoFishNode.resolveEmbedding`). A node with no flag of its own (a group)
- *  is an extent of the space. */
+ *  coordinate space on `axis`: it is rigid (`rigid.ts`), or its own
+ *  `embedded` flag is false there (see `GoFishNode.resolveEmbedding`). A
+ *  node with no flag of its own (a group) is an extent of the space. */
 const pointOn = (node: GoFishNode, axis: 0 | 1): boolean =>
-  node.args?.dims?.[axis]?.embedded === false;
+  node.rigid || node.args?.dims?.[axis]?.embedded === false;
 
 /** Whether `node` draws as a point of a coordinate space on both axes. */
 const drawnAsPoint = (node: GoFishNode): boolean =>
@@ -1077,10 +1078,12 @@ const drawnAsPoint = (node: GoFishNode): boolean =>
  * own frame (see `GoFishRef.intrinsicDims`). The target's box in the
  * space's interior is its local box moved by the translates from it up to
  * the space. On each axis it does not embed, the box collapses to its
- * middle and its size is pixels of ink around the mapped point. The rest is
- * mapped through the space's `interiorTransform`, and the image's bounding
- * box is widened by the ink: by half its own size on each axis for a point
- * mark, and all round by half the thickness of a warped line.
+ * pinned point (`rigid.ts`: its middle when nothing pins it) and the rest
+ * of its size is pixels of ink on either side of the mapped point. The rest
+ * is mapped through the space's `interiorTransform`, and the image's
+ * bounding box is widened by the ink: on each side of each axis by the ink
+ * on that side for a point mark, and all round by the thicker side of a
+ * warped line.
  */
 function drawnBox(target: GoFishNode, space: GoFishNode): Dimensions {
   const local = target.intrinsicDims;
@@ -1093,29 +1096,41 @@ function drawnBox(target: GoFishNode, space: GoFishNode): Dimensions {
   for (let n: GoFishAST | undefined = target; n && n !== space; n = n.parent)
     for (const axis of [0, 1] as const)
       offset[axis] += n.projectedTranslate(axis) ?? 0;
+  const interior = space.interiorTransform!();
   const ends = ([0, 1] as const).map((axis) => {
     const { min = 0, size = 0 } = local[axis];
     const lo = offset[axis] + min;
-    if (!pointOn(target, axis)) return { lo, hi: lo + size, ink: 0 };
-    const mid = lo + size / 2;
-    return { lo: mid, hi: mid, ink: size };
+    if (!pointOn(target, axis))
+      return { lo, hi: lo + size, before: 0, after: 0 };
+    const at = pinnedAt(target, axis, interior, {
+      min: lo,
+      max: lo + size,
+      origin: offset[axis],
+    });
+    return { lo: at, hi: at, before: at - lo, after: lo + size - at };
   });
   const image = boundaryImageBox(
     ends[0].lo,
     ends[0].hi,
     ends[1].lo,
     ends[1].hi,
-    space.interiorTransform!().transform
+    interior.transform
   );
-  const thickness = Math.max(ends[0].ink, ends[1].ink) / 2;
-  const pad: [number, number] = drawnAsPoint(target)
-    ? [ends[0].ink / 2, ends[1].ink / 2]
-    : [thickness, thickness];
-  const axisDims = (lo: number, hi: number, p: number) => ({
-    min: lo - p,
-    size: hi - lo + 2 * p,
-    center: (lo + hi) / 2,
-    max: hi + p,
+  const thickness = Math.max(
+    ...ends.map(({ before, after }) => Math.max(before, after))
+  );
+  const pad = drawnAsPoint(target)
+    ? ends
+    : ends.map(() => ({ before: thickness, after: thickness }));
+  const axisDims = (
+    lo: number,
+    hi: number,
+    p: { before: number; after: number }
+  ) => ({
+    min: lo - p.before,
+    size: hi - lo + p.before + p.after,
+    center: (lo - p.before + hi + p.after) / 2,
+    max: hi + p.after,
   });
   return [
     axisDims(image.minX, image.maxX, pad[0]),

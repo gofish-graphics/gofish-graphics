@@ -1,6 +1,7 @@
 import { NAMEABLE_METHODS } from "../marks/createOperator";
 import { posFn, pxOf } from "../domain";
 import { GoFishNode } from "../_node";
+import { placedExtents, rigidPlacement } from "../rigid";
 import { getValue, isValue } from "../data";
 import {
   Dimensions,
@@ -312,15 +313,25 @@ export const Image = ({
       },
       // IR lowering: the box spans x `[x, x+width]`, y `[y, y+height]`; map both
       // diagonal corners through `toPixel` and take the component-wise min for
-      // the SVG top-left.
+      // the SVG top-left. In a coordinate space the image is drawn rigid,
+      // moved so that its pinned point lands on that point's image
+      // (`rigid.ts`).
       lower: (
-        { intrinsicDims, transform, toPixel },
+        { intrinsicDims, transform, toPixel, coordinateTransform },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
+        const [dx, dy] =
+          coordinateTransform === undefined
+            ? [0, 0]
+            : rigidPlacement(
+                node,
+                coordinateTransform,
+                placedExtents(intrinsicDims, transform)
+              ).shift;
         const [tx, ty] = displayTranslate(transform);
-        const x = tx + (intrinsicDims?.[0]?.min ?? 0);
-        const y = ty + (intrinsicDims?.[1]?.min ?? 0);
+        const x = tx + dx + (intrinsicDims?.[0]?.min ?? 0);
+        const y = ty + dy + (intrinsicDims?.[1]?.min ?? 0);
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
 
@@ -347,6 +358,8 @@ export const Image = ({
     },
     []
   );
+  // An image draws unwarped (`rigid.ts`).
+  node.rigid = true;
   own.bind(node);
   return node;
 };

@@ -28,6 +28,7 @@ import {
   positionOf,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { pinnedAt, placedExtents, rigidPlacement } from "../rigid";
 import { literalBoxExtents } from "../extent";
 import {
   boxOfDims,
@@ -337,21 +338,20 @@ export const Rect = ({
           role: roleFor(node.datum),
         };
 
-        // Both dimensions aesthetic — transformed point.
+        // Both dimensions aesthetic — a rigid box, drawn with its pinned
+        // point on that point's image (`rigid.ts`).
         if (!isXEmbedded && !isYEmbedded) {
-          const center: [number, number] = [
-            displayDims[0].center ?? 0,
-            displayDims[1].center ?? 0,
-          ];
-          const [tX, tY] = space.transform(center);
-          const w = displayDims[0].size ?? 0;
-          const h = displayDims[1].size ?? 0;
+          const [dx, dy] = rigidPlacement(
+            node,
+            space,
+            placedExtents(intrinsicDims, transform)
+          ).shift;
           return [
             rectItemFromBox(
-              tX - w / 2,
-              tX + w / 2,
-              tY - h / 2,
-              tY + h / 2,
+              displayDims[0].min + dx,
+              displayDims[0].max + dx,
+              displayDims[1].min + dy,
+              displayDims[1].max + dy,
               toPixel,
               rectExtra
             ),
@@ -383,18 +383,24 @@ export const Rect = ({
           }
 
           // Nonlinear: a filled band. The midline runs between the edges
-          // on the embedded axis, through the space, and the pixel
-          // thickness is laid off along its normal (`bandRegion`).
+          // on the embedded axis, through the space, at the point pinned
+          // across it (`rigid.ts`; its middle when nothing pins it), and the
+          // pixel thickness is laid off along its normal (`bandRegion`).
+          const pinned = pinnedAt(
+            node,
+            aestheticAxis,
+            space,
+            placedExtents(intrinsicDims, transform)[aestheticAxis]
+          );
           const ends = [displayDims[0], displayDims[1]].map((d, axis) =>
-            axis === aestheticAxis
-              ? [aestheticMid, aestheticMid]
-              : [d.min ?? 0, d.max ?? 0]
+            axis === aestheticAxis ? [pinned, pinned] : [d.min ?? 0, d.max ?? 0]
           );
           const band = bandRegion(
             space,
             [ends[0][0], ends[1][0]],
             [ends[0][1], ends[1][1]],
-            () => thickness / 2
+            () => thickness / 2,
+            aestheticMid - pinned
           );
           return regionItems(regionToPixelSVG(band, toPixel), elementStyle);
         }

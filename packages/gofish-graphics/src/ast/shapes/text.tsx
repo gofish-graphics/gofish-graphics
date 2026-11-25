@@ -13,6 +13,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { placedExtents, rigidPlacement } from "../rigid";
 import { boxExtent, literalStart } from "../extent";
 import { boxOfDims } from "../geometry";
 import { turnedBox, turnedCorners } from "../geometry/plane";
@@ -322,9 +323,11 @@ export const Text = ({
       },
       // IR lowering. The glyph anchor is the origin mapped through `toPixel`
       // and moved `glyphDy` down the screen; the rotation is SVG's,
-      // clockwise on screen.
+      // clockwise on screen. In a coordinate space the text is drawn rigid,
+      // moved so that its pinned point lands on that point's image
+      // (`rigid.ts`).
       lower: (
-        { transform, renderData, toPixel, intrinsicDims },
+        { transform, renderData, toPixel, intrinsicDims, coordinateTransform },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
@@ -333,7 +336,16 @@ export const Text = ({
           : textContent;
         const text = finalText == null ? "" : String(finalText);
 
-        const [anchorX, anchorY] = displayTranslate(transform);
+        const [dx, dy] =
+          coordinateTransform === undefined
+            ? [0, 0]
+            : rigidPlacement(
+                node,
+                coordinateTransform,
+                placedExtents(intrinsicDims, transform)
+              ).shift;
+        const [originX, originY] = displayTranslate(transform);
+        const [anchorX, anchorY] = [originX + dx, originY + dy];
         // `glyphDy` is in screen pixels (a text is drawn upright at its
         // point even inside a coordinate space), so it applies after the
         // origin maps through `toPixel`.
@@ -446,6 +458,8 @@ export const Text = ({
     },
     []
   );
+  // A text draws upright and unwarped (`rigid.ts`).
+  node.rigid = true;
   // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
   node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
   return node;

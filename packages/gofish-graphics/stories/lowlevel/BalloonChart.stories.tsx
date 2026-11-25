@@ -61,9 +61,6 @@ export const Default: StoryObj<Args> = {
     // string's top edge is the balloon's bottom edge. The chain fixes both of
     // the string's edges, so the string is a length of the space and bends
     // with it.
-    // TODO: a box in a coordinate space is drawn at its unwarped position
-    // (repro: Proposals/Balloon Repro), so the balloons do not yet sit
-    // exactly on their strings.
     layer(
       { coord: Coord.wavy(), x: 0, y: 0 },
       scatterData.map((data, i) =>

@@ -2,25 +2,47 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-// Related extents: the relational route to embedding (Route A in
-// notes/design/embedding-annotations.md). A relation that places marks
-// relative to each other in a space must still hold after the space's
-// transform. When it relates both edges of a mark on an axis, both edges
-// are positions of the space, so the mark's extent on that axis is a length
-// of the space, and the axis embeds (`GoFishNode.resolveEmbedding`),
-// whatever unit the mark's size is in. A relation that pins one point of a
-// mark (a center or baseline align, a pitch spacing) places the mark there
-// and says nothing about its extent.
+// What the relations around a node fix of it in its space. A relation that
+// places marks relative to each other in a space must still hold after the
+// space's transform. Read here, once, for two uses:
+//
+// - The relational route to embedding (Route A in
+//   notes/design/embedding-annotations.md). When a relation relates both
+//   edges of a mark on an axis, both edges are positions of the space, so
+//   the mark's extent on that axis is a length of the space, and the axis
+//   embeds (`GoFishNode.resolveEmbedding`), whatever unit the mark's size is
+//   in.
+// - The pinned point of a drawing that does not warp (`rigid.ts`). A rigid
+//   drawing agrees with a warped space at one point only, so the space
+//   places it with the point its relations fix (its `pins`) on that point's
+//   image.
 
 import type { GoFishNode } from "./_node";
 import { resolution } from "./_ref";
 import type { ConstraintSpec } from "./constraints";
-import { axisIndex, directSlot, pointAlignOn } from "./constraints/shared";
+import { isPositionInterval } from "./constraints/position";
+import {
+  axisIndex,
+  directSlot,
+  pointAlignOn,
+  type AlignAnchor,
+} from "./constraints/shared";
 
-/** Whether a relation fixes a node's extent on each axis. */
-export type RelatedExtents = readonly [boolean, boolean];
+/** What the relations around a node fix of it on one axis. */
+export type AxisRelations = {
+  /** A relation fixes its extent: both its edges are positions of the
+   *  space, so the axis embeds (Route A). */
+  readonly extent: boolean;
+  /** The points of its box that a relation fixes in the space, each once:
+   *  its `start` or `end` edge, its `middle`, or its `baseline` (local 0). */
+  readonly pins: readonly AlignAnchor[];
+};
 
-export const UNRELATED: RelatedExtents = [false, false];
+/** {@link AxisRelations} on x and on y. */
+export type Relations = readonly [AxisRelations, AxisRelations];
+
+const FREE: AxisRelations = { extent: false, pins: [] };
+export const UNRELATED: Relations = [FREE, FREE];
 
 /** Whether `node` has no size of its own on `axis`: its box there is its
  *  children's hull. */
@@ -30,84 +52,113 @@ const hugs = (node: GoFishNode, axis: 0 | 1): boolean =>
     undefined;
 
 /**
- * Whether a relation fixes the extent of each direct child of `node` on
- * each axis, given whether one fixes `node`'s (`related`), indexed by child
- * slot. A child's extent is fixed in two ways:
+ * What the relations of `node`, and those that fix `node` itself
+ * (`related`), fix of each of its direct children on each axis, indexed by
+ * child slot.
  *
- * - **A relation of `node` relates both of its edges.** A chain
- *   (`distribute`, a spread or a stack) with a box spacing of any gap
- *   (pixels, a percent, an `fr` weight) or `Spacing.atLeast` relates each
- *   part's start and end to its neighbors' edges, along the chain's axis.
- *   An `align` by `span` relates both edges of each operand; an `align` at
- *   `start` relates the start and one at `end` the end, so the two together
- *   relate both. Only a relation among two or more children relates them.
- * - **It is `node`'s extent.** An only child of a node with no size of its
- *   own on the axis is that node's hull, and a ring an elaboration pass put
- *   around its content (`_transparent`) is its content, so a relation that
- *   fixes `node`'s extent fixes the child's.
+ * A relation of `node` among two or more children fixes these points of
+ * each child it reads:
  *
- * A pitch spacing and an `align` at `middle` or `baseline` pin one point of
- * each child, so they place it without fixing its extent. An operand that
- * resolves inside a child (a nested operand) is not read.
+ * - A chain (`distribute`, a spread or a stack) with a box spacing of any
+ *   gap (pixels, a percent, an `fr` weight) or `Spacing.atLeast` ties each
+ *   part's start to the end of the part before it and its end to the start
+ *   of the part after it, along the chain's axis. With `ends`, the first
+ *   part's start and the last part's end are tied to the layer's box too.
+ *   It fixes every part's extent.
+ * - A pitch spacing fixes its `at` point of each part, and not its extent.
+ * - An `align` by `span` fixes both edges and the extent of each operand.
+ *   An `align` at one anchor fixes that point of each operand; one at
+ *   `start` together with one at `end` fixes both edges, and so the extent.
+ *
+ * A `Constraint.position` at a point fixes its `anchor` of its target on
+ * each axis it gives, and not its extent. An operand that resolves inside a
+ * child (a nested operand) is not read.
+ *
+ * A child is also fixed as `node` is when it is `node`'s extent: an only
+ * child of a node with no size of its own on the axis is that node's hull,
+ * and a ring an elaboration pass put around its content (`_transparent`)
+ * is its content.
  */
-export function relatedExtentsOfChildren(
+export function relationsOfChildren(
   node: GoFishNode,
-  related: RelatedExtents
-): [boolean, boolean][] {
-  const out: [boolean, boolean][] = node.children.map(() => [false, false]);
-  if (out.length === 0) return out;
-  if (node._transparent) {
-    out[0] = [related[0], related[1]];
-    return out;
-  }
-  if (out.length === 1)
-    for (const axis of [0, 1] as const)
-      if (hugs(node, axis)) out[0][axis] = related[axis];
-  if (node.constraints.length === 0) return out;
-  const resolved = resolution(node);
-  // Which edges of each child a relation of `node` relates, per axis.
-  const edges = node.children.map(() =>
-    [0, 1].map(() => ({ start: false, end: false }))
+  related: Relations
+): Relations[] {
+  const n = node.children.length;
+  if (n === 0) return [];
+  if (node._transparent) return [related, ...Array(n - 1).fill(UNRELATED)];
+  // Per child and axis: the pins, and whether its extent is fixed.
+  const acc = node.children.map(() =>
+    [0, 1].map(() => ({
+      extent: false,
+      pins: new Set<AlignAnchor>(),
+      // The edges an `align` of `node` relates: both together fix the extent.
+      aligned: new Set<AlignAnchor>(),
+    }))
   );
-  const relate = (
-    slots: (number | undefined)[],
-    axis: 0 | 1,
-    which: (k: number) => { start: boolean; end: boolean }
-  ) => {
-    if (slots.length < 2) return;
-    slots.forEach((i, k) => {
-      if (i === undefined) return;
-      const { start, end } = which(k);
-      if (start) edges[i][axis].start = true;
-      if (end) edges[i][axis].end = true;
-    });
+  if (n === 1)
+    for (const axis of [0, 1] as const)
+      if (hugs(node, axis)) {
+        acc[0][axis].extent = related[axis].extent;
+        for (const p of related[axis].pins) acc[0][axis].pins.add(p);
+      }
+  const resolved = node.constraints.length === 0 ? undefined : resolution(node);
+  const pin = (i: number | undefined, axis: 0 | 1, p: AlignAnchor) => {
+    if (i !== undefined) acc[i][axis].pins.add(p);
   };
   for (const c of node.constraints as readonly ConstraintSpec[]) {
     if (c.type === "distribute") {
-      if (c.spacing.kind === "pitch") continue;
-      const slots = c.children.map((ref) => directSlot(resolved, ref));
-      relate(slots, axisIndex(c.dir), () => ({ start: true, end: true }));
+      const slots = c.children.map((ref) => directSlot(resolved!, ref));
+      if (slots.length < 2) continue;
+      const axis = axisIndex(c.dir);
+      if (c.spacing.kind === "pitch") {
+        const at = c.spacing.at ?? "baseline";
+        slots.forEach((i) => pin(i, axis, at));
+        continue;
+      }
+      const ends = c.spacing.ends !== undefined;
+      slots.forEach((i, k) => {
+        if (i === undefined) return;
+        acc[i][axis].extent = true;
+        if (k > 0 || ends) pin(i, axis, "start");
+        if (k < slots.length - 1 || ends) pin(i, axis, "end");
+      });
     } else if (c.type === "align") {
-      const slots = c.children.map((ref) => directSlot(resolved, ref));
+      const slots = c.children.map((ref) => directSlot(resolved!, ref));
+      if (slots.length < 2) continue;
       for (const axis of [0, 1] as const) {
         const spec = axis === 0 ? c.x : c.y;
         if (spec === "span") {
-          relate(slots, axis, () => ({ start: true, end: true }));
+          slots.forEach((i) => {
+            if (i === undefined) return;
+            acc[i][axis].extent = true;
+            pin(i, axis, "start");
+            pin(i, axis, "end");
+          });
           continue;
         }
         const point = pointAlignOn(c, axis);
         if (point === undefined) continue;
-        relate(slots, axis, (k) => {
+        slots.forEach((i, k) => {
+          if (i === undefined) return;
           const anchor = Array.isArray(point) ? point[k] : point;
-          return { start: anchor === "start", end: anchor === "end" };
+          acc[i][axis].aligned.add(anchor);
+          pin(i, axis, anchor);
         });
+      }
+    } else if (c.type === "position") {
+      const slots = c.children.map((ref) => directSlot(resolved!, ref));
+      for (const axis of [0, 1] as const) {
+        const coord = axis === 0 ? c.x : c.y;
+        if (coord === undefined || isPositionInterval(coord)) continue;
+        slots.forEach((i) => pin(i, axis, c.anchor));
       }
     }
   }
-  edges.forEach((axes, i) =>
-    axes.forEach(({ start, end }, axis) => {
-      if (start && end) out[i][axis] = true;
-    })
+  return acc.map(
+    (axes) =>
+      axes.map(({ extent, pins, aligned }) => ({
+        extent: extent || (aligned.has("start") && aligned.has("end")),
+        pins: [...pins],
+      })) as unknown as Relations
   );
-  return out;
 }

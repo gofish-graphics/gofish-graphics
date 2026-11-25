@@ -2744,7 +2744,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       },
       box: {
         type: t.boolean,
-        doc: 'True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.',
+        doc: "True draws the layer as one rigid box: inside a coordinate space its content does not warp. The space draws the box flat, moved so that the point of the box its relations fix (the start of a part chained after another, the anchor of an `align`, or its middle when nothing fixes one) lands on that point's image. Inside a space that is not linear, relations that fix two points of the box on one axis (both of its edges) are an error.",
       },
     },
   }),

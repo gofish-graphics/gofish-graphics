@@ -1263,7 +1263,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.
         padding: Pixels the content of this layer's `coord` keeps from the edge of its box (a polar space's outer radius is half the shorter side less this). Ignored on a layer with no `coord`. Default 30.
         transform: Non-affine-foldable scale applied to the composed children.
-        box: True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.
+        box: True draws the layer as one rigid box: inside a coordinate space its content does not warp. The space draws the box flat, moved so that the point of the box its relations fix (the start of a part chained after another, the anchor of an `align`, or its middle when nothing fixes one) lands on that point's image. Inside a space that is not linear, relations that fix two points of the box on one axis (both of its edges) are an error.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [

@@ -65,8 +65,8 @@ import type { AnimationRule } from "../animation/paint";
 import { GoFishRef } from "./_ref";
 import {
   UNRELATED,
-  relatedExtentsOfChildren,
-  type RelatedExtents,
+  relationsOfChildren,
+  type Relations,
 } from "./relatedExtents";
 import { getScopeRegistry, type GlyphRoom } from "./solver/scopes";
 import { GoFishAST } from "./_ast";
@@ -1097,6 +1097,16 @@ export class GoFishNode {
    * the mark where it is drawn. Callable once the node is laid out.
    */
   public interiorTransform?: () => CoordinateTransform;
+  /**
+   * Whether this node draws without warping: a text, an image, a
+   * `layer({ box: true })`. No axis of it ever embeds, and inside a
+   * coordinate space it is drawn flat with its pinned point on that point's
+   * image (`rigid.ts`).
+   */
+  public rigid = false;
+  /** What the relations around this node fix of it on each axis, written
+   *  by {@link resolveEmbedding} (`relationsOfChildren`). */
+  public relations: Relations = UNRELATED;
   constructor(
     {
       key,
@@ -2377,7 +2387,7 @@ export class GoFishNode {
    *
    * A dim embeds by either of two routes. Route A, relational: a relation
    * fixes both of its edges on the axis (`related`, from
-   * `relatedExtentsOfChildren` in relatedExtents.ts: a chain with a box or
+   * `relationsOfChildren` in relatedExtents.ts: a chain with a box or
    * minimum spacing, an align by span or at start and end, and what an only
    * child of an unsized node inherits). The relation must still hold after
    * the transform, so the edges are positions of the space, whatever the
@@ -2395,7 +2405,7 @@ export class GoFishNode {
    */
   public resolveEmbedding(
     insideCoord: boolean = false,
-    related: RelatedExtents = UNRELATED
+    related: Relations = UNRELATED
   ): void {
     // Unit equality reads the type walk's union-find.
     if (!hasUnits()) {
@@ -2404,6 +2414,7 @@ export class GoFishNode {
       );
     }
     const within = insideCoord || this.type === "coord";
+    this.relations = related;
 
     const dims = this.args?.dims as OwnDims<unknown> | undefined;
     if (dims) {
@@ -2420,15 +2431,18 @@ export class GoFishNode {
         // parent or by its own position) is ink. Route A: a relation that
         // fixes both of its edges makes its extent a length of the space,
         // whatever its size.
+        // A rigid drawing never embeds: the space places it whole
+        // (`rigid.ts`).
         const embedded =
-          (baseEmbedded(box as Dimensions[number]) &&
+          !this.rigid &&
+          ((baseEmbedded(box as Dimensions[number]) &&
             !(within && this.isGlyph(dir))) ||
-          related[dir];
+            related[dir].extent);
         dims[dir] = { ...dim, embedded };
       }
     }
 
-    const childRelated = relatedExtentsOfChildren(this, related);
+    const childRelated = relationsOfChildren(this, related);
     this.children.forEach((c, i) => {
       if (c instanceof GoFishNode) c.resolveEmbedding(within, childRelated[i]);
     });

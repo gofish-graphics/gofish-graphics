@@ -409,8 +409,10 @@ local box is the target's box in the space's interior, mapped through
 `interiorTransform` into the space's own frame (`drawnBox` in `_ref.tsx`), and
 its translate walk starts at the space instead of at the target. The mapped box
 follows how the space draws the mark (`embedded`): on an axis that is not
-embedded the mark is ink of a fixed pixel size at a mapped point, and on an
-axis that is, it is an extent that warps. So a circle in polar gives its
+embedded, or for a rigid node such as a box or a text, the mark is ink of a
+fixed pixel size around the mapped image of its pinned point (its middle
+when no relation pins it, see `rigid.ts`), and on an axis that is, it is an
+extent that warps. So a circle in polar gives its
 mapped center with its own radius, and a bar gives the bounding box of its
 warped shape. The middle of that box is not in general the image of the bar's
 own middle. A ref across a space claims no data and embeds nothing, as the

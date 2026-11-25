@@ -220,7 +220,9 @@ hidden node is simply skipped; `bakeSubtree` asks the node's `visibility()`,
 since under a compositor a hidden node still gives its shape. A pure translate-only boundary
 (`box`/`frame`) calls it on its _own_ subtree, seeded at the
 boundary's absolute translate, and lowers each returned entry at its baked absolute
-transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):
+transform. Inside a coordinate space a `box` is rigid: the seed is moved so that the
+box's pinned point lands on its image (`rigid.ts`, see
+[the passes](/internals/layout/passes)), and its content is lowered with no transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):
 a translate-only boundary no longer composes its translate into a `toPixel` closure and
 lower its children parent-relative — it bakes them to absolute coordinates through the
 exact z-order-preserving path the root uses, so the two mechanisms can't drift. Only a

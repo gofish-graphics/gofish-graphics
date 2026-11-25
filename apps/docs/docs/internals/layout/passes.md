@@ -13,6 +13,7 @@ covers:
   - packages/gofish-graphics/src/ast/layoutWarnings.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/relatedExtents.ts
+  - packages/gofish-graphics/src/ast/rigid.ts
   - packages/gofish-graphics/src/bandRegion.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
@@ -478,9 +479,10 @@ Route A, relational: a relation fixes both of its edges on the axis,
 whatever the unit of its size. A relation that places marks relative to each
 other must still hold after the transform, so the edges it relates are
 positions of the space, and the extent between them is a length of the space.
-The pass hands each node one boolean per axis, whether a relation fixes its
-extent there, and `relatedExtentsOfChildren` (`relatedExtents.ts`) reads the
-children's off a node's constraints. A chain (`distribute`, a spread or a
+The pass hands each node what the relations around it fix on each axis
+(`Relations`): whether they fix its extent there, and which points of its box
+they pin. `relationsOfChildren` (`relatedExtents.ts`) reads the children's off
+a node's constraints, and the node keeps its own as `GoFishNode.relations`. A chain (`distribute`, a spread or a
 stack) with a box spacing of any gap, pixels, a percent or an `fr` weight, or
 with `Spacing.atLeast`, relates each part's start and end to its neighbors, so
 every part embeds along the chain. An `align` by `span` relates both edges of
@@ -503,6 +505,26 @@ normal, and two straight caps along the normal close it. In polar with the
 angle embedded this is an annular sector whose ends lie on the rays at its two
 angles. An ellipse draws the same band with an elliptical thickness. The fill
 fills the band and the stroke outlines it.
+
+A drawing that does not warp is rigid (`src/ast/rigid.ts`): a
+`layer({ box: true })`, a text and an image on both axes (`GoFishNode.rigid`;
+no axis of them embeds), and a mark on each axis it does not embed. A rigid
+drawing agrees with a warped space at one point only, so the space draws it
+flat and unrotated, moved so that the point its relations pin lands on that
+point's image. On each axis the pinned point is the one point of its box that
+a relation fixes (`Relations.pins`): a chain with a box spacing pins a part's
+start to the end of the part before it and its end to the start of the part
+after it, an `align` at one anchor pins that anchor, a pitch spacing pins its
+`at` point, and a `Constraint.position` at a point pins its `anchor`. Where
+nothing pins it, the pinned point is its middle, which is where a point mark
+was always drawn. Its start and end are read in the frame the relation acted
+in, so inside a space, whose y runs upward, its start on y is its bottom. Two
+pinned points on one axis (the middle part of a chain, or both edges of an
+`align` by `span`) cannot both hold in a space that is not linear, so they
+are an error there. A band pinned at an edge across it runs its midline along
+that edge and lays its thickness off to one side (`bandRegion`'s `shift`). So a
+balloon chained on top of a string that bends with the space sits with its
+bottom center on the string's top end.
 
 A mark whose extent along a periodic axis is one whole period (`isPeriod` in
 `coord.tsx`) has no ends: its start edge is its end edge. So its region has no

@@ -65,6 +65,28 @@ function normalAt(
   return [-dy / len, dx / len];
 }
 
+/** 1 when the normal `n` at `s` points where the coordinate along
+ *  `across` grows in the image, else -1. */
+function acrossSign(
+  space: CoordinateTransform,
+  s: Point,
+  across: Point,
+  n: Point,
+  step: number
+): number {
+  const ahead = space.transform([
+    s[0] + across[0] * step,
+    s[1] + across[1] * step,
+  ]);
+  const behind = space.transform([
+    s[0] - across[0] * step,
+    s[1] - across[1] * step,
+  ]);
+  return n[0] * (ahead[0] - behind[0]) + n[1] * (ahead[1] - behind[1]) < 0
+    ? -1
+    : 1;
+}
+
 /** A run of points with each point that repeats the one before it left
  *  out. A side of a band that the transform maps to one point (the inner
  *  side of a pie, at the polar center) is that one point. */
@@ -90,17 +112,25 @@ function periodAxis(
  * way along it is `halfWidth(u)`. The midline is sampled adaptively, as a
  * transformed path is (`resampleSegmentSources`). A band of no length is
  * no region.
+ *
+ * The thickness is laid off around a point `shift` pixels from the
+ * midline, toward where the coordinate across the band grows: 0 centers it
+ * on the midline. A mark pinned at an edge across the band (`rigid.ts`)
+ * runs its midline along that edge and shifts its thickness off it.
  */
 export function bandRegion(
   space: CoordinateTransform,
   a: Point,
   b: Point,
-  halfWidth: (u: number) => number
+  halfWidth: (u: number) => number,
+  shift = 0
 ): Path[] {
   const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
   if (length === 0) return [];
   const dir: Point = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
   const step = length * 1e-6;
+  // The axis across the band, growing: the midline runs along one axis.
+  const across: Point = [Math.abs(dir[1]), Math.abs(dir[0])];
   const sources = resampleSegmentSources(a, b, space);
   const left: Point[] = [];
   const right: Point[] = [];
@@ -109,8 +139,9 @@ export function bandRegion(
     const p = space.transform(s);
     const n = normalAt(space, s, dir, step);
     const h = halfWidth(Math.min(1, Math.max(0, u)));
-    left.push([p[0] + n[0] * h, p[1] + n[1] * h]);
-    right.push([p[0] - n[0] * h, p[1] - n[1] * h]);
+    const o = shift === 0 ? 0 : shift * acrossSign(space, s, across, n, step);
+    left.push([p[0] + n[0] * (o + h), p[1] + n[1] * (o + h)]);
+    right.push([p[0] + n[0] * (o - h), p[1] + n[1] * (o - h)]);
   }
   const sideL = distinct(left);
   const sideR = distinct(right).reverse();

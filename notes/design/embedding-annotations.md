@@ -72,6 +72,28 @@ ends there: it draws no caps, and its region is its two edges along the axis, ea
 closed loop (so a full-turn ring has no seam line, and a disc is its rim alone). The
 area drawing of a mark with both axes embedded follows the same rule (`boxRegion`).
 
+**Rigid drawings (11-24, `rigid.ts`).** A box (`layer({ box: true })`), a text and an
+image never warp, and a mark does not warp on an axis that does not embed. A rigid
+drawing can agree with a warped space at one point only. The maintainer's rule: "we need
+the rigid box to agree with the warped space at the pinned point". The pinned point is
+the point of the box that its relations fix in the space, read by the same walk as
+Route A (`relationsOfChildren`), per axis:
+
+- A chain with a box spacing ties a part's start to the end of the part before it and
+  its end to the start of the part after it. So the last part of a chain is pinned at
+  its start, and a balloon chained on top of a string sits with its bottom on the
+  string's top end. (Route A still embeds every part of the chain.)
+- An `align` at one anchor pins that anchor, a pitch spacing pins its `at` point, and a
+  `Constraint.position` at a point pins its `anchor`.
+- Nothing pinned: the middle, which is where a point mark was always drawn.
+- Two pinned points on one axis (the middle part of a chain, an `align` by `span`): a
+  rigid drawing cannot keep both after a transform that is not linear, so this is an
+  error there. In a linear space it keeps both, and it draws.
+
+The space draws the drawing flat and unrotated, moved so that its pinned point lands on
+that point's image. A band (one axis embedded) pinned at an edge across it runs its
+midline along that edge and lays its thickness off to one side.
+
 > **point / line / area = the number of axes whose edges are coordinate-space positions
 > (via Route A or Route B).**
 
