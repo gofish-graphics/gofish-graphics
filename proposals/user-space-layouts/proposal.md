@@ -1796,6 +1796,69 @@ The maintainer set the goal in two sentences. "I think we can treat constraints 
 
 The full 751-story comparison ran before the renames on this tab. After them, the prototype's own stories were rendered again and their normalized DOM is byte-identical to before, the type check is clean, and the unit tests pass. Every picture on this tab is a render of the code under it, made in the copy today.
 
+#### The call: `defineLayout`
+
+`defineLayout(definition)` takes one object and returns an operator. The operator is called like the built-in ones: `pitched({ gap: 8 }, children)`. The definition has a name, a list of its own options, and one body. The body is either `relate` or `arrange`.
+
+```ts
+// A summary with plain type names. The exact declarations from the
+// prototype are under "The definition call" further down.
+// defineLayout takes one definition and returns an operator.
+declare function defineLayout<O>(
+  definition: RelateDefinition<O> | ArrangeDefinition<O>
+): (opts: O & BoxOptions, children: Node[]) => Node;
+
+type RelateDefinition<O> = {
+  name: string;
+  options: (keyof O)[];
+  check?: (opts: O, children: Node[]) => void;
+  // Returns constraints among the children.
+  relate: (
+    children: ChildHandle[],
+    opts: O,
+    tools: {
+      // A child's size, as lengths that may depend on the scale.
+      measure(child: ChildHandle): { w: Length; h: Length };
+      // "x", "y", or a name the coordinate space declares, as 0 or 1.
+      axis(name: string, what: string): 0 | 1;
+    }
+  ) => { relations: Constraint[]; orientation?: 0 | 1 };
+};
+
+type ArrangeDefinition<O> = {
+  name: string;
+  options: (keyof O)[];
+  check?: (opts: O, children: Node[]) => void;
+  // Pixels asked for on x and y. Undefined on an axis: fill the bounds.
+  request?: (
+    children: Child[],
+    opts: O
+  ) => [number | undefined, number | undefined];
+  // Each child's bounds, once the operator's own bounds are known.
+  arrange: (
+    bounds: { w: number; h: number; shape?: Polygon },
+    children: Child[],
+    opts: O
+  ) => { bounds: (Box | Polygon)[] };
+};
+
+type Box = { x: number; y: number; w: number; h: number };
+type Polygon = { points: [number, number][] };
+```
+
+| Field                                                | What it is                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                                               | The operator's name. It is used only in error messages.                                                                                                                                                                                                                                                                                                                   |
+| `options`                                            | The names of the options that belong to this operator, e.g., `["gap"]`. Every other option the caller passes (`w`, `h`, `x`, `y`, `key`, `axes`) is an ordinary box option and is handled for you.                                                                                                                                                                        |
+| `check` (optional)                                   | A function that looks at the options and children once, when the operator is called, and throws if they are wrong.                                                                                                                                                                                                                                                        |
+| `relate(children, opts, tools)`                      | Use this body when the arrangement does not depend on how much space the operator gets. It returns constraints among the children. `children` are handles you pass to `Constraint` calls. `opts` are the operator's own options. `tools.measure(child)` gives a child's width and height as lengths. `tools.axis(name)` turns an axis name such as `"theta"` into 0 or 1. |
+| `arrange(bounds, children, opts)`                    | Use this body when the arrangement depends on the operator's bounds, as a treemap's does. It runs once the bounds are known and returns one box or polygon per child, in pixels. `bounds` is `{ w, h }`.                                                                                                                                                                  |
+| `request(children, opts)` (optional, with `arrange`) | How many pixels the operator asks for on each axis. Left out, the operator fills whatever bounds it is given.                                                                                                                                                                                                                                                             |
+
+What `relate` returns is `{ relations, orientation }`. `relations` is the list of constraints.
+
+> **`orientation` should not be in this API.** It is 0 when the children run along x and 1 when they run along y. The engine reads it for three things: which way a column reads (top to bottom), which axis an `axes` option under a coordinate space applies to, and a check on flexible parts. All three can be worked out from the `Constraint.distribute` the body already returns, because that constraint names its direction. The prototype asks the author to repeat it only because the built-in `spread` stamps this value on its node today (issue \#1039, which calls that stamp a second source of truth, lists it for removal). Recommended: drop the field and derive it.
+
 #### Words used on this tab
 
 - **Operator.** A function that takes children and arranges them, e.g., `spread` or `tile`.

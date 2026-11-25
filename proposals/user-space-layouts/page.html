@@ -1813,6 +1813,101 @@
     </p>
 
     <div class="card">
+      <h3>The call: <code>defineLayout</code></h3>
+      <p class="note">
+        <code>defineLayout(definition)</code> takes one object and returns an
+        operator. The operator is called like the built-in ones:
+        <code>pitched({ gap: 8 }, children)</code>. The definition has a name, a
+        list of its own options, and one body. The body is either
+        <code>relate</code> or <code>arrange</code>.
+      </p>
+      {{code:lp-call}}
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>What it is</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>name</code></td>
+              <td>The operator's name. It is used only in error messages.</td>
+            </tr>
+            <tr>
+              <td><code>options</code></td>
+              <td>
+                The names of the options that belong to this operator, e.g.,
+                <code>["gap"]</code>. Every other option the caller passes
+                (<code>w</code>, <code>h</code>, <code>x</code>, <code>y</code>,
+                <code>key</code>, <code>axes</code>) is an ordinary box option
+                and is handled for you.
+              </td>
+            </tr>
+            <tr>
+              <td><code>check</code> (optional)</td>
+              <td>
+                A function that looks at the options and children once, when the
+                operator is called, and throws if they are wrong.
+              </td>
+            </tr>
+            <tr>
+              <td><code>relate(children, opts, tools)</code></td>
+              <td>
+                Use this body when the arrangement does not depend on how much
+                space the operator gets. It returns constraints among the
+                children. <code>children</code> are handles you pass to
+                <code>Constraint</code> calls. <code>opts</code> are the
+                operator's own options. <code>tools.measure(child)</code>
+                gives a child's width and height as lengths.
+                <code>tools.axis(name)</code> turns an axis name such as
+                <code>"theta"</code> into 0 or 1.
+              </td>
+            </tr>
+            <tr>
+              <td><code>arrange(bounds, children, opts)</code></td>
+              <td>
+                Use this body when the arrangement depends on the operator's
+                bounds, as a treemap's does. It runs once the bounds are known
+                and returns one box or polygon per child, in pixels.
+                <code>bounds</code> is <code>{ w, h }</code>.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>request(children, opts)</code> (optional, with
+                <code>arrange</code>)
+              </td>
+              <td>
+                How many pixels the operator asks for on each axis. Left out,
+                the operator fills whatever bounds it is given.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">
+        What <code>relate</code> returns is
+        <code>{ relations, orientation }</code>. <code>relations</code> is the
+        list of constraints.
+      </p>
+      <div class="callout">
+        <b><code>orientation</code> should not be in this API.</b> It is 0 when
+        the children run along x and 1 when they run along y. The engine reads
+        it for three things: which way a column reads (top to bottom), which
+        axis an <code>axes</code> option under a coordinate space applies to,
+        and a check on flexible parts. All three can be worked out from the
+        <code>Constraint.distribute</code> the body already returns, because
+        that constraint names its direction. The prototype asks the author to
+        repeat it only because the built-in <code>spread</code>
+        stamps this value on its node today (issue #1039, which calls that stamp
+        a second source of truth, lists it for removal). Recommended: drop the
+        field and derive it.
+      </div>
+    </div>
+
+    <div class="card">
       <h3>Words used on this tab</h3>
       <ul class="tight">
         <li>

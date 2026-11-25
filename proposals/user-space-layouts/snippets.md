@@ -2971,6 +2971,54 @@ mount(
 
 <!-- layout protocol prototype: begin -->
 
+<!-- id: lp-call -->
+
+```ts
+// A summary with plain type names. The exact declarations from the
+// prototype are under "The definition call" further down.
+// defineLayout takes one definition and returns an operator.
+declare function defineLayout<O>(
+  definition: RelateDefinition<O> | ArrangeDefinition<O>
+): (opts: O & BoxOptions, children: Node[]) => Node;
+
+type RelateDefinition<O> = {
+  name: string;
+  options: (keyof O)[];
+  check?: (opts: O, children: Node[]) => void;
+  // Returns constraints among the children.
+  relate: (
+    children: ChildHandle[],
+    opts: O,
+    tools: {
+      // A child's size, as lengths that may depend on the scale.
+      measure(child: ChildHandle): { w: Length; h: Length };
+      // "x", "y", or a name the coordinate space declares, as 0 or 1.
+      axis(name: string, what: string): 0 | 1;
+    }
+  ) => { relations: Constraint[]; orientation?: 0 | 1 };
+};
+
+type ArrangeDefinition<O> = {
+  name: string;
+  options: (keyof O)[];
+  check?: (opts: O, children: Node[]) => void;
+  // Pixels asked for on x and y. Undefined on an axis: fill the bounds.
+  request?: (
+    children: Child[],
+    opts: O
+  ) => [number | undefined, number | undefined];
+  // Each child's bounds, once the operator's own bounds are known.
+  arrange: (
+    bounds: { w: number; h: number; shape?: Polygon },
+    children: Child[],
+    opts: O
+  ) => { bounds: (Box | Polygon)[] };
+};
+
+type Box = { x: number; y: number; w: number; h: number };
+type Polygon = { points: [number, number][] };
+```
+
 <!-- id: lp-cell-sketch -->
 
 ```js
