@@ -19,8 +19,11 @@ import { initializeContainer } from "../helper";
 // ../../stories/Tree.stories.tsx — an icicle and a sunburst are the same layout,
 // just cartesian vs. polar.
 //
-// dsl Node="circle" but the gallery reference renders FILLED WEDGES, so each node
-// is a polar wedge (rect swept through θ), per the brief.
+// REFERENCE. The gallery's icicleplot/tree.png is a CARTESIAN icicle (root band
+// on top, children and leaves in bands below). Its dsl.json and index.html are
+// exact copies of the sunburst entry's, so the folder has no spec of its own.
+// This story draws the polar form the copied dsl asks for; the cartesian
+// picture is the node-link "IciclePlot" story in Tree.stories.tsx.
 //
 // ── EMBEDDED-DIMENSION APPROACH (the hard part) ──────────────────────────────
 // A wedge SWEEPS in θ, so the θ-dimension is *embedded* (a data weight, or
@@ -36,14 +39,15 @@ import { initializeContainer } from "../helper";
 // width as a workaround; `include → nest` + auto-fit renders identically and is
 // the principled spelling.)
 //
-// ── POLAR LIMITATIONS (no hacks; flagged, not faked) ─────────────────────────
-//  - polar() InnerRadius/Direction/StartAngle/PolarAxis (the θ/r swap) from the
-//    dsl are not all expressible here; the plot fills the full 2π disc.
-//  - The radial bands start at r=band (distribute-r), leaving a hollow center the
-//    dsl's InnerRadius:0 doesn't want — a separate radial-placement gap (shared
-//    with SectorTree2/HSC), unrelated to the angular auto-fit.
-//  - Links="curve" is unsupported under polar; filled wedges want no links
-//    anyway, so link:"none".
+// RINGS. Siblings align on their inner edge ("start" on r). GoTree aligns the
+// sibling NODES, so a sibling with a deeper subtree (B, whose child B2 has
+// children) still starts its ring where A and C start theirs. Aligning the
+// subtrees' middles instead pushed the shallower siblings out by half a ring
+// and left the rings at uneven radii.
+//
+// NOTES:
+//  - Direction clockwise, StartAngle 0 and InnerRadius 0 are `Coord.clock()`.
+//  - Links="curve": filled wedges want no links, so link:"none".
 const meta: Meta = {
   title: "GoTree / Gallery / icicleplot",
 };
@@ -92,17 +96,16 @@ export const IciclePlot: StoryObj = {
         node,
         link: "none",
         // parentChild: distribute r (juxtapose → adjacent rings, parent inner →
-        // children outward) + align θ middle (parent centered over its subtree;
-        // the embedded width already gives it the subtree's full angular span).
+        // children outward) + nest θ (the parent's arc spans its subtree's).
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
           y: { kind: "distribute", spacing: 0 },
         }),
         // sibling: distribute θ (flatten → pack around the circle) + align r
-        // middle (siblings share one ring).
+        // start (siblings start on one ring).
         sibling: combine({
           x: { kind: "distribute", spacing: 0 },
-          y: { kind: "align", alignment: "middle" },
+          y: { kind: "align", alignment: "start" },
         }),
         coord: Coord.clock(),
       },

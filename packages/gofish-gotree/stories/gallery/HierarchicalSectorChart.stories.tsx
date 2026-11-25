@@ -19,44 +19,25 @@ import { initializeContainer } from "../helper";
 //       angular extent of its children. pad 0 → no angular gap, so the parent's
 //       arc exactly covers its subtree's arc — the sector-ring relationship.
 //     - distribute on r (Y.Root:juxtapose → distribute): parent sits on the
-//       inner ring, the child group one ring out; spacing = ring thickness.
+//       inner ring, the child group on the next ring out, with no gap.
 //   sibling = (distribute θ, align r)
 //     - distribute on θ (X.Subtree:flatten → distribute): siblings pack
-//       angularly, edge mode so each wedge's θ-width (its leaf-count share) is
-//       summed → they tile their parent's arc.
-//     - align on r (Y.Subtree:align → align): siblings share the same ring.
+//       angularly, edge mode so each wedge's θ weight is summed → they tile
+//       their parent's arc.
+//     - align on r (Y.Subtree:align → align "start"): GoTree aligns the
+//       sibling nodes, so siblings start on the same ring.
 //
-// EMBEDDED-DIMENSION WEDGE. A sector wedge SWEEPS through θ, so the node's
-// θ-dimension is EMBEDDED in the polar transform: the rect's WIDTH is measured
-// in θ-units (a data weight, or unsized), so its width sweeps an arc rather
-// than a flat pixel span. Its r-dimension (height) is the ring thickness: each
-// ring touches the next, so its pixel height is a length of the space too.
-// This is the hard "embedded vs non-embedded dimension" case:
-//   - LEAVES carry an explicit θ-width = leafTheta (their angular share).
-//   - INTERNAL nodes get NO width — nest grows the parent's θ-width to its
-//     children's combined extent. Both axes are em* so the rect lives in polar
-//     space. Because nest sums leaf widths up the tree and leaves tile exactly,
-//     the total angular extent works out to the 2π budget:
-//     N_leaves · leafTheta = 2π.
+// SIZES. Leaves carry a unit θ weight and internal nodes none (nest grows each
+// to its children's arc); every node carries a radial weight, its ring count
+// (`rings` below). The coord fits both to the room, so the root is a solid
+// disc and the outer ring meets the rim.
 //
-// NOTES — polar features in the dsl that gofish's polar() CANNOT express
-// (flagged, not faked):
-//  - InnerRadius:0 (the reference has a SOLID center disc, no hole): now
-//    expressible via polar({ innerRadius }) since #620 — not yet applied here.
-//    As drawn, polar()'s first parentChild distribute step starts the root band
-//    at r = bandHeight, not r = 0, so the root renders as a thin ring around a
-//    hole instead of a filled disc — observe the hollow center.
-//  - Direction / StartAngle / CentralAngle: now expressible via
-//    polar({ direction, baselineAngle, centralAngle }) since #620 — not yet applied
-//    here (the dsl's clockwise / start-angle / sub-2π knobs).
-//  - PolarAxis (θ/r axis swap) is not expressible.
-//  - Link:hidden → link:"none" here (correct for a filled-wedge sector chart);
-//    polar links only support {curve:"linear"|"none"}, never arcs.
-//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ sums
-//    them up the tree, and the coord fits the total to the circle — so the disc
-//    closes for any tree with no hand-set leafTheta.
+// NOTES:
+//  - Link:hidden → link:"none" here (correct for a filled-wedge sector chart).
 //  - Node:rectangle in the dsl renders, faithfully, as filled arc wedges (a
 //    rect in polar space IS a sector), matching the reference.
+//  - The reference's data has depth-1 leaves, which GoTree stretches out to
+//    the rim; this tree has none, so that case is not shown.
 //  - ColorRange ["#DE4006","#EFD648"] (orange→yellow by depth) is reproduced by
 //    a hand-sampled per-depth ramp passed to byDepth(); polar()/the color scale
 //    take no interpolated-range option here, so the ramp stops are explicit.
@@ -91,22 +72,26 @@ const sectorTree = {
   ],
 };
 
-const bandHeight = 90; // radial thickness of one ring
+// A node's ring thickness, in leaf rings. GoTree sizes a parent on the
+// juxtapose axis like its child group ("SubtreeHeight: adaptive"), so a leaf
+// is one ring, a parent of leaves one ring, and each level above doubles: the
+// root disc is as thick as the two rings around it.
+const rings = (d: any) => (d.height === 0 ? 1 : 2 ** (d.height - 1));
 
-// Wedge node: width in θ-units sweeps an arc; height is the ring thickness,
-// and rings touch, so both are lengths of the polar space. Leaves carry the explicit θ-share; internal nodes leave
-// width to nest (grows to children's combined arc).
+// Wedge node: width is a θ weight that sweeps an arc; height is a radial
+// weight. The coord fits both to the room. Leaves carry the θ weight; internal
+// nodes leave width to nest (grows to children's combined arc).
 const node = (d: any) =>
   d.height === 0
     ? rect({
         w: datum(1),
-        h: bandHeight,
+        h: datum(rings(d)),
         fill: byDepth(sectorRamp)(d),
         stroke: "white",
         strokeWidth: 1.5,
       })
     : rect({
-        h: bandHeight,
+        h: datum(rings(d)),
         fill: byDepth(sectorRamp)(d),
         stroke: "white",
         strokeWidth: 1.5,
@@ -138,13 +123,13 @@ export const HierarchicalSectorChart: StoryObj = {
         sibling: combine({
           // θ: siblings tile their parent's arc (edge mode sums θ-widths).
           x: { kind: "distribute", spacing: 0 },
-          // r: siblings share the same ring.
-          y: { kind: "align", alignment: "middle" },
+          // r: siblings start on the same ring (their inner edges align).
+          y: { kind: "align", alignment: "start" },
         }),
         coord: Coord.clock(),
       },
       sectorTree
-    ).render(container);
+    ).render(container, { w: 540, h: 540 });
     return container;
   },
 };

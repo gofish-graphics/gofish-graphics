@@ -25,7 +25,10 @@ SECTOR_TREE = {
     ],
 }
 
-BAND_HEIGHT = 90  # radial thickness of one ring
+
+# GoTree sizes a parent like its child group: 2^(height-1) rings, a leaf 1.
+def rings(d):
+    return 1 if d["height"] == 0 else 2 ** (d["height"] - 1)
 
 
 # Leaves carry a unit angular weight; internal nodes leave theta unsized so
@@ -34,13 +37,13 @@ def node(d):
     if d["height"] == 0:
         return rect(
             w=datum(1),
-            h=BAND_HEIGHT,
+            h=datum(rings(d)),
             fill=by_depth(SECTOR_RAMP)(d),
             stroke="white",
             stroke_width=1.5,
         )
     return rect(
-        h=BAND_HEIGHT,
+        h=datum(rings(d)),
         fill=by_depth(SECTOR_RAMP)(d),
         stroke="white",
         stroke_width=1.5,
@@ -59,9 +62,9 @@ def story_hierarchical_sector_chart():
             ),
             sibling=combine(
                 x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "middle"},
+                y={"kind": "align", "alignment": "start"},
             ),
             coord=Coord.clock(),
         ),
-        {},
+        {"w": 540, "h": 540},
     )

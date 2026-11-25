@@ -63,7 +63,10 @@ export const SpiralLayout: StoryObj = {
         parentChild: combine({
           x: {
             kind: "distribute",
-            spacing: Spacing.pitch((2 * Math.PI) / 9, { at: "middle" }),
+            spacing: Spacing.pitch((2 * Math.PI) / 9, {
+              at: "middle",
+              ends: [0, 1],
+            }),
           },
           y: {
             kind: "distribute",

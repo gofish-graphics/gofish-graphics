@@ -4,72 +4,41 @@ import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
 
-// GoTree gallery port — SectorTree2 (concentric filled sector/wedge rings).
+// GoTree gallery port — SectorTree2 (an icicle with its levels laid around the
+// angle and its leaves along the radius: the root is the left half-disc).
 // dsl: Element{Node:rectangle, Color:depth, Link:curve, Thickness:static 2} ;
 //   CoordinateSystem polar {PolarAxis:x-axis, PolarCenter:right} ;
 //   Layout AxisIndependent X{Root:include, Subtree:flatten}
 //                          Y{Root:juxtapose, Subtree:align}, Mode:top-down.
 //
-// MAPPING. Under polar(): x = θ (radians 0..2π), y = r (radius). Per the brief
-// (x=θ, y=r):
-//   parentChild = (nest θ, distribute r)
-//     - nest on θ: X.Root:include → nest. The parent wedge spans the combined
-//       angular extent of its children (pad 0 → no gap, so the parent's arc
-//       exactly covers its subtree's arc — the ring/sector relationship).
-//     - distribute on r: Y.Root:juxtapose → distribute. Parent on the inner
-//       ring, child group one ring out; spacing = ring (band) thickness.
-//   sibling = (distribute θ, align r)
-//     - distribute on θ: X.Subtree:flatten → distribute. Siblings pack
-//       angularly (edge mode sums their θ-widths) so they tile the parent arc.
-//     - align on r: Y.Subtree:align → align. Siblings share one ring.
-// This is the identical axis decomposition to the gallery Sunburst; SectorTree2
-// is GoTree's "rectangle node + curve link, depth color" point in that same
-// polar layout space.
+// PolarAxis: x-axis puts the layout's X on the RADIUS and its Y on the ANGLE.
+// GoFish's polar always reads x as θ and y as r, so the port writes the X
+// relations on `y` and the Y relations on `x`:
+//   - r (dsl X): the parent's radial span includes its children's (nest), and
+//     siblings are flattened outward (distribute), so the leaves split the
+//     radius between them.
+//   - θ (dsl Y): each level takes the next angular slot after its parent
+//     (juxtapose, top-down: the parent first), and siblings start on the same
+//     angle (align "start").
 //
-// EMBEDDED-DIMENSION WEDGE. A sector wedge SWEEPS through θ, so the node's
-// θ-dimension is EMBEDDED in the polar transform: the rect WIDTH is measured in
-// θ-units (a data weight, or unsized) so it sweeps an arc, not a flat pixel span;
-// its r-dimension (height, pixels) is the ring thickness. Hard "embedded vs
-// non-embedded" case:
-//   - LEAVES carry an explicit θ-width = leafTheta (their angular share).
-//   - INTERNAL nodes get NO width — nest grows the parent's θ-width to its
-//     children's combined extent.
-// Because nest sums leaf widths up the tree and leaves tile exactly, the total
-// angular extent equals the 2π budget: N_leaves * leafTheta = 2π.
+// SIZES. Leaves carry a unit radial weight and internal nodes none (nest grows
+// each to its children's span). On θ, GoTree sizes a parent like its child
+// group ("SubtreeHeight: adaptive"), so a node of height h takes 2^(h−1) units
+// and a leaf 1: the root takes half the turn, the next level a quarter, and so
+// on. The coord fits both.
 //
-// NOTES — dsl features that gofish's polar() CANNOT express (flagged, not faked):
-//  - PolarAxis: x-axis — the dsl pins the angular axis to screen-x with the
-//    center on the right (PolarCenter:right), giving the reference its
-//    "solid root half-disc on the left, rings fanning right" look. polar() has
-//    no transposed variant, and PolarCenter is a polar-space anchor that
-//    polar()'s screen-offset `center` does not cover; this re-orientation is NOT
-//    expressible. A θ/r axis swap would map x→r, y→θ, which
-//    inverts our decomposition (nest would grow radius, distribute would
-//    spin angle) and destroys the concentric-ring structure — so polar() is
-//    the closer match and is what's used here. The cost is orientation: we
-//    get a full upright disc, not the right-centered half-disc of the
-//    reference.
-//  - PolarCenter: right — a polar-space anchor (pole at the shape's right),
-//    which polar()'s screen-offset `center` (added #620) does not cover; the
-//    disc stays centered.
-//  - InnerRadius: now expressible via polar({ innerRadius }) since #620 — not
-//    yet applied here; the root band still starts at r = bandHeight (a small
-//    hollow center), not at r = 0.
-//  - Link:curve — links are not drawn for filled sector wedges (link:"none"
-//    is correct here); polar links only support {curve:"linear"|"none"},
-//    never curved arcs (draft PR #637's route→curve registry is where curved
-//    links land), so the dsl's curve links are not representable anyway.
+// The reference turns counter-clockwise from 12 o'clock (the root fills the
+// left half), which is `Coord.polar({ baselineAngle: π/2 })`.
+//
+// NOTES:
+//  - Link:curve — filled sectors draw no links (link:"none").
 //  - Thickness:static 2 maps to the wedge stroke width.
-//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ sums
-//    them up the tree, and the coord fits the total to the circle — so the disc
-//    closes for any tree with no hand-set leafTheta.
 const meta: Meta = {
   title: "GoTree / Gallery / SectorTree2",
 };
 export default meta;
 
-// Balanced binary tree, 4 levels deep → 16 leaves, so wedge widths divide the
-// disc evenly (each internal node has exactly 2 children).
+// Balanced binary tree, 4 levels deep → 16 leaves.
 const deepBalancedTree = (() => {
   const make = (depth: number, prefix = ""): any =>
     depth === 0
@@ -84,23 +53,20 @@ const deepBalancedTree = (() => {
   return make(4);
 })();
 
-const bandHeight = 42; // radial thickness of one ring
+// A node's angular slot, in leaf slots: a parent is as long as its child group.
+const slots = (d: any) => (d.height === 0 ? 1 : 2 ** (d.height - 1));
 
-// Wedge node: width in θ-units sweeps an arc; height in pixels is
-// the ring thickness. Leaves carry the explicit θ-share; internal nodes leave
-// width to nest (grows to children's combined arc). Color by depth (blue ramp,
-// dark root → light leaves), matching the reference. Static thickness-2 stroke.
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: datum(1),
-        h: bandHeight,
+        w: datum(slots(d)),
+        h: datum(1),
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 2,
       })
     : rect({
-        h: bandHeight,
+        w: datum(slots(d)),
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 2,
@@ -112,7 +78,7 @@ export const SectorTree2: StoryObj = {
     gallery: {
       title: "GoTree: Sector Tree",
       description:
-        "A polar sector tree nesting child wedges within parent arcs across radial levels.",
+        "A polar sector tree that lays its levels around the angle and splits the radius among its leaves.",
     },
   },
   render: () => {
@@ -121,22 +87,22 @@ export const SectorTree2: StoryObj = {
       {
         node,
         link: "none",
+        // parentChild: θ — the child group in the next angular slot;
+        // r — the parent spans its children's radial range.
         parentChild: combine({
-          // θ: parent wedge encloses its subtree's arc (pad 0 → exact tiling).
-          x: { kind: "nest", pad: 0 },
-          // r: parent inner ring, child group one ring out.
-          y: { kind: "distribute", spacing: bandHeight },
-        }),
-        sibling: combine({
-          // θ: siblings tile their parent's arc (edge mode sums θ-widths).
           x: { kind: "distribute", spacing: 0 },
-          // r: siblings share the same ring.
-          y: { kind: "align", alignment: "middle" },
+          y: { kind: "nest", pad: 0 },
         }),
-        coord: Coord.clock(),
+        // sibling: θ — siblings start on the same angle; r — they split the
+        // radius outward.
+        sibling: combine({
+          x: { kind: "align", alignment: "start" },
+          y: { kind: "distribute", spacing: 0 },
+        }),
+        coord: Coord.polar({ baselineAngle: Math.PI / 2 }),
       },
       deepBalancedTree
-    ).render(container);
+    ).render(container, { w: 540, h: 540 });
     return container;
   },
 };

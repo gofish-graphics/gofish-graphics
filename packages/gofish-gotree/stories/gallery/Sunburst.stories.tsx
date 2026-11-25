@@ -17,7 +17,7 @@ import { initializeContainer } from "../helper";
 //       parent's arc exactly covers its subtree's arc — the sunburst ring
 //       relationship.
 //     - distribute on r: parent sits on the inner ring, the child group on the
-//       next ring out (Y.Root:juxtapose → distribute), spacing = ring thickness.
+//       next ring out (Y.Root:juxtapose → distribute), with no gap.
 //   sibling = (distribute θ, align r)
 //     - distribute on θ: siblings pack angularly, edge mode so each wedge's
 //       θ-width (its leaf-count share) is summed → they tile their parent's arc
@@ -29,36 +29,26 @@ import { initializeContainer } from "../helper";
 // in θ-units (a data weight, or unsized), so its width sweeps an arc rather
 // than being a flat pixel span. Its r-dimension (height, pixels) is the ring
 // thickness. This is the hard "embedded vs non-embedded dimension" case:
-//   - LEAVES carry an explicit θ-width = leafTheta (their angular share).
+//   - LEAVES carry a unit θ weight, `w: datum(1)`.
 //   - INTERNAL nodes get NO width — nest grows the parent's θ-width to its
 //     children's combined extent. Both sizes are lengths of the polar space,
 //     so the rect lives in it.
-// Because nest sums leaf widths up the tree and the leaves tile exactly, the
-// total angular extent works out to the 2π budget: N_leaves * leafTheta = 2π.
+// The coord fits the summed leaf weights to the full turn, so the disc closes
+// for any tree with no hand-set angle.
 //
-// NOTES — polar features in the dsl that gofish's polar() CANNOT express
-// (flagged, not faked):
-//  - InnerRadius: 0 is now expressible via polar({ innerRadius }) since #620 —
-//    not yet applied here. As drawn, the root ring lands at
-//    r ∈ [bandHeight, 2·bandHeight] because the first parentChild distribute step
-//    starts the root band at r = bandHeight, not r = 0. (The dsl asks for
-//    InnerRadius:0 = no hole; as drawn we get a hole — observe the hollow center.)
-//  - Direction: clockwise — now expressible via polar({ direction }) since #620
-//    — not yet applied here.
-//  - StartAngle / CentralAngle: now expressible via
-//    polar({ baselineAngle, centralAngle }) since #620 — not yet applied here; as
-//    drawn the disc starts at the same angle and the budget is the full 2π.
-//  - PolarAxis: y-axis (the θ/r axis swap from the dsl) is not expressible.
-//  - Link:curve — links are not drawn for a filled-wedge sunburst (link:"none"
-//    is correct here); polar links only support {curve:"linear"|"none"},
-//    never curved arcs (draft PR #637's route→curve registry is where curved
-//    links land).
-//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight; the coord
-//    fits the summed weights to the budget and nest grows each parent to its
-//    children's combined arc — so the disc closes for any tree with no hand-set
-//    leafTheta. (This nest-θ case composes with the coord fit-frame.)
+// RINGS. The dsl's Y.Root juxtapose has Margin "0rr": each ring touches the
+// one inside it, and the root is a disc (InnerRadius 0). So the radial
+// distribute has no gap. Siblings align on their inner edge ("start" on r),
+// which is GoTree's "align the sibling nodes": a sibling with a deeper subtree
+// still starts its ring where its siblings start theirs.
+//
+// NOTES:
+//  - Direction clockwise and StartAngle 0 are `Coord.clock()`.
+//  - Link:curve — a filled-wedge sunburst draws no links (link:"none").
 //  - Node:circle in the dsl, but the reference (and a real sunburst) is filled
 //    arc wedges — we render rect wedges, matching the visual reference.
+//  - The reference draws a real dataset with uneven depth; this story draws a
+//    balanced binary tree, so its wedges are even.
 const meta: Meta = {
   title: "GoTree / Gallery / sunburst",
 };
@@ -120,14 +110,14 @@ export const Sunburst: StoryObj = {
         parentChild: combine({
           // θ: parent wedge encloses its subtree's arc (pad 0 → exact tiling).
           x: { kind: "nest", pad: 0 },
-          // r: parent inner ring, child group one ring out.
-          y: { kind: "distribute", spacing: bandHeight },
+          // r: parent inner ring, child group on the next ring out.
+          y: { kind: "distribute", spacing: 0 },
         }),
         sibling: combine({
           // θ: siblings tile their parent's arc (edge mode sums θ-widths).
           x: { kind: "distribute", spacing: 0 },
-          // r: siblings share the same ring.
-          y: { kind: "align", alignment: "middle" },
+          // r: siblings start on the same ring (their inner edges align).
+          y: { kind: "align", alignment: "start" },
         }),
         coord: Coord.clock(),
       },

@@ -2,114 +2,68 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { rect, datum, Coord } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
-// GoTree gallery port — SectorTree (concentric rings of thin sector wedges).
+// GoTree gallery port — SectorTree (one thin arc per node, all centered on the
+// bottom of the disc, the root the outer full circle).
 //
 // dsl.json:
 //   Layout AxisIndependent, bottom-up
 //     X { Root: juxtapose (→distribute),  Subtree: flatten (→distribute) }
 //     Y { Root: within    (→align),       Subtree: align   (→align)     }
 //   CoordinateSystem { Category: polar, PolarAxis: x-axis, PolarCenter: right }
-//   Element { Node: rectangle, Color: depth, Link: none,
-//             RootHeight: rdepth, Thickness: static (StaticThickness 2),
-//             ArcDirection: top }
+//   Element { Node: rectangle, Color: depth, RootHeight: rdepth }
 //
-// VISUAL TARGET (gallery/SectorTree/tree.png): thin (≈2px) concentric arc rings
-// emanating from a center, one ring per tree depth, leaves fanning angularly,
-// colored light (center) → blue (outer) by depth.
+// PolarAxis: x-axis puts the layout's X on the RADIUS and its Y on the ANGLE.
+// GoFish's polar always reads x as θ and y as r, so the port writes the X
+// relations on `y` and the Y relations on `x`:
+//   - r (dsl X): every node gets its own radius. Parent and child group are
+//     juxtaposed, bottom-up, so the parent lies OUTSIDE its children (the
+//     parentChild distribute runs in reverse), and siblings are flattened
+//     outward one after another. The root is the outermost arc.
+//   - θ (dsl Y): every node is centered on the same angle ("within"/"align"
+//     middle), the bottom of the disc, and its angular extent is its reverse
+//     depth (RootHeight: rdepth): the root is the whole circle, a depth-1 node
+//     two thirds of it, a leaf one third.
 //
-// ── MAPPING. Under polar(): x = θ (radians 0..2π), y = r (radius). ───────────
-// A sector wedge SWEEPS through θ, so the θ-dimension is EMBEDDED in the node's
-// width (a data weight, or unsized); the radial thickness is its height
-// (pixels along r). Same embedded-wedge technique as the
-// Sunburst / IciclePlot(polar) templates.
-//   - sibling = (distribute θ, align r): siblings pack angularly into their
-//     parent's arc (X.Subtree flatten → distribute) and share one radial ring
-//     (Y.Subtree align → align). This is the dsl mapping verbatim.
-//   - parentChild: nest θ realizes the dsl's X.Root = include (parent's arc spans
-//     its children's; nest grows the unsized parent θ). On the radial axis the
-//     port diverges from the dsl's literal Y.Root = within (→align r): aligning r
-//     would collapse the tree to one ring. The reference's concentric rings come
-//     from GoTree's `RootHeight: rdepth` radius-by-depth encoding, which polar()
-//     cannot express, so we use distribute-r (parent inner ring, child group one
-//     ring out) to realize them.
+// SIZES. Each node's θ extent is its reverse depth and its r extent one unit,
+// both as weights; the coord fits them, so the root closes into the rim.
 //
-// ── NOTES — dsl features GoFish's polar() CANNOT express ──
-//    (flagged, not faked):
-//  - PolarAxis: x-axis (the θ/r axis swap) is NOT expressible: polar() has no
-//    transposed variant — it always maps x→θ, y→r ([r·sinθ, r·cosθ]). So the
-//    PolarAxis choice can't be honored; I use polar().
-//  - PolarCenter: right is not expressible — the dsl's PolarCenter is a
-//    polar-space anchor (place the pole at the shape's "right"), which polar()'s
-//    screen-offset `center` does not cover. The partial (≈270°) sweep IS now
-//    expressible via polar({ baselineAngle, centralAngle }) since #620 — not yet
-//    applied here; this port renders a FULL concentric-ring disc, not the
-//    reference's off-center partial fan.
-//  - RootHeight: rdepth — radius-driven-by-depth is not a knob; concentric rings
-//    are realized via distribute-r (see MAPPING divergence above).
-//  - Thickness: static / StaticThickness 2 — there is no per-node static-pixel
-//    radial-thickness knob under polar (thickness is the pixel band height in
-//    r-units). I approximate thin rings with a small band height + a radial gap.
-//  - InnerRadius / Direction / StartAngle / CentralAngle: now expressible via
-//    polar({ innerRadius, direction, baselineAngle, centralAngle }) since #620 —
-//    not yet applied here (the hollow-center inner radius, CW/CCW direction,
-//    start angle, and sub-2π central angle).
-//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ grows
-//    parents to their children's arc, and the coord fits the summed weights to
-//    the circle — so the rings close for any tree with no hand-set leafTheta.
-//  - Link: none — correct for filled wedges; matches the dsl.
+// NOTES:
+//  - PolarCenter: right decides which end of the X axis is the pole; the
+//    reference has the root on the rim, which the reverse order gives.
+//  - Link: none — matches the dsl.
 const meta: Meta = { title: "GoTree / Gallery / SectorTree" };
 export default meta;
 
-// Light (center) → blue (outer), so depth 0 (root, inner ring) is faintest and
-// deeper rings darken outward — matching the reference's ramp.
-const sectorBlues = [
-  "#eff6fb",
-  "#d6e7f3",
-  "#b6d4ea",
-  "#8fbfe0",
-  "#6aa8d6",
-  "#4a90c8",
-  "#2f78b8",
-];
+// Light (leaves) → blue (root), the reference's ramp.
+const sectorBlues = ["#2171b5", "#84aed8", "#deebf7"];
 
-// Balanced binary tree, 6 levels deep → 64 leaves, so wedge widths divide the
-// disc evenly (each internal node has exactly 2 children) and the concentric
-// rings (one per depth) read clearly.
-const deepBalancedTree = (() => {
-  const make = (depth: number, prefix = ""): any =>
-    depth === 0
-      ? { name: prefix }
-      : {
-          name: prefix || "root",
-          children: [
-            make(depth - 1, prefix + "L"),
-            make(depth - 1, prefix + "R"),
-          ],
-        };
-  return make(6);
-})();
+// A three-level tree with uneven fan-out, like the reference.
+const branch = (p: string, n: number) =>
+  Array.from({ length: n }, (_, i) => ({ name: `${p}${i}` }));
+const sectorTree = {
+  name: "root",
+  children: [
+    { name: "a", children: branch("a", 3) },
+    { name: "b" },
+    { name: "c", children: branch("c", 4) },
+    { name: "d", children: branch("d", 2) },
+    { name: "e" },
+    { name: "f", children: branch("f", 3) },
+    { name: "g", children: branch("g", 1) },
+    { name: "h", children: branch("h", 4) },
+  ],
+};
+const LEVELS = 3; // root + 2 levels
 
-const RING_THICKNESS = 8; // thin radial band (approximates StaticThickness 2)
-const RING_GAP = 35; // radial gap between consecutive rings
-
-// Wedge node (θ auto-fit, #618): leaves carry a unit angular weight; internal
-// nodes leave θ unsized so nest-θ grows each to its children's combined arc. The
-// coord fits the summed leaf weights to the circle. h (pixels) is the thin ring.
+// Thin arc: θ extent = reverse depth, r extent = one unit.
 const node = (d: any) =>
-  d.height === 0
-    ? rect({
-        w: datum(1),
-        h: RING_THICKNESS,
-        fill: byDepth(sectorBlues)(d),
-        stroke: "#2f78b8",
-        strokeWidth: 0.75,
-      })
-    : rect({
-        h: RING_THICKNESS,
-        fill: byDepth(sectorBlues)(d),
-        stroke: "#2f78b8",
-        strokeWidth: 0.75,
-      });
+  rect({
+    w: datum(LEVELS - d.depth),
+    h: datum(1),
+    fill: byDepth(sectorBlues)(d),
+    stroke: "white",
+    strokeWidth: 1,
+  });
 
 export const SectorTree: StoryObj = {
   render: () =>
@@ -117,22 +71,22 @@ export const SectorTree: StoryObj = {
       {
         node,
         link: "none",
-        // parentChild: nest θ (include → parent's arc spans its children's;
-        // nest grows the unsized parent θ) + distribute r (parent inner ring →
-        // child group one ring out, gap = RING_GAP).
+        // parentChild: r — the child group, then the parent outside it
+        // (juxtapose, bottom-up); θ — the child group centered within the
+        // parent's arc.
         parentChild: combine({
-          x: { kind: "nest", pad: 0 },
-          y: { kind: "distribute", spacing: RING_GAP },
+          x: { kind: "align", alignment: "middle" },
+          y: { kind: "distribute", spacing: 0, order: "reverse" },
         }),
-        // sibling: distribute θ (pack angularly into the parent's arc) +
-        // align r middle (siblings share one ring).
+        // sibling: r — flattened outward one after another; θ — centered on
+        // the same angle.
         sibling: combine({
-          x: { kind: "distribute", spacing: 0 },
-          y: { kind: "align", alignment: "middle" },
+          x: { kind: "align", alignment: "middle" },
+          y: { kind: "distribute", spacing: 0 },
         }),
         coord: Coord.clock(),
       },
-      {},
-      deepBalancedTree
+      { w: 540, h: 540 },
+      sectorTree
     ),
 };

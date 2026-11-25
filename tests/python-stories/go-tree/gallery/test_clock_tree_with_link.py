@@ -23,13 +23,13 @@ CLOCK_DATA = {
     ],
 }
 
-BAND_HEIGHT = 60  # radial thickness of the ring band
+LEVELS = 3  # root + 2 levels
 
 
 def node(d):
     return rect(
         w=datum(1),
-        h=BAND_HEIGHT,
+        h=datum(LEVELS - d["depth"]),
         fill=by_depth()(d),
         stroke="white",
         stroke_width=1.5,
@@ -43,12 +43,12 @@ def story_clock_tree_with_link():
             node=node,
             link={"curve": Curve.linear(), "stroke": "#90a4ae", "stroke_width": 1},
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "middle"},
+                x={"kind": "distribute", "spacing": 0, "order": "reverse"},
+                y={"kind": "align", "alignment": "end"},
             ),
             sibling=combine(
                 x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "middle"},
+                y={"kind": "align", "alignment": "end"},
             ),
             coord=Coord.clock(inner_radius=0.79),
         ),

@@ -19,22 +19,26 @@ SAMPLE_TREE = make(3)
 
 TYRE_BLUES = ["#08306b", "#2171b5", "#6baed6", "#c6dbef", "#deebf7"]
 
-BAND = 56  # radial thickness of one inclusion band
+LEVELS = 4  # root + 3 levels
 
 
-# A node's ring is as thick as the levels below it, so every ring starts at
-# the hub and the rings overlap like tyre treads.
+def rdepth(d):
+    return LEVELS - d["depth"]
+
+
+# A node's band is as thick as its reverse depth, and each child group sits
+# centered within its parent's band, so the root shows at the rim and the hub.
 def node(d):
     if d["height"] == 0:
         return rect(
             w=datum(1),
-            h=(d["height"] + 1) * BAND,
+            h=datum(rdepth(d)),
             fill=by_depth(TYRE_BLUES)(d),
             stroke="white",
             stroke_width=2,
         )
     return rect(
-        h=(d["height"] + 1) * BAND,
+        h=datum(rdepth(d)),
         fill=by_depth(TYRE_BLUES)(d),
         stroke="white",
         stroke_width=2,
@@ -49,11 +53,11 @@ def story_tyre_tree():
             link="none",
             parent_child=combine(
                 x={"kind": "nest", "pad": 0},
-                y={"kind": "align", "alignment": "start"},
+                y={"kind": "align", "alignment": "middle"},
             ),
             sibling=combine(
                 x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "start"},
+                y={"kind": "align", "alignment": "middle"},
             ),
             coord=Coord.clock(inner_radius=0.25),
         ),

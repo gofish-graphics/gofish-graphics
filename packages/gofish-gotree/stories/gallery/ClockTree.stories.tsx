@@ -8,54 +8,30 @@ import { combine, byDepth, mount } from "./_shared";
 //   Root:within/bottom} ; CoordinateSystem polar {StartAngle:0.01,
 //   InnerRadius:0.72}.
 //
-// MAPPING. Under polar(): x = θ (radians 0..2π), y = r (radius). Brief mapping:
-//   parentChild = (distribute θ, align r)
-//   sibling     = (distribute θ, align r)
-//   Both relationships distribute on θ and align on r — i.e. EVERY node (parents
-//   and children alike) gets its own angular slot, and they all share one radial
-//   band. Relation → kind: X.flatten/juxtapose → distribute; Y.align/within →
-//   align. The nested distributes-on-θ compose into a single flat angular
-//   sequence (the bottom-up "flatten"): each node tiles one wedge of the disc.
+// MAPPING. Under polar(): x = θ, y = r.
+//   parentChild = (distribute θ, align r) ; sibling = (distribute θ, align r)
+//   Every node, parent or child, gets its own angular slot, and the nested
+//   distributes compose into one flat sequence around the rim. The dsl's Mode
+//   is bottom-up, so a parent comes AFTER its children: the parentChild
+//   distribute runs in reverse order, and the root takes the last slot, just
+//   before 12 o'clock.
+//   Y.Root within / bottom: every node sits on the same edge, the OUTER rim
+//   ("end" on r), and grows inward by its reverse depth (RootHeight: rdepth),
+//   so the root is the tallest wedge and the deepest leaves the shortest.
 //
-// EMBEDDED-DIMENSION WEDGE. Each node is a rect whose θ-dimension (width) is
-// a data weight so it SWEEPS an arc, and whose r-dimension (height, a data
-// weight too) is a radial band. thetaPerNode = 2π / N_total tiles the full circle when
-// summed by the edge-mode θ-distribute (spacing 0). RootHeight:rdepth → height
-// grows with reverse-depth (d.height): the root is the tallest wedge (reaching
-// furthest), leaves the shortest. Color:depth → byDepth() ramp, root darkest.
+// SIZES. Each node's θ extent is a unit weight (every node an equal slot) and
+// its r extent is its reverse depth as a weight; the coord fits both, so the
+// ring closes and the tallest wedge reaches from the rim to the 0.72 hub.
 //
-// NOW EXPRESSIBLE (parameterized polar(), #620):
-//  - InnerRadius: 0.72 — APPLIED via `polar({ innerRadius: 0.72 })`. The disc is
-//    hollow from r=0 to r=0.72·R and the wedges live in the outer rim — the true
-//    clock face the dsl asks for. This was the single biggest fidelity gap and is
-//    now closed.
-//  - StartAngle / Direction / CentralAngle: polar() now takes baselineAngle,
-//    direction, and centralAngle knobs. We keep the defaults here (12-o'clock
-//    start, clockwise, full 2π) — the GoTree StartAngle:0.01 uses a different
-//    zero/winding convention, and the default already reads as a clock face.
-//
-// REMAINING GAPS (flagged, not faked):
-//  - NO angular auto-fit: angle is NOT allocated by the layout engine from the
-//    node count. thetaPerNode is hand-set to 2π / N_total and summed by
-//    edge-distribute. In practice the realized sweep falls SHORT of the full 2π
-//    (the rim is a partial fan, not a closed ring — visible above) — the nested
-//    distribute layers don't sum their angular bounding boxes to exactly
-//    N·thetaPerNode, so without an auto-fit pass the wedges under-fill the
-//    circle. A different node count or width would instead overflow and wrap.
-//    GoTree allocates angle automatically; gofish-gotree has no such pass (#618).
-//  - bottom-up Mode / Root within/bottom alignment: the dsl pins the rim to the
-//    OUTER edge and grows RootHeight inward. We can only align r (middle here),
-//    so wedges are centered on the shared band, not edge-anchored to a rim.
-//  - GoFish polar() has no θ/r axis swap (no transposed variant), so the
-//    PolarAxis swap is not expressible; not needed here.
-//  - Link is "none" in the dsl (a clock face has no connecting edges) — correct
-//    here; nothing to draw.
+// NOTES:
+//  - StartAngle 0.01 turns: `Coord.clock()` starts at 12 o'clock, which the
+//    reference also reads as (its root sits just before 12).
+//  - Link is "none" in the dsl (a clock face has no connecting edges).
 const meta: Meta = { title: "GoTree / Gallery / ClockTree" };
 export default meta;
 
 // A moderately bushy tree so the rim is densely populated (like the reference,
-// ~30 wedges of varying depth-color). thetaPerNode is derived from the live
-// node count below so the wedges tile the full circle exactly.
+// ~30 wedges of varying depth-color).
 const clockTree = {
   name: "root",
   children: [
@@ -85,17 +61,14 @@ const clockTree = {
   ],
 };
 
-// Wedge node: `w` (the θ extent) is a unit angular WEIGHT (every node an equal slot). The
-// coord is the single σ-scale-root: it sums the weights (N·σ) and fits them to
-// the angular budget, propagating one σ down through the nested distributes — so
-// the ring closes exactly with NO hand-set 2π/N. As data weights, θ sweeps an
-// arc and r is a radial band. RootHeight:rdepth → height grows with d.height: root tallest.
-// The height is a radial WEIGHT too, so the coord fits the tallest node to the
-// band between the inner radius and the rim.
+const LEVELS = 4; // root + 3 levels (B2's and D2's children are depth 3)
+
+// Wedge node: `w` (the θ extent) is a unit angular weight (every node an equal
+// slot) and `h` (the r extent) is its reverse depth, a radial weight.
 const node = (d: any) =>
   rect({
     w: datum(1),
-    h: datum(d.height + 1),
+    h: datum(LEVELS - d.depth),
     fill: byDepth()(d),
     stroke: "white",
     strokeWidth: 1.5,
@@ -108,16 +81,16 @@ export const ClockTree: StoryObj = {
         node,
         link: "none",
         parentChild: combine({
-          // θ: parent and its child-group take adjacent angular slots.
-          x: { kind: "distribute", spacing: 0 },
-          // r: parent and group share the radial band.
-          y: { kind: "align", alignment: "middle" },
+          // θ: the child group, then the parent (bottom-up), in adjacent slots.
+          x: { kind: "distribute", spacing: 0, order: "reverse" },
+          // r: parent and group share the outer rim.
+          y: { kind: "align", alignment: "end" },
         }),
         sibling: combine({
           // θ: siblings tile angularly (edge mode sums θ-widths).
           x: { kind: "distribute", spacing: 0 },
-          // r: siblings share the same radial band.
-          y: { kind: "align", alignment: "middle" },
+          // r: siblings share the outer rim.
+          y: { kind: "align", alignment: "end" },
         }),
         // InnerRadius:0.72 — the hollow clock rim (nodes live in the outer band,
         // the disc is empty from the center out to 0.72·R). Now expressible.

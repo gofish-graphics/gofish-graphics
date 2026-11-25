@@ -2,29 +2,24 @@
 
 import math
 
-from gofish import Coord, Spacing, rect
+from gofish import Coord, datum, rect
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
-LEAF_THETA = (2 * math.pi) / 9  # fixed theta-width per node (~9 slots)
-VALUE_R = 42  # r-units per unit of value (violin thickness)
 
-
-# A leaf's radial thickness is proportional to its value; internal nodes
-# leave r unsized so the r nest grows them over their subtree.
+# Every node is one theta unit wide. Leaves are one radial unit; internal
+# nodes leave r to the nest.
 def node(d):
     if d["height"] == 0:
         return rect(
-            w=LEAF_THETA,
-            h=d["data"]["value"] * VALUE_R,
-            em_x=True,
+            w=datum(1),
+            h=datum(1),
             fill=by_depth()(d),
             stroke="white",
             stroke_width=1,
         )
     return rect(
-        w=LEAF_THETA,
-        em_x=True,
+        w=datum(1),
         fill=by_depth()(d),
         stroke="white",
         stroke_width=1,
@@ -38,14 +33,19 @@ def story_violin_tree():
             node=node,
             link="none",
             parent_child=combine(
-                x={"kind": "distribute", "spacing": Spacing.pitch(0, at="middle")},
-                y={"kind": "nest", "pad": 18},
+                # theta: the child group, then the parent (bottom-up).
+                x={"kind": "distribute", "spacing": 0, "order": "reverse"},
+                # r: the parent's span covers its subtree's (Root include).
+                y={"kind": "nest", "pad": 0},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": Spacing.pitch(LEAF_THETA, at="middle")},
-                y={"kind": "distribute", "spacing": Spacing.pitch(0, at="middle")},
+                # theta: siblings follow one another around the circle.
+                x={"kind": "distribute", "spacing": 0},
+                # r: and inward (PolarCenter bottom: the layout's top is the rim).
+                y={"kind": "distribute", "spacing": 0, "order": "reverse"},
             ),
-            coord=Coord.clock(),
+            # Counter-clockwise from 12 o'clock, as the reference turns.
+            coord=Coord.polar(baseline_angle=math.pi / 2),
         ),
-        {},
+        {"w": 540, "h": 540},
     )

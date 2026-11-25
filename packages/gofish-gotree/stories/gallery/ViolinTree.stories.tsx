@@ -1,61 +1,46 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, Coord, Spacing } from "gofish-graphics";
+import { rect, datum, Coord } from "gofish-graphics";
 import { combine, byDepth, mount, sampleTree } from "./_shared";
 
-// GoTree gallery port — ViolinTree (polar nested bands, no links).
-// dsl: bottom-up; X[Subtree flatten / Root juxtapose] Y[Subtree flatten / Root
-// include] under CoordinateSystem polar; Node rectangle, Color depth.
-//   - Root (parent↔subtree) relation: X juxtapose → distribute θ ; Y include →
-//     nest r. So parentChild = (distribute θ, nest r): the parent's rect grows
-//     RADIALLY to embed its subtree (the "embedded radial dimension").
-//   - Subtree (sibling↔sibling) relation: X flatten → distribute θ ; Y flatten →
-//     distribute r. So sibling = (distribute θ, distribute r).
-// Under polar(): x = θ (radians 0..2π), y = r (radius). So distribute-x spreads
-// nodes angularly and distribute/nest-y stacks/embeds them radially.
+// GoTree gallery port — ViolinTree (one angular slot per node around the
+// circle; a parent's radial span covers its children's).
+// dsl: bottom-up; X[Subtree flatten / Root juxtapose] Y[Subtree flatten
+// (Margin -0.46, space-between) / Root include] under CoordinateSystem polar
+// {PolarCenter bottom, StartAngle 0.01}; Node rectangle, Color depth.
 //
-// Node = rect, color byDepth, link = none. Internal nodes are left UNSIZED on r
-// (h) so nest-on-r grows them to wrap their subtree; leaves are sized on r by
-// d.data.value, so the radial "thickness" varies leaf-to-leaf — the violin
-// silhouette. θ-width is a fixed per-node constant (no angular auto-fit).
+// Under polar(): x = θ, y = r.
+//   - θ (dsl X): every node gets its own slot, in post-order: Root juxtapose
+//     bottom-up puts the parent AFTER its child group (the parentChild
+//     distribute runs in reverse), and siblings follow one another. The
+//     reference turns counter-clockwise from 12 o'clock, so the root takes the
+//     last slot, a full-radius wedge just after 12.
+//   - r (dsl Y): a parent's radial span covers its children's (include →
+//     nest), and siblings follow one another (flatten → distribute). With
+//     PolarCenter bottom the layout's top is the rim, so the first sibling is
+//     outermost and the sequence spirals inward.
 //
-// POLAR LIMITATIONS (no hacks here — flagged honestly):
-//  - StartAngle:0.01, and any CentralAngle/Direction/InnerRadius, are now
-//    expressible via polar({ ... }) since #620 — not yet applied here (our disc
-//    stays centered with θ starting at 0). PolarCenter:"bottom" remains
-//    inexpressible: it is a polar-space anchor, which polar()'s screen-offset
-//    `center` does not cover.
-//  - No angular auto-fit. θ-width is a fixed constant per node and sibling θ
-//    spacing is fixed; GoTree allocates θ by subtree leaf-count so its violins
-//    pack the disc exactly. Here a wide level can overflow the 2π budget and
-//    wrap. Sizes/spacings are hand-tuned for `sampleTree` (8 leaves).
-//  - nest-on-r (embedded radial dimension) is rough: combine() applies the
-//    parentChild x-distribute to [parent, childGroup] too, so I use
-//    Spacing.pitch(0, { at: "middle" }) there to keep the parent θ-centered over its
-//    subtree rather than juxtaposed beside it. True GoTree juxtapose offsets
-//    the parent angularly; that isn't faithfully reproducible without angular
-//    allocation. The radial embedding (nest y) is the load-bearing mapping.
-//  - bottom-up layout (leaves drive sizing upward) is implicit in how nest
-//    grows internals from their children; there's no explicit "Mode" knob.
+// SIZES. Every node is one θ unit wide. Leaves are one radial unit and
+// internal nodes leave r to nest. The coord fits both.
+//
+// NOTES:
+//  - Y Subtree Margin -0.46: GoTree overlaps each sibling with the one before
+//    it by 46% of its length. GoFish has no negative gap measured in the
+//    children's own size, so the siblings here only touch, and the radial
+//    steps are wider than the reference's.
 const meta: Meta = { title: "GoTree / Gallery / ViolinTree" };
 export default meta;
-
-const LEAF_THETA = (2 * Math.PI) / 9; // fixed θ-width per node (~9 slots)
-const VALUE_R = 42; // r-units per unit of d.data.value (violin thickness)
 
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: LEAF_THETA,
-        h: d.data.value * VALUE_R, // leaf radial thickness ∝ value
-        emX: true,
+        w: datum(1),
+        h: datum(1),
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,
       })
     : rect({
-        // internal: unsized on r (h) → nest grows it to embed the subtree.
-        w: LEAF_THETA,
-        emX: true,
+        w: datum(1),
         fill: byDepth()(d),
         stroke: "white",
         strokeWidth: 1,
@@ -63,30 +48,26 @@ const node = (d: any) =>
 
 export const ViolinTree: StoryObj = {
   render: () =>
-    mount({
-      node,
-      link: "none",
-      // parentChild: X juxtapose → distribute θ ; Y include → nest r.
-      // spacing:0/center on θ keeps parent θ-centered over its subtree (see
-      // NOTES); nest on r grows the parent's rect to embed the subtree.
-      parentChild: combine({
-        x: {
-          kind: "distribute",
-          spacing: Spacing.pitch(0, { at: "middle" }),
-        },
-        y: { kind: "nest", pad: 18 },
-      }),
-      // sibling: X flatten → distribute θ ; Y flatten → distribute r.
-      sibling: combine({
-        x: {
-          kind: "distribute",
-          spacing: Spacing.pitch(LEAF_THETA, { at: "middle" }),
-        },
-        y: {
-          kind: "distribute",
-          spacing: Spacing.pitch(0, { at: "middle" }),
-        },
-      }),
-      coord: Coord.clock(),
-    }),
+    mount(
+      {
+        node,
+        link: "none",
+        parentChild: combine({
+          // θ: the child group, then the parent (bottom-up).
+          x: { kind: "distribute", spacing: 0, order: "reverse" },
+          // r: the parent's span covers its subtree's (Root include).
+          y: { kind: "nest", pad: 0 },
+        }),
+        sibling: combine({
+          // θ: siblings follow one another around the circle.
+          x: { kind: "distribute", spacing: 0 },
+          // r: and inward (PolarCenter bottom: the layout's top is the rim).
+          y: { kind: "distribute", spacing: 0, order: "reverse" },
+        }),
+        // Counter-clockwise from 12 o'clock, as the reference turns.
+        coord: Coord.polar({ baselineAngle: Math.PI / 2 }),
+      },
+      { w: 540, h: 540 },
+      sampleTree
+    ),
 };

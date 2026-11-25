@@ -16,7 +16,10 @@ def story_side_tree():
             node=node,
             link={"curve": Curve.linear(), "stroke": "#607d8b", "stroke_width": 1.5},
             parent_child=combine(
-                x={"kind": "distribute", "spacing": Spacing.pitch(0.5, at="middle")},
+                x={
+                    "kind": "distribute",
+                    "spacing": Spacing.pitch(0.5, at="middle", ends=[0, 1]),
+                },
                 y={"kind": "distribute", "spacing": Spacing.pitch(84, at="middle")},
             ),
             sibling=combine(

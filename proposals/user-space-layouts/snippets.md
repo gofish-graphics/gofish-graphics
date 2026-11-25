@@ -2315,3 +2315,411 @@ chart(rows, { coord: Coord.clock(), w: 320, h: 320 })
   .mark(circle({ r: 4, fill: INK }))
   .layer(line({ stroke: INK, strokeWidth: 2 }));
 ```
+
+<!-- id: gt-sunburst-old -->
+
+```ts
+// GoTree / Gallery / sunburst, before. Each ring is bandHeight px thick.
+mount({
+  parentChild: combine({
+    x: { kind: "nest", pad: 0 },
+    y: { kind: "distribute", spacing: bandHeight }, // a ring's thickness of gap
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+});
+```
+
+<!-- id: gt-sunburst-new -->
+
+```ts
+// After. Rings touch (the dsl's Margin is "0rr"), and siblings start on
+// the same ring.
+mount({
+  parentChild: combine({
+    x: { kind: "nest", pad: 0 },
+    y: { kind: "distribute", spacing: 0 },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "start" },
+  }),
+});
+```
+
+<!-- id: gt-icicle-old -->
+
+```ts
+// GoTree / Gallery / icicleplot, before.
+mount({
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+});
+```
+
+<!-- id: gt-icicle-new -->
+
+```ts
+// After. GoTree's "align" lines up the sibling nodes, which are the first
+// ring of each sibling subtree, so the subtrees start on the same ring.
+mount({
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "start" },
+  }),
+});
+```
+
+<!-- id: gt-hsc-old -->
+
+```ts
+// GoTree / Gallery / HierarchicalSectorChart, before.
+const bandHeight = 90; // radial thickness of one ring
+rect({ w: datum(1), h: bandHeight /* ... */ }); // leaves
+rect({ h: bandHeight /* ... */ }); // internal nodes
+mount({
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+});
+tree(spec, data).render(container);
+```
+
+<!-- id: gt-hsc-new -->
+
+```ts
+// After. GoTree sizes a parent like its child group, so a node of height h
+// is 2^(h-1) rings thick and a leaf one ring.
+const rings = (d: any) => (d.height === 0 ? 1 : 2 ** (d.height - 1));
+rect({ w: datum(1), h: datum(rings(d)) /* ... */ }); // leaves
+rect({ h: datum(rings(d)) /* ... */ }); // internal nodes
+mount({
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "start" },
+  }),
+});
+tree(spec, data).render(container, { w: 540, h: 540 });
+```
+
+<!-- id: gt-tyre-old -->
+
+```ts
+// GoTree / Gallery / TyreTree, before. Bands in pixels: 224 px of radial
+// room in a canvas that has 187.5 px.
+const band = 56;
+rect({ h: (d.height + 1) * band /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: "nest", pad: 0 },
+    y: { kind: "align", alignment: "start" },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "start" },
+  }),
+});
+```
+
+<!-- id: gt-tyre-new -->
+
+```ts
+// After. A band is as thick as its reverse depth (RootHeight: rdepth), and
+// the child group sits centered within its parent's band ("within").
+const LEVELS = 4;
+const rdepth = (d: any) => LEVELS - d.depth;
+rect({ h: datum(rdepth(d)) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: "nest", pad: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+});
+```
+
+<!-- id: gt-clock-old -->
+
+```ts
+// GoTree / Gallery / ClockTree, before.
+rect({ w: datum(1), h: datum(d.height + 1) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+});
+```
+
+<!-- id: gt-clock-new -->
+
+```ts
+// After. Bottom-up puts a parent after its children; RootHeight: rdepth
+// sizes by depth; Y align "bottom" hangs every wedge from the rim.
+const LEVELS = 4;
+rect({ w: datum(1), h: datum(LEVELS - d.depth) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: 0, order: "reverse" },
+    y: { kind: "align", alignment: "end" },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "end" },
+  }),
+});
+```
+
+<!-- id: gt-ctwl-old -->
+
+```ts
+// GoTree / Gallery / ClockTreeWithLink, before.
+const bandHeight = 60;
+rect({ w: datum(1), h: bandHeight /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+});
+```
+
+<!-- id: gt-ctwl-new -->
+
+```ts
+// After. The same rule as ClockTree. The links are unchanged.
+const LEVELS = 3;
+rect({ w: datum(1), h: datum(LEVELS - d.depth) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: 0, order: "reverse" },
+    y: { kind: "align", alignment: "end" },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "end" },
+  }),
+});
+```
+
+<!-- id: gt-sector-old -->
+
+```ts
+// GoTree / Gallery / SectorTree, before: one ring per depth.
+rect({ w: datum(1), h: 8 /* ... */ }); // leaves; internal nodes have no w
+mount({
+  parentChild: combine({
+    x: { kind: "nest", pad: 0 },
+    y: { kind: "distribute", spacing: 35 },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+});
+```
+
+<!-- id: gt-sector-new -->
+
+```ts
+// After. PolarAxis: x-axis puts the dsl's X on r and its Y on θ, so the X
+// relations go on `y` and the Y relations on `x`.
+const LEVELS = 3;
+rect({ w: datum(LEVELS - d.depth), h: datum(1) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: "align", alignment: "middle" }, // Y Root: within
+    y: { kind: "distribute", spacing: 0, order: "reverse" }, // X Root: juxtapose
+  }),
+  sibling: combine({
+    x: { kind: "align", alignment: "middle" }, // Y Subtree: align
+    y: { kind: "distribute", spacing: 0 }, // X Subtree: flatten
+  }),
+});
+```
+
+<!-- id: gt-sector2-old -->
+
+```ts
+// GoTree / Gallery / SectorTree2, before: a sunburst with gaps.
+rect({ w: datum(1), h: 42 /* ... */ }); // leaves; internal nodes have no w
+mount({
+  parentChild: combine({
+    x: { kind: "nest", pad: 0 },
+    y: { kind: "distribute", spacing: 42 },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 },
+    y: { kind: "align", alignment: "middle" },
+  }),
+  coord: Coord.clock(),
+});
+```
+
+<!-- id: gt-sector2-new -->
+
+```ts
+// After. PolarAxis: x-axis, so the X relations go on `y` (r) and the Y
+// relations on `x` (θ). A node of height h takes 2^(h-1) angular slots.
+const slots = (d: any) => (d.height === 0 ? 1 : 2 ** (d.height - 1));
+rect({ w: datum(slots(d)), h: datum(1) /* ... */ }); // leaves
+rect({ w: datum(slots(d)) /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: 0 }, // Y Root: juxtapose
+    y: { kind: "nest", pad: 0 }, // X Root: include
+  }),
+  sibling: combine({
+    x: { kind: "align", alignment: "start" }, // Y Subtree: align
+    y: { kind: "distribute", spacing: 0 }, // X Subtree: flatten
+  }),
+  coord: Coord.polar({ baselineAngle: Math.PI / 2 }), // counter-clockwise from 12
+});
+```
+
+<!-- id: gt-tornado-old -->
+
+```ts
+// GoTree / Gallery / TornadoTree, before. TornadoTree2 was the same with
+// other numbers.
+rect({ w: 0.13, h: 59, emX: true /* ... */ }); // leaves
+rect({ w: 0.13, emX: true /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: Spacing.pitch(0.55, { at: "middle" }) },
+    y: { kind: "nest", pad: 44 },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: Spacing.pitch(0.42, { at: "middle" }) },
+    y: { kind: "distribute", spacing: Spacing.pitch(44, { at: "middle" }) },
+  }),
+});
+```
+
+<!-- id: gt-tornado-new -->
+
+```ts
+// After. PolarAxis: x-axis, so the X relations go on `y` (r) and the Y
+// relations on `x` (θ). No flags and no hand numbers.
+rect({ w: datum(1), h: datum(1) /* ... */ }); // leaves
+rect({ h: datum(1) /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: "nest", pad: 0 }, // Y Root: include
+    // X Root: juxtapose, bottom-up. TornadoTree2 (PolarCenter: left) leaves
+    // out `order: "reverse"`, so its root is at the center.
+    y: { kind: "distribute", spacing: 4, order: "reverse" },
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 }, // Y Subtree: flatten
+    y: { kind: "distribute", spacing: 4 }, // X Subtree: flatten
+  }),
+});
+```
+
+<!-- id: gt-violin-old -->
+
+```ts
+// GoTree / Gallery / ViolinTree, before.
+const LEAF_THETA = (2 * Math.PI) / 9;
+rect({ w: LEAF_THETA, h: d.data.value * 42, emX: true /* ... */ }); // leaves
+rect({ w: LEAF_THETA, emX: true /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: Spacing.pitch(0, { at: "middle" }) },
+    y: { kind: "nest", pad: 18 },
+  }),
+  sibling: combine({
+    x: {
+      kind: "distribute",
+      spacing: Spacing.pitch(LEAF_THETA, { at: "middle" }),
+    },
+    y: { kind: "distribute", spacing: Spacing.pitch(0, { at: "middle" }) },
+  }),
+  coord: Coord.clock(),
+});
+```
+
+<!-- id: gt-violin-new -->
+
+```ts
+// After. Each node takes its own angular slot, parent after children.
+rect({ w: datum(1), h: datum(1) /* ... */ }); // leaves
+rect({ w: datum(1) /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: 0, order: "reverse" }, // X Root: juxtapose
+    y: { kind: "nest", pad: 0 }, // Y Root: include
+  }),
+  sibling: combine({
+    x: { kind: "distribute", spacing: 0 }, // X Subtree: flatten
+    // Y Subtree: flatten. PolarCenter: bottom puts the layout's top at the rim.
+    y: { kind: "distribute", spacing: 0, order: "reverse" },
+  }),
+  coord: Coord.polar({ baselineAngle: Math.PI / 2 }), // counter-clockwise from 12
+});
+```
+
+<!-- id: gt-ends-old -->
+
+```ts
+// GoTree / Gallery / SideTree and SpiralLayout, before: the root's chain
+// around the turn took the default ends, half a gap at each end.
+mount({
+  parentChild: combine({
+    x: { kind: "distribute", spacing: Spacing.pitch(0.5, { at: "middle" }) },
+    // ...
+  }),
+});
+```
+
+<!-- id: gt-ends-new -->
+
+```ts
+// After. GoTree puts the first branch at the start angle, so no room
+// before it and a whole gap after the last.
+mount({
+  parentChild: combine({
+    x: {
+      kind: "distribute",
+      spacing: Spacing.pitch(0.5, { at: "middle", ends: [0, 1] }),
+    },
+    // ...
+  }),
+});
+```
+
+<!-- id: gt-nl-old -->
+
+```ts
+// GoTree / Node-Link / Sunburst and NestedPietree, before.
+const leafTheta = (2 * Math.PI) / deepLeafCount;
+rect({ w: d.width * leafTheta, h: bandHeight, emX: true /* ... */ });
+// NestedPietree leaves, sized by hand to fit 2π with the pads and gaps
+const NPT_LEAF_W = Math.PI / 2 - 0.27;
+rect({ w: NPT_LEAF_W, h: 36 /* ... */ });
+```
+
+<!-- id: gt-nl-new -->
+
+```ts
+// After. Weights, which the coord fits to the turn and the radius.
+rect({ w: datum(d.width), h: bandHeight /* ... */ });
+rect({ w: datum(1), h: datum(1) /* ... */ }); // NestedPietree leaves
+```

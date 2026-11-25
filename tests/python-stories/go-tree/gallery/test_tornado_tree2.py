@@ -1,31 +1,16 @@
 """Equivalent of gofish-gotree/stories/gallery/TornadoTree2.stories.tsx."""
 
-from gofish import Coord, Spacing, rect
+from gofish import Coord, datum, rect
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
-LEAF_THETA = 0.12  # angular width of a node (radians)
-LEAF_R = 89  # radial thickness of a leaf (px in r)
 
-
-# Internal nodes leave r unsized so the r nest grows them over their subtree.
+# Leaves carry a unit theta weight; internal nodes leave theta to the nest.
+# Every node is one radial unit thick.
 def node(d):
     if d["height"] == 0:
-        return rect(
-            w=LEAF_THETA,
-            h=LEAF_R,
-            em_x=True,
-            fill=by_depth()(d),
-            stroke="white",
-            stroke_width=1,
-        )
-    return rect(
-        w=LEAF_THETA,
-        em_x=True,
-        fill=by_depth()(d),
-        stroke="white",
-        stroke_width=1,
-    )
+        return rect(w=datum(1), h=datum(1), fill=by_depth()(d))
+    return rect(h=datum(1), fill=by_depth()(d))
 
 
 def story_tornado_tree2():
@@ -34,15 +19,21 @@ def story_tornado_tree2():
             SAMPLE_TREE,
             node=node,
             link="none",
+            # PolarAxis x-axis: the layout's X relations go on r (y here) and
+            # its Y relations on theta (x here).
             parent_child=combine(
-                x={"kind": "distribute", "spacing": Spacing.pitch(0.5, at="middle")},
-                y={"kind": "nest", "pad": 38},
+                # theta: the parent's arc spans its subtree's (Root include).
+                x={"kind": "nest", "pad": 0},
+                # r: the parent, then its child group outside it.
+                y={"kind": "distribute", "spacing": 4},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": Spacing.pitch(0.32, at="middle")},
-                y={"kind": "distribute", "spacing": Spacing.pitch(76, at="middle")},
+                # theta: siblings follow one another around the angle.
+                x={"kind": "distribute", "spacing": 0},
+                # r: and outward.
+                y={"kind": "distribute", "spacing": 4},
             ),
             coord=Coord.clock(),
         ),
-        {},
+        {"w": 540, "h": 540},
     )

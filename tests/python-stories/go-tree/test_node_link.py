@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Constraint, Coord, Curve, Spacing, circle, layer, rect, text
+from gofish import Constraint, Coord, Curve, Spacing, circle, datum, layer, rect, text
 from gofish.gotree import distribute, nest, tree
 from python_stories.gotree_data import by_depth
 
@@ -224,16 +224,13 @@ def make(depth, prefix=""):
 
 DEEP_BALANCED_TREE = make(4)
 
-DEEP_LEAF_COUNT = 16  # 2^4
-LEAF_THETA = (2 * math.pi) / DEEP_LEAF_COUNT  # a sunburst leaf's angle
 BAND_HEIGHT = 38  # radial thickness per tree level
 
 
 def sunburst_node(d):
     return rect(
-        w=d["width"] * LEAF_THETA,
+        w=datum(d["width"]),
         h=BAND_HEIGHT,
-        em_x=True,
         fill=by_depth(POLAR_GREENS)(d),
         stroke="white",
         stroke_width=2,
@@ -284,19 +281,18 @@ def story_icicle_plot():
 
 
 # Nested pie tree: the polar version of the nested boxes. A parent's wedge
-# encloses its children's, so the leaves are innermost. The sizes are worked
-# out by hand to fit the 2 pi budget (#475):
-#   4 * leaf width + 4 * sibling gap + 6 * x pad = 2 pi.
-NPT_LEAF_W = math.pi / 2 - 0.27  # about 1.30 rad
-NPT_SIB = 0.08
-NPT_X_PAD = 0.13
+# encloses its children's, so the leaves are innermost. Each leaf carries a
+# unit weight on both axes; the coord fits the weights, with the gaps and pads
+# (radians) taken out first, to the full turn.
+NPT_SIB = 0.08  # gap between sibling wedges (radians)
+NPT_X_PAD = 0.13  # angular pad inside each parent wedge (radians)
 
 
 def nested_pie_node(d):
     if d["height"] == 0:
         return rect(
-            w=NPT_LEAF_W,
-            h=36,
+            w=datum(1),
+            h=datum(1),
             fill=POLAR_GREENS[-1],
             stroke="white",
             stroke_width=4,

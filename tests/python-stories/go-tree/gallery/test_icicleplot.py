@@ -40,7 +40,7 @@ def story_icicle_plot():
             ),
             sibling=combine(
                 x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "middle"},
+                y={"kind": "align", "alignment": "start"},
             ),
             coord=Coord.clock(),
         ),

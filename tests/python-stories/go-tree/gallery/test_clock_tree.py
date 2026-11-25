@@ -35,10 +35,13 @@ CLOCK_TREE = {
 
 # The height is a radial WEIGHT too, so the coord fits the tallest node to the
 # band between the inner radius and the rim.
+LEVELS = 4  # root + 3 levels
+
+
 def node(d):
     return rect(
         w=datum(1),
-        h=datum(d["height"] + 1),
+        h=datum(LEVELS - d["depth"]),
         fill=by_depth()(d),
         stroke="white",
         stroke_width=1.5,
@@ -52,12 +55,12 @@ def story_clock_tree():
             node=node,
             link="none",
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "middle"},
+                x={"kind": "distribute", "spacing": 0, "order": "reverse"},
+                y={"kind": "align", "alignment": "end"},
             ),
             sibling=combine(
                 x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "middle"},
+                y={"kind": "align", "alignment": "end"},
             ),
             coord=Coord.clock(inner_radius=0.72),
         ),

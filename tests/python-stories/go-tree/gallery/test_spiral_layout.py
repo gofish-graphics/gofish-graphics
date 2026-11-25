@@ -20,7 +20,9 @@ def story_spiral_layout():
             parent_child=combine(
                 x={
                     "kind": "distribute",
-                    "spacing": Spacing.pitch((2 * math.pi) / 9, at="middle"),
+                    "spacing": Spacing.pitch(
+                        (2 * math.pi) / 9, at="middle", ends=[0, 1]
+                    ),
                 },
                 y={
                     "kind": "distribute",

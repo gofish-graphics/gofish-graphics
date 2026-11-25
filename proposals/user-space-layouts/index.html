@@ -644,14 +644,766 @@
     data-title="Review: what landed and what is open"
   >
     <p>
-      This tab has two parts. The first part shows the four questions that are
-      open now, each with real renders, the code that drew them, and a
+      This tab has two parts. The first part shows what is open now: the GoTree
+      polar stories checked against the GoTree gallery, then four layout
+      questions, each with real renders, the code that drew them, and a
       recommendation where there is one. The second part shows what has been
       decided and built on the branch. Every picture is a render of the code
       under it, made on the branch today unless its caption says otherwise.
     </p>
 
     <h2 class="first">Open now</h2>
+    <h3>GoTree polar stories against the GoTree gallery</h3>
+    <p>
+      Each card puts one polar GoTree story beside the picture in the GoTree
+      gallery that it ports (BIT-VIS/gotree,
+      <code>gallery/&lt;Name&gt;/tree.png</code>). Changed stories show three
+      panels: the reference, the branch before this round (38a79eac3), and the
+      branch now. The cause of each difference is one of four kinds.
+      <b>(a)</b> The port's spec was wrong. <b>(b)</b> The engine has a bug.
+      <b>(c)</b> GoFish cannot write it yet. <b>(d)</b> Cosmetic, such as
+      different data. No engine bug turned up in this round; every fix is in a
+      story.
+    </p>
+    <div class="gallery">
+      <div class="card">
+        <h3>Sunburst <span class="ev exact">fixed</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-sunburst.png"
+              alt="Sunburst: reference, before, after"
+            />
+            <figcaption>The rings now touch, as in the reference.</figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> The port put a whole ring's thickness of space between a
+          parent and its children, which drew the white rings. The dsl's margin
+          is zero. The reference also uses real, uneven data (d), and the port
+          keeps its balanced tree.
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / sunburst, before. Each ring is bandHeight px thick.
+mount({
+  parentChild: combine({
+    x: { kind: &quot;nest&quot;, pad: 0 },
+    y: { kind: &quot;distribute&quot;, spacing: bandHeight }, // a ring&#x27;s thickness of gap
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. Rings touch (the dsl&#x27;s Margin is &quot;0rr&quot;), and siblings start on
+// the same ring.
+mount({
+  parentChild: combine({
+    x: { kind: &quot;nest&quot;, pad: 0 },
+    y: { kind: &quot;distribute&quot;, spacing: 0 },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Polar icicle <span class="ev exact">fixed</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-icicleplot.png"
+              alt="Polar icicle: reference, before, after"
+            />
+            <figcaption>
+              The rings now sit at even radii. The reference is a cartesian
+              icicle.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> Siblings were centered on each other, so a shallow subtree
+          beside a deep one moved out by half a ring. GoTree's "align" lines up
+          the sibling nodes, which is the start of each subtree.
+        </p>
+        <div class="callout">
+          The gallery's <code>icicleplot/tree.png</code> is a cartesian icicle,
+          and its <code>dsl.json</code> is a byte copy of the sunburst's. So
+          there is no polar icicle to match. The cartesian picture is the
+          node-link IciclePlot story. Whether this story should stay is the
+          maintainer's call.
+        </div>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / icicleplot, before.
+mount({
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. GoTree&#x27;s &quot;align&quot; lines up the sibling nodes, which are the first
+// ring of each sibling subtree, so the subtrees start on the same ring.
+mount({
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Hierarchical sector chart <span class="ev exact">fixed</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-hierarchical-sector-chart.png"
+              alt="Hierarchical sector chart: reference, before, after"
+            />
+            <figcaption>
+              The root disc is now twice a ring's thickness.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> Every ring had the same thickness in pixels, and siblings
+          were centered. In GoTree a parent is as thick as its child group, so
+          the root is two rings thick here. The reference's tree also has some
+          leaves at depth 1 (d).
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / HierarchicalSectorChart, before.
+const bandHeight = 90; // radial thickness of one ring
+rect({ w: datum(1), h: bandHeight /* ... */ }); // leaves
+rect({ h: bandHeight /* ... */ }); // internal nodes
+mount({
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+});
+tree(spec, data).render(container);</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. GoTree sizes a parent like its child group, so a node of height h
+// is 2^(h-1) rings thick and a leaf one ring.
+const rings = (d: any) =&gt; (d.height === 0 ? 1 : 2 ** (d.height - 1));
+rect({ w: datum(1), h: datum(rings(d)) /* ... */ }); // leaves
+rect({ h: datum(rings(d)) /* ... */ }); // internal nodes
+mount({
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+  }),
+});
+tree(spec, data).render(container, { w: 540, h: 540 });</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Tyre tree <span class="ev exact">fixed</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-tyre-tree.png"
+              alt="Tyre tree: reference, before, after"
+            />
+            <figcaption>
+              The root now shows at the rim and around the hub, and nothing is
+              clipped.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> The port aligned each child group at the parent's inner
+          edge, so the root showed only at the rim. GoTree's "within" centers
+          it. The bands were also pixels that needed 224 px of room in a canvas
+          with 187.5 px. They are weights now, so they fit.
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / TyreTree, before. Bands in pixels: 224 px of radial
+// room in a canvas that has 187.5 px.
+const band = 56;
+rect({ h: (d.height + 1) * band /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: &quot;nest&quot;, pad: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;start&quot; },
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. A band is as thick as its reverse depth (RootHeight: rdepth), and
+// the child group sits centered within its parent&#x27;s band (&quot;within&quot;).
+const LEVELS = 4;
+const rdepth = (d: any) =&gt; LEVELS - d.depth;
+rect({ h: datum(rdepth(d)) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: &quot;nest&quot;, pad: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Clock tree <span class="ev exact">fixed</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-clock-tree.png"
+              alt="Clock tree: reference, before, after"
+            />
+            <figcaption>
+              Wedges hang from the rim, and the root is just before 12.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> Three rules were off. Bottom-up layout puts a parent after
+          its children, a wedge's length is its reverse depth, not its height,
+          and the dsl aligns every wedge at the rim, not at the middle of the
+          band.
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / ClockTree, before.
+rect({ w: datum(1), h: datum(d.height + 1) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. Bottom-up puts a parent after its children; RootHeight: rdepth
+// sizes by depth; Y align &quot;bottom&quot; hangs every wedge from the rim.
+const LEVELS = 4;
+rect({ w: datum(1), h: datum(LEVELS - d.depth) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0, order: &quot;reverse&quot; },
+    y: { kind: &quot;align&quot;, alignment: &quot;end&quot; },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;end&quot; },
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>
+          Clock tree with link
+          <span class="ev close">wedges fixed, links differ</span>
+        </h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-clock-tree-with-link.png"
+              alt="Clock tree with link: reference, before, after"
+            />
+            <figcaption>
+              The wedges follow the clock tree's rule. The links do not match.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          The wedges were <b>(a)</b>, the same three rules as the clock tree.
+          The links are <b>(c)</b>. The reference draws straight step links
+          across the hollow center in screen space. A link inside a coord is
+          drawn in the coord's space, so it bends with the circle.
+        </p>
+        <div class="callout">
+          To match, a link needs a route that is drawn in screen space while its
+          ends stay on marks placed in the polar space.
+        </div>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / ClockTreeWithLink, before.
+const bandHeight = 60;
+rect({ w: datum(1), h: bandHeight /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. The same rule as ClockTree. The links are unchanged.
+const LEVELS = 3;
+rect({ w: datum(1), h: datum(LEVELS - d.depth) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0, order: &quot;reverse&quot; },
+    y: { kind: &quot;align&quot;, alignment: &quot;end&quot; },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;end&quot; },
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Sector tree <span class="ev exact">fixed</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-sector-tree.png"
+              alt="Sector tree: reference, before, after"
+            />
+            <figcaption>
+              Arcs centered on 6 o'clock, the root the outer circle.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> The dsl sets <code>PolarAxis: x-axis</code>, which puts the
+          layout's X on the radius and its Y on the angle. The port drew a
+          sunburst instead. GoFish's polar always reads x as θ, but the swap is
+          still easy to write: the X relations go on <code>y</code> and the Y
+          relations on <code>x</code>. The reference has more nodes (d).
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / SectorTree, before: one ring per depth.
+rect({ w: datum(1), h: 8 /* ... */ }); // leaves; internal nodes have no w
+mount({
+  parentChild: combine({
+    x: { kind: &quot;nest&quot;, pad: 0 },
+    y: { kind: &quot;distribute&quot;, spacing: 35 },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. PolarAxis: x-axis puts the dsl&#x27;s X on r and its Y on θ, so the X
+// relations go on `y` and the Y relations on `x`.
+const LEVELS = 3;
+rect({ w: datum(LEVELS - d.depth), h: datum(1) /* ... */ });
+mount({
+  parentChild: combine({
+    x: { kind: &quot;align&quot;, alignment: &quot;middle&quot; }, // Y Root: within
+    y: { kind: &quot;distribute&quot;, spacing: 0, order: &quot;reverse&quot; }, // X Root: juxtapose
+  }),
+  sibling: combine({
+    x: { kind: &quot;align&quot;, alignment: &quot;middle&quot; }, // Y Subtree: align
+    y: { kind: &quot;distribute&quot;, spacing: 0 }, // X Subtree: flatten
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Sector tree 2 <span class="ev exact">fixed</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-sector-tree2.png"
+              alt="Sector tree 2: reference, before, after"
+            />
+            <figcaption>
+              The root is the left half, and the leaves split the radius.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          <b>(a)</b> The same axis swap as the sector tree. The levels run
+          around the angle and the leaves along the radius. The reference's tree
+          is three levels deep with uneven fan-out, and the port keeps a
+          balanced tree four levels deep, so it has one more angular slot (d).
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / SectorTree2, before: a sunburst with gaps.
+rect({ w: datum(1), h: 42 /* ... */ }); // leaves; internal nodes have no w
+mount({
+  parentChild: combine({
+    x: { kind: &quot;nest&quot;, pad: 0 },
+    y: { kind: &quot;distribute&quot;, spacing: 42 },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 },
+    y: { kind: &quot;align&quot;, alignment: &quot;middle&quot; },
+  }),
+  coord: Coord.clock(),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. PolarAxis: x-axis, so the X relations go on `y` (r) and the Y
+// relations on `x` (θ). A node of height h takes 2^(h-1) angular slots.
+const slots = (d: any) =&gt; (d.height === 0 ? 1 : 2 ** (d.height - 1));
+rect({ w: datum(slots(d)), h: datum(1) /* ... */ }); // leaves
+rect({ w: datum(slots(d)) /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 }, // Y Root: juxtapose
+    y: { kind: &quot;nest&quot;, pad: 0 }, // X Root: include
+  }),
+  sibling: combine({
+    x: { kind: &quot;align&quot;, alignment: &quot;start&quot; }, // Y Subtree: align
+    y: { kind: &quot;distribute&quot;, spacing: 0 }, // X Subtree: flatten
+  }),
+  coord: Coord.polar({ baselineAngle: Math.PI / 2 }), // counter-clockwise from 12
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Tornado trees <span class="ev no">still differ</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-tornado-tree.png"
+              alt="Tornado tree: reference, before, after"
+            />
+            <figcaption>Tornado tree. The root is the outer circle.</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-tornado-tree2.png"
+              alt="Tornado tree 2: reference, before, after"
+            />
+            <figcaption>
+              Tornado tree 2. The root is the dot at the center.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          The axes were <b>(a)</b>. Both use <code>PolarAxis: x-axis</code>,
+          which the port had ignored, and placed nodes by hand-set pitches with
+          the <code>emX</code> flag. The rewrite uses the swap and has no flags
+          or hand numbers. What is left is <b>(c)</b>. The dsl overlaps each
+          sibling with the one before it by 46% of its length (<code
+            >Margin -0.46</code
+          >), which winds the spiral tighter.
+        </p>
+        <div class="callout">
+          To match, a gap needs to be writable as a negative share of the
+          children's own size. A box gap today is pixels, a percent of the room,
+          or a non-negative <code>fr</code>.
+        </div>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / TornadoTree, before. TornadoTree2 was the same with
+// other numbers.
+rect({ w: 0.13, h: 59, emX: true /* ... */ }); // leaves
+rect({ w: 0.13, emX: true /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: Spacing.pitch(0.55, { at: &quot;middle&quot; }) },
+    y: { kind: &quot;nest&quot;, pad: 44 },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: Spacing.pitch(0.42, { at: &quot;middle&quot; }) },
+    y: { kind: &quot;distribute&quot;, spacing: Spacing.pitch(44, { at: &quot;middle&quot; }) },
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. PolarAxis: x-axis, so the X relations go on `y` (r) and the Y
+// relations on `x` (θ). No flags and no hand numbers.
+rect({ w: datum(1), h: datum(1) /* ... */ }); // leaves
+rect({ h: datum(1) /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: &quot;nest&quot;, pad: 0 }, // Y Root: include
+    // X Root: juxtapose, bottom-up. TornadoTree2 (PolarCenter: left) leaves
+    // out `order: &quot;reverse&quot;`, so its root is at the center.
+    y: { kind: &quot;distribute&quot;, spacing: 4, order: &quot;reverse&quot; },
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 }, // Y Subtree: flatten
+    y: { kind: &quot;distribute&quot;, spacing: 4 }, // X Subtree: flatten
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Violin tree <span class="ev no">still differs</span></h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-violin-tree.png"
+              alt="Violin tree: reference, before, after"
+            />
+            <figcaption>
+              The root wedge reaches from the center to the rim just after 12,
+              and the rest spiral inward.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          The order was <b>(a)</b>. The port placed nodes by pitches with
+          <code>emX</code>, and its parents were centered over their children
+          instead of after them. The rewrite gives each node its own slot,
+          parent after children, counter-clockwise from 12. The steps are wider
+          than the reference's for the same reason as the tornado trees,
+          <b>(c)</b>, and the port's tree is smaller (d).
+        </p>
+        <div class="callout">
+          To match, the same negative gap as the tornado trees.
+        </div>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / ViolinTree, before.
+const LEAF_THETA = (2 * Math.PI) / 9;
+rect({ w: LEAF_THETA, h: d.data.value * 42, emX: true /* ... */ }); // leaves
+rect({ w: LEAF_THETA, emX: true /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: Spacing.pitch(0, { at: &quot;middle&quot; }) },
+    y: { kind: &quot;nest&quot;, pad: 18 },
+  }),
+  sibling: combine({
+    x: {
+      kind: &quot;distribute&quot;,
+      spacing: Spacing.pitch(LEAF_THETA, { at: &quot;middle&quot; }),
+    },
+    y: { kind: &quot;distribute&quot;, spacing: Spacing.pitch(0, { at: &quot;middle&quot; }) },
+  }),
+  coord: Coord.clock(),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. Each node takes its own angular slot, parent after children.
+rect({ w: datum(1), h: datum(1) /* ... */ }); // leaves
+rect({ w: datum(1) /* ... */ }); // internal nodes
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0, order: &quot;reverse&quot; }, // X Root: juxtapose
+    y: { kind: &quot;nest&quot;, pad: 0 }, // Y Root: include
+  }),
+  sibling: combine({
+    x: { kind: &quot;distribute&quot;, spacing: 0 }, // X Subtree: flatten
+    // Y Subtree: flatten. PolarCenter: bottom puts the layout&#x27;s top at the rim.
+    y: { kind: &quot;distribute&quot;, spacing: 0, order: &quot;reverse&quot; },
+  }),
+  coord: Coord.polar({ baselineAngle: Math.PI / 2 }), // counter-clockwise from 12
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>
+          Side tree and spiral layout <span class="ev no">still differ</span>
+        </h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-side-tree.png"
+              alt="Side tree: reference, before, after"
+            />
+            <figcaption>Side tree.</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-spiral-layout.png"
+              alt="Spiral layout: reference, before, after"
+            />
+            <figcaption>Spiral layout.</figcaption>
+          </figure>
+        </div>
+        <p>
+          In both references the first branch starts at the start angle, so the
+          root's chain now writes <code>ends: [0, 1]</code>. That is the only
+          change. The rest is <b>(a)</b> and <b>(c)</b>. These stories place
+          circles by hand-set pitches in radians, and their links bend with the
+          circle, while the references draw straight links. A circle node gets
+          no angular room from the tree, which is the gap GALLERY.md lists
+          first.
+        </p>
+        <div class="callout">
+          To match, point nodes need angular room by leaf count, and links need
+          a straight route in screen space.
+        </div>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Gallery / SideTree and SpiralLayout, before: the root&#x27;s chain
+// around the turn took the default ends, half a gap at each end.
+mount({
+  parentChild: combine({
+    x: { kind: &quot;distribute&quot;, spacing: Spacing.pitch(0.5, { at: &quot;middle&quot; }) },
+    // ...
+  }),
+});</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. GoTree puts the first branch at the start angle, so no room
+// before it and a whole gap after the last.
+mount({
+  parentChild: combine({
+    x: {
+      kind: &quot;distribute&quot;,
+      spacing: Spacing.pitch(0.5, { at: &quot;middle&quot;, ends: [0, 1] }),
+    },
+    // ...
+  }),
+});</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>
+          Node-link sunburst and nested pie tree
+          <span class="ev close">cleaned up</span>
+        </h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/gt-nl-sunburst.png"
+              alt="Node-link sunburst: reference, before, after"
+            />
+            <figcaption>Sunburst. The normalized DOM is unchanged.</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-nl-nested-pietree.png"
+              alt="Nested pie tree: reference, before, after"
+            />
+            <figcaption>
+              Nested pie tree. The ring now closes and fills the canvas.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          Both stories sized wedges by hand in radians, and the sunburst also
+          set <code>emX</code>. They now give weights, which the coord fits. The
+          sunburst draws the same picture. The nested pie tree's hand sizes
+          added up to more than a full turn, so it had a seam at 12; now it
+          closes. Neither is a port of one gallery picture: the gallery's
+          NestedPieTree has many more leaves and alternates slice and dice by
+          depth (d).
+        </p>
+        <p class="label">Old code</p>
+        <pre><code class="language-typescript">// GoTree / Node-Link / Sunburst and NestedPietree, before.
+const leafTheta = (2 * Math.PI) / deepLeafCount;
+rect({ w: d.width * leafTheta, h: bandHeight, emX: true /* ... */ });
+// NestedPietree leaves, sized by hand to fit 2π with the pads and gaps
+const NPT_LEAF_W = Math.PI / 2 - 0.27;
+rect({ w: NPT_LEAF_W, h: 36 /* ... */ });</code></pre>
+        <p class="label prop">New code</p>
+        <pre><code class="language-typescript">// After. Weights, which the coord fits to the turn and the radius.
+rect({ w: datum(d.width), h: bandHeight /* ... */ });
+rect({ w: datum(1), h: datum(1) /* ... */ }); // NestedPietree leaves</code></pre>
+      </div>
+
+      <div class="card">
+        <h3>Stories not changed in this round</h3>
+        <p>
+          The reference beside the branch, with the main difference in each
+          caption.
+        </p>
+        <div class="strip wide">
+          <figure>
+            <img src="img/gt-outside-in-tree.png" alt="Outside-in tree" />
+            <figcaption>
+              Outside-in tree. Matches; the data differs (d).
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-multilevel-silhouette-tree.png"
+              alt="Multilevel silhouette tree"
+            />
+            <figcaption>
+              Multilevel silhouette tree. Close. A gap runs between the root
+              disc and the first ring, and the links bend (c).
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/gt-radial-tree.png" alt="Radial tree" />
+            <figcaption>Radial tree. Close; the links bend (c).</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-radial-tree-incline.png"
+              alt="Radial tree incline"
+            />
+            <figcaption>
+              Radial tree incline. Close; the links bend (c).
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/gt-radial-deep.png" alt="Radial deep" />
+            <figcaption>
+              Radial deep. Close; curved links are drawn straight (c).
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-radial-phylogenetic-tree.png"
+              alt="Radial phylogenetic tree"
+            />
+            <figcaption>Radial phylogenetic tree. Close.</figcaption>
+          </figure>
+          <figure>
+            <img src="img/gt-rotation-tree.png" alt="Rotation tree" />
+            <figcaption>
+              Rotation tree. Close; the arc links are approximated (c).
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-nl-radial-nodes.png"
+              alt="Node-link radial nodes"
+            />
+            <figcaption>
+              Node-link radial nodes. Does not match. Every level uses the same
+              pitch, a third of a turn, so the fans wrap around (a).
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/gt-deep-tree.png" alt="Deep tree" />
+            <figcaption>
+              Deep tree. Its reference is cartesian; its dsl.json is a copy of
+              the sunburst's.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/gt-flower-tree.png" alt="Flower tree" />
+            <figcaption>
+              Flower tree. Does not match. Circles nest on one axis, which a
+              circle cannot do (c).
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/gt-oak-tree-vis.png" alt="Oak tree" />
+            <figcaption>
+              Oak tree. Does not match. It needs the axis swap and straight step
+              links (a, c).
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-orthogonal-grid-embedding.png"
+              alt="Orthogonal grid embedding"
+            />
+            <figcaption>
+              Orthogonal grid embedding. Does not match; orthogonal links are
+              drawn straight (c).
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/gt-nested-pie-tree.png"
+              alt="Nested pie tree, gallery port"
+            />
+            <figcaption>
+              Nested pie tree (gallery port). The port is cartesian and the
+              reference is polar (a). Its gallery description calls it
+              cartesian, so changing it is the maintainer's call.
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+
+    <h3>Layout questions</h3>
     <div class="gallery">
       <!-- O1 -->
       <div class="card">
@@ -834,9 +1586,14 @@ layer({ coord: Coord.clock(), w: 360, h: 320 }, [
           </div>
         </details>
         <p>
-          The default turns four GoTree stories by half their root gap:
-          side-tree, spiral-layout, tornado-tree and tornado-tree2. The
-          tornado's SVG also changes size, from 505 by 390 px to 426 by 456 px.
+          When this question was written, the default turned four GoTree stories
+          by half their root gap: side-tree, spiral-layout, tornado-tree and
+          tornado-tree2. The pictures below are from then. Since the GoTree
+          rework above, the tornado trees have no gaps on the angle, so the
+          default does not touch them. The side tree and the spiral layout now
+          write <code>ends: [0, 1]</code> on the root's chain themselves,
+          because in both GoTree references the first branch starts at the start
+          angle.
         </p>
         <div class="strip wide">
           <figure>
@@ -874,7 +1631,9 @@ layer({ coord: Coord.clock(), w: 360, h: 320 }, [
           </figure>
         </div>
         <details class="code">
-          <summary>The tornado tree's spec, unchanged by the branch</summary>
+          <summary>
+            The tornado tree's spec at the time, since rewritten
+          </summary>
           <div class="inner">
             <pre><code class="language-typescript">// GoTree / Gallery / TornadoTree, as on the branch. Every node is 0.13 rad
 // wide, and pitches between centers place it along the angle.
@@ -930,14 +1689,16 @@ barsWith(Spacing.box(fr(1), { ends: 0.5 }));
 barsWith(Spacing.box(fr(1), { ends: 1 }));</code></pre>
         <div class="callout">
           <b>Fork: the default on a glued axis.</b> (a) Keep half a gap at each
-          end and accept that the four GoTree stories turn. (b) Keep half a gap
-          at each end, and GoTree's lowering writes <code>ends: [0, 1]</code> on
-          the root's sibling chain, so the four stories keep their pictures. (c)
-          Make a whole gap at the end the default. That is a one-line change in
-          the library, and the pie and chord then match d3's layouts rather than
-          d3.arc.<br />Recommended: (b). Half a gap at each end is what d3.arc
-          draws and what a pie user sees, and the GoTree stories are better
-          fixed in GoTree, which knows that its root is a tree and not a pie.
+          end, and each GoTree story that needs it writes
+          <code>ends: [0, 1]</code> itself, as the side tree and the spiral
+          layout now do. (b) Keep half a gap at each end, and GoTree's lowering
+          writes <code>ends: [0, 1]</code> on the root's sibling chain, so the
+          stories need not. (c) Make a whole gap at the end the default. That is
+          a one-line change in the library, and the pie and chord then match
+          d3's layouts rather than d3.arc.<br />Recommended: (b). Half a gap at
+          each end is what d3.arc draws and what a pie user sees, and the GoTree
+          stories are better fixed in GoTree, which knows that its root is a
+          tree and not a pie.
         </div>
         <pre><code class="language-typescript">// Option (b), a sketch, not run: GoTree&#x27;s lowering adds `ends: [0, 1]` to
 // the sibling chain of the root only, where the chain fills the turn.
@@ -1015,9 +1776,13 @@ chart(nightingale, { coord: Coord.clock(), axes: true, padding: 40 /* ... */ })
   .mark(rect({ h: &quot;Death&quot;, fill: &quot;Type&quot; }));</code></pre>
 
         <p>
-          Seven stories still set a flag. Each pair below is the branch with its
-          flag, then the same story with the flag removed, rendered in a
-          throwaway copy of the branch.
+          When this question was written, seven stories set a flag. Each pair
+          below is the branch with its flag, then the same story with the flag
+          removed, rendered in a throwaway copy of the branch. Since then the
+          GoTree rework above removed the flag from the tornado trees, the
+          violin tree and the node-link sunburst, and the balloon chart dropped
+          its flag too. The multilevel silhouette tree and the outside-in tree
+          still set one.
         </p>
         <h4>(i) Widths placed by a pitch</h4>
         <p>
@@ -1240,15 +2005,16 @@ const parentChild = (children: any[]) =&gt; {
 };</code></pre>
         <p>
           Recommended for (i) and (iii): rewrite each to relations that fix both
-          edges, story by story, and drop the flag only where the picture is the
-          same. The node-link sunburst can go now. The tornado and violin trees
-          need more work first.
+          edges, story by story. That is now done. The tornado and violin trees
+          were rewritten from their GoTree specs, with the axis swap and weights
+          in place of pitches, and the node-link sunburst gives its wedges
+          weights.
         </p>
         <p class="note">
           <code>emX</code> and <code>emY</code> cannot be deleted from the API
-          yet, since the seven stories above still use them. The
-          <code>embed()</code> that <code>connect</code> uses inside the library
-          stays either way.
+          yet, since the multilevel silhouette tree and the outside-in tree
+          still use them. The <code>embed()</code> that
+          <code>connect</code> uses inside the library stays either way.
         </p>
       </div>
 
@@ -1754,7 +2520,10 @@ layer([
               src="img/rev2-main-vs-branch-violin-tree.png"
               alt="Violin tree"
             />
-            <figcaption>Violin tree. Same picture.</figcaption>
+            <figcaption>
+              Violin tree. Same picture. Since rewritten; see the GoTree cards
+              above.
+            </figcaption>
           </figure>
           <figure>
             <img
@@ -1782,6 +2551,7 @@ layer([
               Icicle plot in polar. The root now shows as a disc at the center.
               Its reference is a cartesian icicle, whose top band is the root.
               The rings around the root sit at uneven radii, as they do on main.
+              Since fixed: see the GoTree cards above.
             </figcaption>
           </figure>
           <figure>
@@ -1790,8 +2560,9 @@ layer([
               alt="Sector tree 2"
             />
             <figcaption>
-              Sector tree 2. The root now shows as a dark disc at the center, as
-              in the GoTree reference image.
+              Sector tree 2. The root now shows as a dark disc at the center.
+              The reference's root is the left half-disc; the GoTree cards above
+              show the story rewritten to match.
             </figcaption>
           </figure>
           <figure>
@@ -1823,7 +2594,8 @@ layer([
             <figcaption>
               Sector tree. The root now shows as an 8 px circle at the center.
               The GoTree reference draws the root as the outer circle, because
-              its rings run the other way.
+              its rings run the other way. The GoTree cards above show the story
+              rewritten to match.
             </figcaption>
           </figure>
           <figure>
@@ -1837,8 +2609,8 @@ layer([
               bottom, and it was clipped on main too, with the same warning that
               it draws past the canvas. The story's four bands are sized by hand
               in pixels and need 224 px of radial room, and the canvas gives
-              187.5 px. That is a problem in the story's spec, and it is not
-              fixed here.
+              187.5 px. That was a problem in the story's spec. It is fixed in
+              the GoTree cards above.
             </figcaption>
           </figure>
           <figure>
@@ -1858,6 +2630,7 @@ layer([
             />
             <figcaption>
               Tornado tree. Turned by the end spacing default, open question 2.
+              Since rewritten; see the GoTree cards above.
             </figcaption>
           </figure>
           <figure>
@@ -1867,7 +2640,7 @@ layer([
             />
             <figcaption>
               Tornado tree 2. Turned by the end spacing default, open question
-              2.
+              2. Since rewritten; see the GoTree cards above.
             </figcaption>
           </figure>
         </div>

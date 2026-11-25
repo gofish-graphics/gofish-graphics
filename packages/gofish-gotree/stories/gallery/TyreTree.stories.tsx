@@ -4,12 +4,7 @@ import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
 
-// A *balanced* binary tree (depth 3 → 8 leaves, 4 levels). Balance matters: with
-// align-r the radial bands only line up into clean concentric rings when every
-// leaf sits at the same depth. An UNEVEN tree (mixed leaf depths) under align-r
-// makes the radial domain inconsistent across subtrees and the angular budget
-// overflows 2π, so the outer wedges wrap into a spiral — a real limitation of
-// the no-auto-fit polar() (see NOTES). 8 leaves → leafTheta = 2π/8 ties out.
+// A balanced binary tree (depth 3 → 8 leaves, 4 levels).
 const sampleTree = (() => {
   const make = (depth: number, prefix = "root"): any =>
     depth === 0
@@ -23,98 +18,62 @@ const sampleTree = (() => {
         };
   return make(3);
 })();
+const LEVELS = 4; // root + 3 levels
 
 // GoTree gallery port — TyreTree (concentric tyre-like rings of wedges, where a
-// parent's wedge *includes* its children radially: the outermost ring is the
-// root, and each level nests one band further toward the center).
+// parent's wedge *includes* its children radially).
 //
 // dsl.json:
 //   Layout AxisIndependent, Mode bottom-up
 //     X.Root = include   → parentChild θ : parent SPANS its children's arc  → nest θ
 //     X.Subtree = flatten → sibling θ     : siblings packed around the circle → distribute θ
 //     Y.Root = within     → parentChild r : child band lies WITHIN the parent's → align r
-//     Y.Subtree = align   → sibling r      : siblings share the same radial edge → align r
+//     Y.Subtree = align   → sibling r      : siblings share the same band → align r
 //   CoordinateSystem polar, PolarCenter bottom, InnerRadius 0.25
 //   Element Node=rectangle, RootWidth=value, RootHeight=rdepth, Color=depth
 //
-// Under polar(): x = θ (radians, 0..2π), y = r (radius). So the brief mapping is
-//   parentChild = (nest θ, align r) ; sibling = (distribute θ, align r).
+// Under polar(): x = θ, y = r. So parentChild = (nest θ, align r) and
+// sibling = (distribute θ, align r).
 //
-// ── HOW THE TYRE FORMS (the "inclusion" of the dsl) ──────────────────────────
-// Unlike the sunburst/icicle (where each depth gets its OWN ring via distribute-r),
-// here every node is ALIGNED on r at the same INNER edge and its radial height
-// encodes its reverse-depth (rdepth = d.height in d3-hierarchy = edges to the
-// deepest descendant). A node at rdepth k spans (k + 1) bands OUTWARD from the
-// shared inner edge:
-//   - root        → tallest wedge, reaches from the inner edge all the way out;
-//   - its children → shorter, drawn ON TOP, covering the inner bands;
-//   - leaves      → one band, innermost (drawn last, on top).
-// Because the recursion paints the parent first and the child group on top
-// (renderSubtree → parentChild([parent, childGroup])), each shallower level is
-// progressively overpainted toward the center, leaving the outer rim showing
-// only the root, the next band in root+depth-1, and so on — the concentric
-// "tyre". That radial inclusion is exactly the dsl's Y.Root=within / X.Root=
-// include pair (parent's wedge spatially CONTAINS its subtree's).
+// HOW THE TYRE FORMS. Every node is CENTERED on the same radius ("within"),
+// and its radial thickness is its reverse depth (RootHeight: rdepth, the number
+// of levels from its depth down to the deepest one). The root is the thickest
+// wedge; each child group is drawn on top of its parent and is one level
+// thinner, so the parent shows as a band on BOTH sides of it: the root is the
+// dark rim outside and the dark ring around the hub, and each depth-1 wedge
+// shows inside and outside its leaves. This is the reference picture.
 //
-// ── EMBEDDED-DIMENSION WEDGE (the hard part) ─────────────────────────────────
-// A wedge SWEEPS in θ, so the θ-dimension is embedded in the node's width:
-//   w = d.width * leafTheta   (d.width = leaf count from d3-hierarchy)
-//   h = (d.height + 1) * band (pixels)   (rdepth → radial extent, leaves ≥1 band)
-// A data width (or none) is a length of the polar space, measured in radians.
-// The pixel height is laid off along the radius, which polar does not
-// stretch, so each node draws as an annular sector. Because each node's
-// angular width is its leaf-count share, a parent's width equals the sum of its
-// children's widths automatically — so nest-θ (pad 0) and the embedded width
-// agree, and the parent wedge spans exactly its subtree's arc (RootWidth=value).
+// SIZES. Leaves carry a unit θ weight and internal nodes none (nest grows each
+// to its children's arc); every node carries its rdepth as a radial weight. The
+// coord fits both to the room between the hub and the rim.
 //
-// ── POLAR LIMITATIONS (no hacks; flagged, not faked) ─────────────────────────
-//  - InnerRadius 0.25 — APPLIED via `polar({ innerRadius: 0.25 })`: the donut
-//    hub. The concentric depth bands now ring a 25%-radius hollow center instead
-//    of filling to r=0 (the headline "tyre" gap, now closed).
-//  - Still NOT expressible (flagged, not faked):
-//     · PolarCenter "bottom" — polar()'s `center` is a screen-space offset, not a
-//       semantic "bottom" pin; left centered here (cosmetic).
-//     · Direction / StartAngle / CentralAngle — polar() now has these knobs but
-//       this chart's spec only customizes InnerRadius; kept at defaults.
-//     · no θ/r axis swap (no transposed variant; PolarAxis swap not expressible).
-//  - Angular AUTO-FIT (#618): leaves carry a unit `w` (θ) weight, nest-θ grows
-//    each parent to its children's arc, and the coord fits the summed weights to
-//    the circle — so the disc closes for any tree with no hand-set leafTheta.
-//  - REQUIRES a depth-balanced tree: align-r needs every leaf at the same depth
-//    so the radial bands line up. A mixed-depth tree makes the per-subtree r
-//    extents disagree and the angular budget overflows 2π (outer wedges spiral).
-//    The dsl's bottom-up adaptive layout would absorb that; our hand-budgeted
-//    polar() cannot, so we use a balanced tree (see sampleTree above).
-//  - Link is "none": a filled-wedge inclusion tree draws no links (the dsl has no
-//    link element either); polar links only support linear interpolation anyway.
+// NOTES:
+//  - PolarCenter "bottom" is a polar-space anchor, which polar()'s screen-space
+//    `center` does not cover; the disc stays centered (cosmetic).
+//  - RootWidth=value: this tree has no values, so each leaf weighs 1.
+//  - Link is "none": a filled-wedge inclusion tree draws no links.
 const meta: Meta = {
   title: "GoTree / Gallery / TyreTree",
 };
 export default meta;
 
-// Sequential blue ramp, dark at the root (outer rim) → light at the leaves
-// (inner), matching the reference. Color = depth.
+// Sequential blue ramp, dark at the root → light at the leaves. Color = depth.
 const tyreBlues = ["#08306b", "#2171b5", "#6baed6", "#c6dbef", "#deebf7"];
 
-const band = 56; // radial thickness of one inclusion band
+// Reverse depth: the root spans every level, a leaf one.
+const rdepth = (d: any) => LEVELS - d.depth;
 
-// θ auto-fit (#618): leaves carry a unit angular weight; internal nodes leave θ
-// unsized so nest-θ grows each to its children's combined arc (no double-count —
-// only leaves are sized). The coord fits the summed leaf weights to the circle.
-// r-dimension embedded: rdepth → (height+1) bands, so a parent's wedge is taller
-// than (and, pinned to the same inner edge via align-r start, encloses) its
-// children's.
 const node = (d: any) =>
   d.height === 0
     ? rect({
         w: datum(1),
-        h: (d.height + 1) * band,
+        h: datum(rdepth(d)),
         fill: byDepth(tyreBlues)(d),
         stroke: "white",
         strokeWidth: 2,
       })
     : rect({
-        h: (d.height + 1) * band,
+        h: datum(rdepth(d)),
         fill: byDepth(tyreBlues)(d),
         stroke: "white",
         strokeWidth: 2,
@@ -135,23 +94,19 @@ export const TyreTree: StoryObj = {
       {
         node,
         link: "none",
-        // parentChild: nest θ realizes the dsl's X.Root=include (parent's arc
-        // spans its children's). Only LEAVES are θ-sized (unit weight); internal
-        // nodes are unsized so nest grows them to the subtree arc — no double-
-        // count. align r "start" pins every node's INNER edge to the same radius,
-        // so the taller (lower-depth) wedge reaches OUTWARD past its children —
-        // the radial "within" inclusion that makes the root the outer rim.
+        // parentChild: nest θ (the parent's arc spans its children's) + align
+        // r middle (the child group sits centered WITHIN the parent's band).
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
-          y: { kind: "align", alignment: "start" },
+          y: { kind: "align", alignment: "middle" },
         }),
         // sibling: distribute θ (pack siblings around the circle) + align r
-        // "start" (siblings share the same inner edge / band).
+        // middle (siblings share one center radius).
         sibling: combine({
           x: { kind: "distribute", spacing: 0 },
-          y: { kind: "align", alignment: "start" },
+          y: { kind: "align", alignment: "middle" },
         }),
-        // InnerRadius:0.25 — the donut hole (tyre hub). Now expressible.
+        // InnerRadius:0.25 — the donut hole (tyre hub).
         coord: Coord.clock({ innerRadius: 0.25 }),
       },
       sampleTree

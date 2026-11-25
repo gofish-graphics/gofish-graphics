@@ -8,6 +8,7 @@ import {
   Coord,
   Curve,
   Spacing,
+  datum,
 } from "gofish-graphics";
 import { tree, nest, distribute } from "../src";
 
@@ -301,10 +302,11 @@ export const LabeledNestedBoxes: StoryObj<Args> = {
 //    handles radial placement; `distribute({dir: "x"})` for sibling
 //    handles angular placement. Neither touches the other axis.
 //
-// 2. Each node's width is `d.width * leafTheta` (where d.width is the
-//    HierarchyDatum's leaf count, from d3-hierarchy's `.leaves().length`).
-//    With leafTheta = 2π / N_leaves, root spans the full disc, depth-1
-//    spans half each, leaves span a quadrant each. Wedges line up.
+// 2. Each node's width is an angular weight, `datum(d.width)`, where d.width
+//    is the HierarchyDatum's leaf count (d3-hierarchy's `.leaves().length`).
+//    The coord fits the weights to the full turn, so the root spans the
+//    whole disc, each depth-1 node half of it, and each leaf one sixteenth.
+//    Wedges line up.
 const polarGreens = ["#3c7c3c", "#7fb37f", "#a8d9a8", "#c8e6c8"];
 
 const polarBalancedTree = {
@@ -331,15 +333,12 @@ const deepBalancedTree = (() => {
   return make(4);
 })();
 
-const deepLeafCount = 16; // 2^4
-const leafTheta = (2 * Math.PI) / deepLeafCount; // sunburst leaf theta extent
 const bandHeight = 38; // radial thickness per tree level
 
 const sunburstNode = (d: any) =>
   rect({
-    w: d.width * leafTheta,
+    w: datum(d.width),
     h: bandHeight,
-    emX: true,
     fill: polarGreens[Math.min(d.depth, polarGreens.length - 1)],
     stroke: "white",
     strokeWidth: 2,
@@ -426,31 +425,19 @@ export const IciclePlot: StoryObj<Args> = {
 // adjacent radial bands of the sunburst. So in this layout the leaves are
 // at the smallest radii (innermost) and root spans the full disc.
 //
-// Leaf width is the deepest level's theta share (here π/2 for 4 leaves);
-// internals have no fixed dims so nest grows them to inner.intrinsicDims
-// + 2 * padding. White stroke gives visible separation between nested
-// wedges.
-// Cartesian-x must fit inside polar's [0, 2π] domain — overflow wraps and
-// produces visual artifacts. For the balanced 2x2 tree the budget is:
-//   4·leafW + 4·sibSpacing + 6·xPad = 2π
-// (4 leaves; 4 sibling gaps total — 3 inside each subtree row plus 1
-// inter-subtree gap; 2 nest levels × 2 sides per level = 4 inner nest
-// edges plus the root nest's 2 outer edges = 6).
-//
-// The library doesn't auto-fit yet — Constraint.distribute and
-// Constraint.nest don't participate in the spread operator's
-// sharedScale/Monotonic-inversion fitting path. Sizes are hand-computed.
-// Tracked in https://github.com/gofish-graphics/gofish-graphics/issues/475
-const NPT_LEAF_W = Math.PI / 2 - 0.27; // ≈ 1.30 rad
-const NPT_SIB = 0.08;
-const NPT_X_PAD = 0.13;
-// Budget check: 4 * 1.30 + 4 * 0.08 + 6 * 0.13 ≈ 6.30 ≈ 2π ✓
+// Each leaf carries a unit angular weight, `w: datum(1)`; internals have no
+// fixed dims so nest grows them to their children's extent + 2 * padding.
+// The coord fits the leaf weights, with the gaps and pads (radians) taken
+// out first, to the full turn, so the root wedge closes into a ring. White
+// stroke gives visible separation between nested wedges.
+const NPT_SIB = 0.08; // gap between sibling wedges (radians)
+const NPT_X_PAD = 0.13; // angular pad inside each parent wedge (radians)
 
 const nestedPieNode = (d: any) =>
   d.height === 0
     ? rect({
-        w: NPT_LEAF_W,
-        h: 36,
+        w: datum(1),
+        h: datum(1),
         fill: polarGreens[polarGreens.length - 1],
         stroke: "white",
         strokeWidth: 4,

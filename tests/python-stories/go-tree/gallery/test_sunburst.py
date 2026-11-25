@@ -51,14 +51,14 @@ def story_sunburst():
             parent_child=combine(
                 # theta: parent wedge encloses its subtree's arc (pad 0 -> exact tiling).
                 x={"kind": "nest", "pad": 0},
-                # r: parent inner ring, child group one ring out.
-                y={"kind": "distribute", "spacing": BAND_HEIGHT},
+                # r: parent inner ring, child group on the next ring out.
+                y={"kind": "distribute", "spacing": 0},
             ),
             sibling=combine(
                 # theta: siblings tile their parent's arc (edge mode sums theta-widths).
                 x={"kind": "distribute", "spacing": 0},
-                # r: siblings share the same ring.
-                y={"kind": "align", "alignment": "middle"},
+                # r: siblings start on the same ring (their inner edges align).
+                y={"kind": "align", "alignment": "start"},
             ),
             coord=Coord.clock(),
         ),

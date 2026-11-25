@@ -4,67 +4,63 @@ from gofish import Coord, datum, rect
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import by_depth
 
-SECTOR_BLUES = [
-    "#eff6fb",
-    "#d6e7f3",
-    "#b6d4ea",
-    "#8fbfe0",
-    "#6aa8d6",
-    "#4a90c8",
-    "#2f78b8",
-]
+# Light (leaves) -> blue (root), the reference's ramp.
+SECTOR_BLUES = ["#2171b5", "#84aed8", "#deebf7"]
 
 
-# Balanced binary tree, 6 levels deep.
-def make(depth, prefix=""):
-    if depth == 0:
-        return {"name": prefix}
-    return {
-        "name": prefix or "root",
-        "children": [make(depth - 1, prefix + "L"), make(depth - 1, prefix + "R")],
-    }
+def branch(p, n):
+    return [{"name": f"{p}{i}"} for i in range(n)]
 
 
-DEEP_BALANCED_TREE = make(6)
+# A three-level tree with uneven fan-out, like the reference.
+SECTOR_TREE = {
+    "name": "root",
+    "children": [
+        {"name": "a", "children": branch("a", 3)},
+        {"name": "b"},
+        {"name": "c", "children": branch("c", 4)},
+        {"name": "d", "children": branch("d", 2)},
+        {"name": "e"},
+        {"name": "f", "children": branch("f", 3)},
+        {"name": "g", "children": branch("g", 1)},
+        {"name": "h", "children": branch("h", 4)},
+    ],
+}
+LEVELS = 3  # root + 2 levels
 
-RING_THICKNESS = 8  # thin radial band (approximates StaticThickness 2)
-RING_GAP = 35  # radial gap between consecutive rings
 
-
-# Leaves carry a unit angular weight; internal nodes leave theta unsized so
-# the nest grows them to their children's combined arc.
+# Thin arc: theta extent = reverse depth, r extent = one unit.
 def node(d):
-    if d["height"] == 0:
-        return rect(
-            w=datum(1),
-            h=RING_THICKNESS,
-            fill=by_depth(SECTOR_BLUES)(d),
-            stroke="#2f78b8",
-            stroke_width=0.75,
-        )
     return rect(
-        h=RING_THICKNESS,
+        w=datum(LEVELS - d["depth"]),
+        h=datum(1),
         fill=by_depth(SECTOR_BLUES)(d),
-        stroke="#2f78b8",
-        stroke_width=0.75,
+        stroke="white",
+        stroke_width=1,
     )
 
 
 def story_sector_tree():
     return (
         tree(
-            DEEP_BALANCED_TREE,
+            SECTOR_TREE,
             node=node,
             link="none",
+            # PolarAxis x-axis: the layout's X relations go on r (y here) and
+            # its Y relations on theta (x here).
             parent_child=combine(
-                x={"kind": "nest", "pad": 0},
-                y={"kind": "distribute", "spacing": RING_GAP},
+                # theta: the child group centered within the parent's arc.
+                x={"kind": "align", "alignment": "middle"},
+                # r: the child group, then the parent outside it (bottom-up).
+                y={"kind": "distribute", "spacing": 0, "order": "reverse"},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 0},
-                y={"kind": "align", "alignment": "middle"},
+                # theta: centered on the same angle.
+                x={"kind": "align", "alignment": "middle"},
+                # r: one after another outward.
+                y={"kind": "distribute", "spacing": 0},
             ),
             coord=Coord.clock(),
         ),
-        {},
+        {"w": 540, "h": 540},
     )
