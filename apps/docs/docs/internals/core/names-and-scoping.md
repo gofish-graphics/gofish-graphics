@@ -347,7 +347,8 @@ The layer cannot move `mercury` on its own: the spread already placed it inside
 `planets`. So a nested operand is **rigidly attached** to the direct child that
 contains it (its container). `NestedOperand` (`constraints/nestedOperand.ts`)
 stands in for it in the solve: its box is the container's box plus a constant
-offset, taken from the container's finished layout (`nestedGap`). For each axis
+offset, taken from the container's finished layout (`nestedGap`). A layer builds
+the stand-ins of its nested operands in `operandPlaceables`. For each axis
 the operand takes part in, the solve adds one relation that ties the operand's
 `start` to the container's `start` at that offset.
 

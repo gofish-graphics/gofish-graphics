@@ -23,7 +23,8 @@ import {
   type Placement,
 } from "../constraints/claimPlacement";
 import { type ConstraintSpec } from "../constraints";
-import type { ResolvedOperands } from "../constraints/shared";
+import type { ResolvedConstraints } from "../_ref";
+import type { AxisDirection } from "../axisDirection";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -150,7 +151,7 @@ const reaching = (e: Extent, from: Extent, to: Extent): Extent =>
  * its own: a layer's literal start, a shape's start or center, a pixel or
  * a datum (`positionOf` in its layout), or a node its own layout places
  * from the refs it reads (`GoFishNode.placedByLayout`). Layout pins it
- * where it put itself, so the plan takes it there (`at:`). A child its own
+ * where it put itself, so the plan takes it there (`planInput.at`). A child its own
  * data places (a `region` in its cell) is the other kind of child the plan
  * leaves where it is (`placedByOwnData`, `ClaimChild.dataPositioned`).
  */
@@ -281,21 +282,21 @@ export const plotIn = (
  * envelope of their boxes, which is what layout lays out.
  *
  * `children` is what the claim walk knows of each child, with its claim as
- * its extent (`claimChildren` in `layer`). `nested` is where an operand
- * nested in a child lands in that child's own frame
- * (`planPlacementInChild`). `ring` says the layer is a ring of chrome, whose
- * children past the first are chrome.
+ * its extent (`claimChildren` in `layer`). An operand nested in a child
+ * lands where the plans from it up to that child put it in the child's own
+ * frame (`nestedPlacement`). `ring` says the layer is a ring of chrome,
+ * whose children past the first are chrome.
  */
 export function buildPlan(
   node: GoFishNode,
   axis: 0 | 1,
   children: ClaimChild[],
   constraints: readonly ConstraintSpec[],
-  { operands, keyOf }: ResolvedOperands,
-  nested: (key: string) => Placement | undefined,
+  { operands, keyOf }: Pick<ResolvedConstraints, "operands" | "keyOf">,
   ring: boolean,
   scale: number
 ): LayerPlan {
+  const nested = nestedPlacement(node, axis, operands);
   // A child placed where its refs land is placed by what it draws: its
   // forms are where it is placed, all of them box.
   const forms = children.map((c, i): ChildForms | undefined =>
@@ -649,7 +650,7 @@ export function planPlacement(
  * (`throughPlans`): its offset inside the container, which holds wherever
  * its parent's solve places the container. Undefined where no plan reaches.
  */
-export function planPlacementInChild(
+function planPlacementInChild(
   target: GoFishNode,
   container: GoFishNode,
   axis: 0 | 1
@@ -660,9 +661,23 @@ export function planPlacementInChild(
   return placementOf(...walked.at);
 }
 
+/** Where an operand nested in a child of `layer` lands in that child's own
+ *  frame on `axis` (`planPlacementInChild`), by its key. */
+const nestedPlacement =
+  (layer: GoFishNode, axis: 0 | 1, operands: ResolvedConstraints["operands"]) =>
+  (key: string): Placement | undefined => {
+    const op = operands.get(key);
+    const container = op && layer.children[op.child];
+    return op !== undefined &&
+      op.node instanceof GoFishNode &&
+      container instanceof GoFishNode
+      ? planPlacementInChild(op.node, container, axis)
+      : undefined;
+  };
+
 /** The node whose frame a `position` constraint of `layer` reads its
  *  datums in (`PositionOptions.in`), if it names one. */
-export const inTarget = (
+const inTarget = (
   c: ConstraintSpec,
   layer: GoFishNode
 ): GoFishNode | undefined => {
@@ -719,4 +734,41 @@ export function frameIn(
   const sign = flips(layer, child, axis) ? -1 : 1;
   const [zero, one] = pts.map((x) => (sign === 1 ? x : Pwl.negate(x)));
   return { key: target.uid, child: i, zero, unit: sub(one, zero) };
+}
+
+/**
+ * Where the frame each `position` with `in` of `layer` names sits as laid
+ * out (`InFrame`, which `frameIn` reads in the claim walk), by the uid of
+ * its node and the axis: its data 0 from the origin of the child of
+ * `layer` that holds it, and one data unit, in `layer`'s axis order
+ * (`direction`). A point of a node's frame is at `dir·(σ·v + originPx)` in
+ * its local pixels (a node that reads y upward stores it reflected), which
+ * each node between moves by its translate. Undefined where a node between
+ * is not placed yet.
+ */
+export function laidFrames(
+  layer: GoFishNode,
+  direction: AxisDirection
+): (uid: string, axis: 0 | 1) => [number, number] | undefined {
+  const inTargets = new Map<string, GoFishNode>();
+  for (const c of layer.constraints) {
+    const t = inTarget(c, layer);
+    if (t !== undefined) inTargets.set(t.uid, t);
+  }
+  return (uid, axis) => {
+    const t = inTargets.get(uid);
+    const frame = t?.layoutFrames?.[axis];
+    if (t === undefined || frame === undefined) return undefined;
+    const dirOf = (n: GoFishNode) => (axis === 0 ? 1 : n.yFrame.direction);
+    // Up to the child that holds `t`, whose own translate is its
+    // origin, which the plan adds.
+    let px = dirOf(t) * frame.originPx;
+    for (let n = t; n.parent !== layer; n = n.parent) {
+      const tr = n.projectedTranslate(axis);
+      if (n.parent === undefined || tr === undefined) return undefined;
+      px += tr;
+    }
+    const dir = axis === 0 ? 1 : direction;
+    return [dir * px, dir * dirOf(t) * frame.sigma];
+  };
 }

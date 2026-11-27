@@ -225,7 +225,8 @@ export function cellSpans(
  *      axis where its track has one, and the layer's box on any other;
  *   2. its room in a chain (`own`, where defined): a member of a chain with
  *      no size of its own is proposed its need (its claim at the layer's σ)
- *      plus its share of its chain's slack (`chainRooms` in `layer`, #1257);
+ *      plus its share of its chain's slack (`chainRooms` in
+ *      `constraints/distribute.ts`, #1257);
  *   3. default layer box: any other child is proposed the layer's room, or
  *      what dressing leaves of it for a part of its plot (`plotRooms` in
  *      `layer`). A child with a size of its own keeps it, and one without

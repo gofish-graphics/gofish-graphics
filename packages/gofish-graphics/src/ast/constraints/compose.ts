@@ -35,6 +35,7 @@
 // pin) is not modeled: such a layer is left to the default union too.
 
 import type { GoFishAST } from "../_ast";
+import { GoFishNode } from "../_node";
 import type { Cell } from "../cells";
 import { getValue } from "../data";
 import { Size } from "../dims";
@@ -48,6 +49,7 @@ import {
   mergeCells,
   type OrdinalKey,
   type UnitRecord,
+  isVisualized,
 } from "../underlyingSpace";
 import {
   resolveAlignmentSpace,
@@ -60,9 +62,12 @@ import {
   distributeChildrenInPlacementOrder,
   resolveBaseline,
   distributeSpaceFold,
+  stackPlaces,
   type DistributeConstraint,
   type StackBaseline,
+  type StackPlace,
 } from "./distribute";
+import { isConstant } from "../fun";
 import { type AlignConstraint } from "./align";
 import {
   axisCoordinates,
@@ -72,6 +77,7 @@ import {
 } from "./position";
 import {
   axisIndex,
+  axisName,
   directSlot,
   isPointAlign,
   type AlignAnchor,
@@ -650,4 +656,131 @@ export function composePlanSpaces(
         : UNDEFINED;
   }
   return spaces;
+}
+
+/**
+ * The part of a layer's space each child is in on `axis`, from `base`, the
+ * part each is in on its own, through the layer's `aligns`.
+ * A point `align` puts each operand's anchor exactly at its partners'
+ * anchors: it has no offset or gap (a chain's `spacing` is a
+ * `distribute`, not an align). So where a partner is in a continuous or
+ * ordinal part on the axis, the anchor is at a datum there, and an
+ * operand in no such part is in its partner's: it is at that datum, as
+ * a circle is, with a size of its own in pixels (a flower aligned to the
+ * end of its stem). A `"span"` align ties both endpoints, so both are at
+ * data and the operand is in its partner's part the same way. A
+ * `"size"` align ties only a length and leaves the position free, so no
+ * endpoint is at a datum and it joins nothing. Aligns chain, so this
+ * runs until nothing changes. A `ref` operand is in the part its target
+ * is in, in its target's layer (`refPart`: an index into `base`, or a
+ * part of another layer's; undefined for an operand that is no `ref`),
+ * and an align never moves it.
+ * TODO(#1053, #1054): a shortcut. A pixel offset on an aligned operand
+ * (a `.translate()` wrapper) would put its anchor at datum + pixels,
+ * which is in no data space; today the align's solve overrides that
+ * translate, so the anchor is at the datum and the operand joins.
+ * Once pixel offsets have their own semantics, an operand an align
+ * places with a pixel offset should stay out of its partner's part.
+ */
+export function alignedParts(
+  axis: 0 | 1,
+  base: UnderlyingSpace[],
+  aligns: readonly ConstraintSpec[],
+  resolved: ResolvedOperands,
+  refPart: (i: number) => number | UnderlyingSpace | undefined
+): UnderlyingSpace[] {
+  // Per align, the operands it puts in a part (no `ref`), and where
+  // each operand's part is read: an index into `parts`, or a part of
+  // another layer's.
+  const groups: {
+    moved: number[];
+    reads: (number | UnderlyingSpace)[];
+  }[] = [];
+  for (const c of aligns) {
+    const spec = c.type === "align" ? c[axisName(axis)] : undefined;
+    if (spec !== "span" && !isPointAlign(spec)) continue;
+    const moved: number[] = [];
+    const reads: (number | UnderlyingSpace)[] = [];
+    for (const r of c.children) {
+      const i = directSlot(resolved, r);
+      if (i === undefined) continue;
+      const home = refPart(i);
+      if (home !== undefined) reads.push(home);
+      else {
+        moved.push(i);
+        reads.push(i);
+      }
+    }
+    groups.push({ moved, reads });
+  }
+  if (groups.length === 0) return base;
+  const parts = [...base];
+  const read = (r: number | UnderlyingSpace) =>
+    typeof r === "number" ? parts[r] : r;
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const { moved, reads } of groups) {
+      let at: UnderlyingSpace | undefined;
+      for (const r of reads)
+        if (isVisualized(read(r))) {
+          at = read(r);
+          break;
+        }
+      if (at === undefined) continue;
+      for (const i of moved)
+        if (!isVisualized(parts[i])) {
+          parts[i] = at;
+          changed = true;
+        }
+    }
+  }
+  return parts;
+}
+
+/**
+ * Per axis, where each stack on that axis in `plan` lays a part whose
+ * offset changes along u (`stackPlaces`), by child index: the part draws
+ * its offset (`AxisScale.shear`), and the layer claims the part where it
+ * lies. A part whose offset is one number is placed by the solve
+ * instead (`lowerDistributePlacement`). A part that cannot draw a
+ * changing offset (a rect, a circle) is an error that names it.
+ */
+export function stackPlacesOf(
+  plan: ComposePlan | undefined,
+  children: Size<UnderlyingSpace>[],
+  childNodes: readonly GoFishAST[]
+): [Map<number, StackPlace>, Map<number, StackPlace>] {
+  const out: [Map<number, StackPlace>, Map<number, StackPlace>] = [
+    new Map(),
+    new Map(),
+  ];
+  for (const seg of plan?.segments ?? []) {
+    if (!seg.glue) continue;
+    const axis = seg.dAxis;
+    const nameOf = (k: number) =>
+      seg.keys[k] !== undefined ? `the part "${seg.keys[k]}"` : `part ${k + 1}`;
+    const places = stackPlaces(
+      seg.idx.map((i) => children[i][axis]),
+      seg.baseline
+    );
+    seg.idx.forEach((i, k) => {
+      if (isConstant(places[k].offset)) return;
+      const child = childNodes[i];
+      if (!(child instanceof GoFishNode) || child.shearAxis !== axis) {
+        const what = child instanceof GoFishNode ? child.type : "reference";
+        const across = axisName(axis === 0 ? 1 : 0);
+        throw new Error(
+          `[gofish] stack: ${nameOf(k)} is a ${what}, which has one ` +
+            `size along ${axisName(axis)}, but the stack moves it by an ` +
+            `offset that changes along ${across}, since some parts are ` +
+            `bands whose thickness changes there, so its boundary ` +
+            `changes too. A ${what} can't be split along a ` +
+            `changing boundary; only a band can. Stack parts that are ` +
+            `all bands (ribbon({ x, h })).`
+        );
+      }
+      out[axis].set(i, places[k]);
+    });
+  }
+  return out;
 }
