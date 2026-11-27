@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
   Constraint,
+  Dist,
   arrow,
   chart,
   circle,
@@ -107,21 +108,19 @@ export const PerRowNames: StoryObj = {
 // A `.relate()` operand keeps the layer that bound it (#1236). The callout is
 // a nested layer with a swatch of its own named "density", and its arrow
 // still points at the outer curve.
-const normal = Array.from({ length: 81 }, (_, i) => {
-  const x = -4 + i / 10;
-  return { x, pdf: Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI) };
-});
+const normal = Dist.normal({ mean: "mean", sd: "sd" });
 export const NestedCallout: StoryObj = {
   render: () => {
     const container = initializeContainer();
     layer([
-      chart(normal, { w: 240, h: 160 })
-        .flow(scatter({ x: "x" }))
-        .mark(
-          ribbon({ h: "pdf", fill: "#D1E4F6", stroke: "#467DA8" }).name(
-            "density"
-          )
-        ),
+      chart([{ mean: 0, sd: 1 }], { w: 240, h: 160 }).mark(
+        ribbon({
+          x: normal.domain(),
+          h: normal.density(),
+          fill: "#D1E4F6",
+          stroke: "#467DA8",
+        }).name("density")
+      ),
     ])
       .relate(({ density }) => [
         layer([
@@ -205,18 +204,12 @@ const groups = [
   { g: "E", mu: 1.9 },
   { g: "F", mu: 2.4 },
 ];
-const groupDensity = groups.flatMap(({ g, mu }) =>
-  Array.from({ length: 81 }, (_, i) => {
-    const x = -3 + i / 10;
-    const z = x - mu;
-    return { g, mu, x, pdf: Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI) };
-  })
-);
+const groupDensity = Dist.normal({ mean: "mu", sd: 1 });
 export const MedianTrend: StoryObj = {
   render: () => {
     const container = initializeContainer();
     layer([
-      chart(groupDensity, { w: 360, axes: false })
+      chart(groups, { w: 360, axes: false })
         .flow(
           spread({
             by: "g",
@@ -226,9 +219,16 @@ export const MedianTrend: StoryObj = {
         )
         .mark(
           layer([
-            chart()
-              .flow(scatter({ x: "x", h: 28 }))
-              .mark(ribbon({ h: "pdf", fill: "#D1E4F6", stroke: "#467DA8" })),
+            chart().mark(
+              layer({ h: 28 }, [
+                ribbon({
+                  x: groupDensity.domain(),
+                  h: groupDensity.density(),
+                  fill: "#D1E4F6",
+                  stroke: "#467DA8",
+                }),
+              ])
+            ),
             chart().mark(
               circle({
                 cx: field("mu").median(),
