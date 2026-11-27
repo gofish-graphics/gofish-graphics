@@ -550,6 +550,46 @@ and pairwise forms), so an option that names a layer (a blob's
 `avoiding: selectAll(name)`) resolves against it; it is undefined in the
 combinator form.
 
+`connect` draws one or more _edges_ from each operand to the next, the model
+the shape form's `Band` uses. Each end of an edge is a point on its operand's
+box, or is omitted. An omitted end attaches as near the other end as the box
+allows: the box's nearest point to a point, or the whole box, which the
+curve's route reads, when both ends are omitted. A point is a box of zero size,
+so a route reads an anchored end the same way. `line` is one open edge, from
+`source` to `target` when they are given. Its curve routes the edge between
+them, and an anchored line with no curve is straight, a default of `line` for
+node-link edges and ropes: the omitted curve smooths only a line through its
+marks' centers. With only `source` or only `target`, a pairwise route
+attaches the omitted end at the nearest point of the other operand. A sequence
+curve threads each edge through where it enters each operand (`target`) and
+then where it leaves it (`source`). The first operand has only its leave point
+and the last only its enter point, and an operand whose two points are one
+point is one knot. So a line given only `source`, or neither end, threads one
+point per mark, a line from the middle of each mark's end side to the middle
+of the next one's start side runs through both sides of every mark in between,
+and a ribbon's edges run across each bar's top, from the first bar's far side
+to the last bar's near side, as the pairwise band does. Two knots that are one
+point (bars that touch) are one knot. With one knot per operand the curve's
+parameter is the connection variable when it has numeric values in order;
+with two knots on some operand there is no value of it for each knot, so the
+parameter is each knot's position on a continuous connection axis, and
+otherwise the knots are centripetal. Operands that overlap along the
+connection axis put the knots out of order: the curve is drawn through them
+anyway, on centripetal knots, and the connector records an
+`overlapping-marks` layout warning (`layoutWarnings.ts`).
+Consecutive pairs are drawn as one path where each pair's routed path ends
+where the next pair's starts.
+The connector itself has no default discrete curve: `line` passes a straight
+one and `ribbon` a bezier. `ribbon` is two edges, from the far face of each
+operand to the near face of the next along `dir`, closed into a filled region.
+A ribbon's curve must draw a _band edge_, a path that goes on along the
+connection axis from one end to the other, as each edge of the shape form's
+band is a function of its parameter. Each curve declares whether it does where
+it is registered (`bandEdge` on each route in `routers.ts`): every sequence
+curve, `linear`, `bezier` and `orthogonal` do, and `arc` and `perfectArrows`,
+which bow away from the chord and turn back, do not, so `ribbon` throws on
+them.
+
 `createRelationalMark` dispatches on the shape of its arguments into four call
 forms:
 

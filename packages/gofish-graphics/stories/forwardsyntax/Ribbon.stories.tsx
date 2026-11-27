@@ -11,6 +11,7 @@ import {
   selectAll,
   field,
   Coord,
+  Curve,
 } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
 
@@ -84,6 +85,69 @@ export const Polar: StoryObj<Args> = {
         .flow(group({ by: "species" }))
         .mark(ribbon({ opacity: 0.8 })),
     ]).render(container, { axes: true });
+
+    return container;
+  },
+};
+
+// The ribbon chart's bands drawn with orthogonal edges: each band runs level
+// from a bar, steps at the midpoint of the gap, and runs level into the next.
+export const Orthogonal: StoryObj<Args> = {
+  args: { h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(seafood, { h: args.h })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64 }),
+        stack({ by: field("species").sort("count"), dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .layer(ribbon({ opacity: 0.8, curve: Curve.orthogonal() }))
+      .render(container);
+
+    return container;
+  },
+};
+
+// The same with the lakes down y and each lake's bar stacked across x.
+export const OrthogonalVertical: StoryObj<Args> = {
+  args: { w: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(seafood, { w: args.w })
+      .flow(
+        spread({ by: "lake", dir: "y", spacing: 64 }),
+        stack({ by: field("species").sort("count"), dir: "x" })
+      )
+      .mark(rect({ w: "count", fill: "species" }))
+      .layer(ribbon({ dir: "y", opacity: 0.8, curve: Curve.orthogonal() }))
+      .render(container);
+
+    return container;
+  },
+};
+
+// A smooth band over bars with width on a continuous x: it runs across each
+// bar's top, from the first bar's far side to the last bar's near side, and
+// curves between the bars.
+export const SmoothOverBars: StoryObj<Args> = {
+  render: () => {
+    const container = initializeContainer();
+
+    const data = [
+      { x: 0, v: 40 },
+      { x: 1, v: 150 },
+      { x: 2, v: 90 },
+      { x: 3, v: 180 },
+      { x: 4, v: 60 },
+    ];
+    chart(data, { w: 360, h: 220 })
+      .flow(scatter({ by: "x", x: "x" }))
+      .mark(rect({ w: 30, h: "v", fill: "#4c78a8", opacity: 0.5 }))
+      .layer(ribbon({ fill: "#f58518", opacity: 0.5 }))
+      .render(container);
 
     return container;
   },

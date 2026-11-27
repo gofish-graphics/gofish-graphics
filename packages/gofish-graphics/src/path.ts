@@ -84,6 +84,10 @@ export const reverseSegment = (seg: PathSegment): PathSegment =>
     ? segment(seg.points[1], seg.points[0])
     : curve(seg.end, seg.control2, seg.control1, seg.start);
 
+/** Where a segment starts and where it ends. */
+export const segmentEnds = (seg: PathSegment): [Point, Point] =>
+  seg.type === "line" ? seg.points : [seg.start, seg.end];
+
 /** A path traversed from its end to its start: the same points. */
 export const reversePath = (path: Path): Path =>
   path.map(reverseSegment).reverse();

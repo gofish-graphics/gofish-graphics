@@ -46,8 +46,24 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 `curve` takes a member of the [`Curve`](/python/api/curve) family, such as
 `Curve.monotone()` or `Curve.orthogonal(bend="auto")`. When `curve` is left
 out, a line over a continuous axis uses `Curve.monotone()`, and any other line
-uses `Curve.linear()`. The [`Curve`](/python/api/curve#curves-through-data) page
-compares the curves.
+uses `Curve.linear()`. A line with `source` or `target` runs between those
+anchor points, routed by `curve`, and is straight when `curve` is left out.
+A curve that routes each pair of marks (`Curve.linear()`, `Curve.bezier()`,
+`Curve.orthogonal()`, `Curve.arc()` or `Curve.perfect_arrows()`) runs from the
+`source` point to the `target` point, and with only one of them it attaches the
+other end at the nearest point of the other mark. A curve that threads the
+whole run (`Curve.step()`, `Curve.monotone()`, `Curve.smooth()` or
+`Curve.catmull_rom()`) passes through each mark's `target` point and then its
+`source` point. The first mark has only its `source` point and the last only
+its `target` point. With only one of them given, or neither, the two are one
+point, and the curve passes every mark once at it. So
+`source=["end", "middle"], target=["start", "middle"]` runs from the first
+mark's right side, through both sides of each mark in between, to the last
+mark's left side, and `source=["middle", "end"], target=["middle", "end"]`
+passes the middle of each mark's `end` side on y. When the marks overlap along
+the connection axis, these points are out of order, and the line prints a
+`[gofish:layout]` warning. The
+[`Curve`](/python/api/curve#curves-through-data) page compares the curves.
 
 ## Shape form
 

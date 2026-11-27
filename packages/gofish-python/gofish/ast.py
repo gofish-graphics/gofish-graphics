@@ -3930,12 +3930,15 @@ def line(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     Given ``x`` and ``y``, the shape form: ``line(x="date", y="price")``
     draws one path per group through its rows, sorted by ``x``.
 
-    Without them, a center-mode connector (the path between mark centers),
-    in three forms:
+    Without them, a connector: one open edge from each mark to the next,
+    through the marks' centers, or from the ``source`` point on one mark to
+    the ``target`` point on the next (a normalized anchor on its bbox,
+    Bluefish-style ``Line``). ``curve`` routes an anchored line between its
+    anchor points; left out, an anchored line is straight. It comes in three
+    forms:
       - combinator form ``line([ref(a), ref(b)], dir="x")`` — the low-level
         connector over explicitly listed children (the drop-in for the removed
-        ``connect``). ``source``/``target`` pin each endpoint to a normalized
-        anchor on its bbox (Bluefish-style ``Line``) instead of the center.
+        ``connect``).
       - bag form ``line(...)`` fused over the chart's own flow (in ``.mark()``
         position, or ``.layer()`` over the previous tier's marks): the split
         is inferred from the flow, or pinned with ``along="year"`` (names a
@@ -3970,9 +3973,13 @@ def ribbon(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     ``ribbon(x="date", h="count")`` draws one band per group from 0 to ``h``
     at each row's ``x``, sorted by ``x``.
 
-    Without them, an edge-mode connector: a filled band between the facing
-    edges of consecutive marks (streamgraphs, sankey ribbons), in three forms
-    like :func:`line`: combinator form
+    Without them, a connector: two edges, the near and far sides of a band,
+    each from the far side of one mark to the near side of the next along
+    ``dir``, closed into a filled region (streamgraphs, sankey ribbons).
+    ``curve`` must draw a band edge, a path that runs on along ``dir``:
+    ``Curve.arc()``, ``Curve.perfect_arrows()`` and
+    ``Curve.orthogonal(bend="auto")`` are an error when the chart is drawn.
+    It comes in three forms like :func:`line`: combinator form
     ``ribbon([ref(a), ref(b)], dir="x")`` (the low-level connector over listed
     children — drop-in for the removed ``connect``), bag form fused over the
     chart's own flow (split inferred, or pinned with ``along="year"`` — see

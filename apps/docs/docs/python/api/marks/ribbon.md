@@ -44,6 +44,18 @@ ribbon(stroke=None, stroke_width=None, opacity=None, blend_mode=None,
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
+In the connector form, `curve` takes `Curve.linear()`, `Curve.bezier()`,
+`Curve.orthogonal()`, `Curve.step()`, `Curve.monotone()`, `Curve.smooth()` or
+`Curve.catmull_rom()`. Each edge of the band runs along the connection axis, so
+`Curve.arc()` and `Curve.perfect_arrows()`, which bow away from the line between
+their ends, are errors, and so is `Curve.orthogonal(bend="auto")`, which picks a
+bend axis for each edge on its own. A band drawn with `Curve.step()`,
+`Curve.monotone()`, `Curve.smooth()` or `Curve.catmull_rom()` enters each mark
+at its near side along `dir` and leaves at its far side, so it starts at the
+first mark's far side, runs across each mark in between, and ends at the last
+mark's near side. When the marks overlap along `dir`, these points are out of
+order, and the ribbon prints a `[gofish:layout]` warning.
+
 ## Shape form
 
 Given `x`, the ribbon draws one band per group, from 0 to `h` at each row's

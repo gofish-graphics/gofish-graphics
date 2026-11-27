@@ -3564,17 +3564,17 @@ for the API.
         },
         "curve": {
           "$ref": "#/$defs/Curve",
-          "description": "Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted."
+          "description": "Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). With `source` or `target`, the curve routes the line between the anchor points. A curve that routes each pair of marks (Curve.linear(), Curve.bezier(), Curve.orthogonal(), Curve.arc() or Curve.perfectArrows()) attaches an omitted end at the point of the other mark nearest the given one. A curve that threads the whole run (Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom()) passes through each mark's `target` point and then its `source` point; the first mark has only its `source` point and the last only its `target` point. With only one of them given, or neither (the mark's center), the two are one point, and the curve passes every mark once at it. So with `source: [\"end\", \"middle\"]` and `target: [\"start\", \"middle\"]` it runs from the first mark's right side, through both sides of each mark in between, to the last mark's left side. Marks that overlap along the connection axis put these points out of order, and the line warns. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(); a line with `source` or `target` is Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted."
         },
         "dir": {
           "enum": ["x", "y"],
           "description": "Connection axis."
         },
         "source": {
-          "description": "Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword."
+          "description": "Connector form: where the line leaves each mark, a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword. `curve` routes the line between the anchor points; omitted, the line is straight."
         },
         "target": {
-          "description": "Anchor-mode end point; see `source`."
+          "description": "Connector form: where the line enters each mark; see `source`."
         },
         "from": {
           "type": "string",
@@ -3717,7 +3717,7 @@ for the API.
         },
         "curve": {
           "$ref": "#/$defs/Curve",
-          "description": "Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band. The shape form reads its curve over x (or y), so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted."
+          "description": "Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.orthogonal(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Each edge of the band runs along the connection axis, so Curve.arc() and Curve.perfectArrows(), which bow away from the line between their ends, are errors, and so is Curve.orthogonal({bend: \"auto\"}), which picks a bend axis for each edge on its own. Curve.orthogonal() bends both edges at the midpoint between two marks. Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. These four thread each edge through the whole run: it enters each mark at its near side and leaves at its far side, so it starts at the first mark's far side, runs across each mark in between, and ends at the last mark's near side. Marks that overlap along the connection axis put these points out of order, and the ribbon warns. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band. The shape form reads its curve over x (or y), so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted."
         },
         "from": {
           "type": "string"
@@ -4870,12 +4870,12 @@ for the API.
             },
             "padStart": {
               "$ref": "#/$defs/Number",
-              "description": "Gap in pixels between the source box and the start of the arc.",
+              "description": "Gap in pixels between the source box and the start of the arc. A line with `source` or `target` is not padded at either end.",
               "default": 0
             },
             "padEnd": {
               "$ref": "#/$defs/Number",
-              "description": "Gap in pixels between the end of the arc and the target box.",
+              "description": "Gap in pixels between the end of the arc and the target box. A line with `source` or `target` is not padded at either end.",
               "default": 20
             },
             "flip": {

@@ -47,7 +47,23 @@ line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve?, along?, fro
 `Curve.monotone()` or `Curve.orthogonal({ bend: "auto" })`. When `curve` is
 omitted, `line` inspects the connected points. If they share a continuous
 connection axis, it smooths them with `Curve.monotone()`. Otherwise it draws a
-straight polyline, `Curve.linear()`. The [`Curve`](/js/api/curve#curves-through-data)
+straight polyline, `Curve.linear()`. A line with `source` or `target` runs
+between those anchor points, routed by `curve`, and is straight when `curve` is
+omitted. A curve that routes each pair of marks (`Curve.linear()`,
+`Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc()` or
+`Curve.perfectArrows()`) runs from the `source` point to the `target` point,
+and with only one of them it attaches the other end at the nearest point of the
+other mark. A curve that threads the whole run (`Curve.step()`,
+`Curve.monotone()`, `Curve.smooth()` or `Curve.catmullRom()`) passes through
+each mark's `target` point and then its `source` point. The first mark has only
+its `source` point and the last only its `target` point. With only one of them
+given, or neither, the two are one point, and the curve passes every mark once
+at it. So `source: ["end", "middle"], target: ["start", "middle"]` runs from
+the first mark's right side, through both sides of each mark in between, to the
+last mark's left side, and `source: ["middle", "end"], target: ["middle", "end"]`
+passes the middle of each mark's `end` side on y. When the marks overlap along
+the connection axis, these points are out of order, and the line prints a
+`[gofish:layout]` warning. The [`Curve`](/js/api/curve#curves-through-data)
 page compares the curves and says how a line picks the knots of its curve.
 
 ## Shape form

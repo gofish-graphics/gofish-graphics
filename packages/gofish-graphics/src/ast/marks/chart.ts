@@ -5,8 +5,14 @@
 import type { Curve } from "../../families/curve";
 import {
   connect as Connect,
+  type AnchorAlignment,
   type AnchorSpec,
 } from "../graphicalOperators/connect";
+import {
+  bandEdgeCurveNames,
+  curveName,
+  drawsBandEdge,
+} from "../graphicalOperators/routers";
 import { GoFishNode } from "../_node";
 import {
   getValue,
@@ -36,7 +42,7 @@ import {
 } from "../../interaction/live";
 import { rect as generatedRect, baseBlank } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
-import type { XYWHDims } from "../dims";
+import { elaborateDirection, type XYWHDims } from "../dims";
 import { Mark, MarkChild, Operator } from "../types";
 import {
   addRenderMethod,
@@ -52,7 +58,7 @@ import {
   type FunctionExpr,
   type ValueExpr,
 } from "../groupExpr";
-import { monotone } from "../../families/curve";
+import { bezier, linear as linearCurve, monotone } from "../../families/curve";
 import type { ParameterCurve } from "../fun";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
@@ -121,7 +127,7 @@ import {
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
-import { withKindValues } from "../strategyKind";
+import { kindValue, withKindValues } from "../strategyKind";
 import { LayerContext, datumOfInput, markContext } from "./markResult";
 import { withRegistrar } from "../../interaction/resolveContext";
 import { withFlowStep } from "./compose";
@@ -1084,9 +1090,10 @@ export type LineOptions = WithEffect & {
   // `Curve.perfectArrows({ bow })`, …). The single path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
-  // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
+  // Anchors: pin each endpoint to a normalized point on its mark's bbox
   // (Bluefish-style `Line`) instead of the center — for ropes, node-link edges,
-  // etc. When given, the anchor points win over the routed center path.
+  // etc. `curve` routes the line between the anchor points; omitted, an
+  // anchored line is straight.
   source?: AnchorSpec;
   target?: AnchorSpec;
   from?: string;
@@ -1244,27 +1251,36 @@ function shapeForm(
   return withWire(nameableMark(mark), { type, opts: options });
 }
 
-// `line`'s connector form — a center-mode connector (the "line" component):
-// the path between the centers of consecutive marks. `route` picks the shape
-// (linear | bezier | orthogonal | arc | perfectArrows | …).
+// `line`'s connector form: one open edge from each mark to the next, from
+// its center (the whole box, which the curve's route reads) or from the
+// `source`/`target` points on it.
 const lineConnector = createRelationalMark<LineOptions>(
   "line",
   (o, children, inferred) =>
     Connect(
       {
         direction: o.dir ?? "x",
-        mode: "center",
+        edges: [{ source: o.source, target: o.target }],
+        // Omitted, the curve of a line through its marks' centers is "auto":
+        // connect smooths it (monotone) when the marks share a continuous
+        // connection axis, else draws it straight. An anchored line's
+        // (`source`/`target`) is straight. That is a default of `line`, not
+        // of the connector model: anchors are used for node-link edges and
+        // ropes, where a straight segment is what is meant.
+        // TODO: decide whether an anchored line over a continuous axis
+        // should smooth, as a ribbon's edges (also anchored) do.
+        curve:
+          o.curve ??
+          (o.source !== undefined || o.target !== undefined
+            ? linearCurve()
+            : undefined),
+        discreteCurve: linearCurve(),
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 1,
         strokeDasharray: o.strokeDasharray,
         opacity: o.opacity,
         blendMode: o.blendMode,
-        // Omitted ⇒ "auto": connect smooths (monotone) when the connected
-        // points share a continuous connection axis, else a straight line.
-        curve: o.curve,
-        source: o.source,
-        target: o.target,
         along: inferred.along,
         parameterAxis: inferred.parameterAxis,
       },
@@ -1318,8 +1334,9 @@ export type RibbonOptions = WithEffect & {
   opacity?: number | LiveValue;
   blendMode?: BlendMode;
   dir?: "x" | "y";
-  // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
-  // Edge mode honors linear (linear band) vs bezier (S-curve band).
+  // Screen-space path shape for the band edges: a curve that draws a band
+  // edge (`drawsBandEdge` in `routers.ts`), such as `Curve.bezier()` or
+  // `Curve.orthogonal()`. `Curve.arc()` and `Curve.perfectArrows()` throw.
   curve?: Curve;
   from?: string;
   to?: string;
@@ -1353,30 +1370,50 @@ export type RibbonOptions = WithEffect & {
   y?: ShapeChannel;
 };
 
-// `ribbon`'s connector form — an edge-mode connector: a filled band between
-// the facing edges of consecutive marks (sankey ribbons, bands between
-// discrete marks).
+// `ribbon`'s connector form: two edges, the near and far sides of a band,
+// each from the far face of one mark to the near face of the next along
+// `dir`, closed into a filled region (sankey ribbons, bands between discrete
+// marks, stacked areas). Its curve draws a band edge (`ribbon` checks it).
 const ribbonConnector = createRelationalMark<RibbonOptions>(
   "ribbon",
-  (o, children, inferred) =>
-    Connect(
+  (o, children, inferred) => {
+    // Each side as an [x, y] anchor: `m` along the connection axis, `c`
+    // across it, for every direction form `connect` takes.
+    const main = elaborateDirection(o.dir ?? "x");
+    const side = (m: AnchorAlignment, c: AnchorAlignment): AnchorSpec =>
+      main === 0 ? [m, c] : [c, m];
+    return Connect(
       {
         direction: o.dir ?? "x",
-        mode: "edge",
+        edges: [
+          { source: side("end", "start"), target: side("start", "start") },
+          { source: side("end", "end"), target: side("start", "end") },
+        ],
+        closed: true,
+        // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
+        // connection axis, else a bezier band.
+        curve: o.curve,
+        discreteCurve: bezier(),
         blendMode: o.blendMode ?? "normal",
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
-        // connection axis, else a bezier band.
-        curve: o.curve,
         along: inferred.along,
         parameterAxis: inferred.parameterAxis,
       },
       children
-    )
+    );
+  }
 );
+
+/** A curve as the call that makes it: `Curve.orthogonal({ bend: "auto" })`,
+ *  or `Curve.arc()` when it sets no options. */
+const curveCall = ({ kind, ...options }: Curve): string => {
+  const set = Object.entries(options).filter(([, v]) => v !== undefined);
+  const args = set.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(", ");
+  return `Curve.${kind}(${set.length === 0 ? "" : `{ ${args} }`})`;
+};
 
 /**
  * `ribbon` has two forms, picked by whether a position channel is given:
@@ -1416,6 +1453,25 @@ export function ribbon(
         "[gofish] ribbon({ inset }): inset draws in the band of the shape " +
           "form, ribbon({ x, h }) or ribbon({ y, w }). The connector form " +
           "joins the edges of other marks, which it does not draw in."
+      );
+    // A bare kind (`Curve.monotone`) is its value, as `createRelationalMark`
+    // reads it.
+    const curve = kindValue(options?.curve);
+    if (
+      curveName(curve, "ribbon({ curve })") !== undefined &&
+      !drawsBandEdge(curve!)
+    )
+      throw new Error(
+        `[gofish] ribbon({ curve: ${curveCall(curve!)} }): a ribbon is the band ` +
+          `between two edges that each run along its axis (dir), one value ` +
+          `across it at each point along it, and this curve does not draw ` +
+          `such an edge. An arc or a perfect-arrows bow turns back along ` +
+          `the axis, and an elbow with bend: "auto" picks an axis for each ` +
+          `edge on its own, so two of them bound no band. Use one of ` +
+          bandEdgeCurveNames()
+            .map((name) => `Curve.${name}()`)
+            .join(", ") +
+          `.`
       );
     return children === undefined
       ? ribbonConnector(options)

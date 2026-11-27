@@ -72,7 +72,8 @@ A curve that is read over time can also move a mark: `time.transition()`,
 
 When a `line` or `ribbon` has no `curve`, it looks at the connected points. If
 they share a continuous connection axis, it uses `Curve.monotone()`. Otherwise a
-`line` uses `Curve.linear()` and a `ribbon` uses `Curve.bezier()`.
+`line` uses `Curve.linear()` and a `ribbon` uses `Curve.bezier()`. A `line`
+with `source` or `target` uses `Curve.linear()`.
 `time.transition()`, `Animation.tween()` and `interpolate()` default to
 `Curve.monotone()`.
 
@@ -139,6 +140,11 @@ first of these that it finds:
   applies. These are centripetal knots. Two points at the same spot, up to
   rounding, are one point: the curve drops the repeat, as d3 does.
 
+The first rule needs one point per mark. When the line enters and leaves a mark
+at two different points (a line with `source` and `target` on different sides,
+or a `ribbon` over bars with width), it has no value of the field for each
+point, so it uses the second or third rule.
+
 A `ribbon` picks its knots the same way, and both edges of the band use the
 same knots. Because the knots come from the data, a line and a
 [`time.transition()`](/js/animation) through the same points follow the same
@@ -160,4 +166,8 @@ its moving mark can sit slightly off a Catmull-Rom line.
 geometry instead, for layouts with no single growth axis. `Curve.arc()` bulges
 up by default; `{ direction: "down" }` flips it. A line threaded through the
 keyframes of a `time.sequence` cannot use `Curve.orthogonal()`, `Curve.arc()` or
-`Curve.perfectArrows()`.
+`Curve.perfectArrows()`. A `ribbon` cannot use `Curve.arc()` or
+`Curve.perfectArrows()`: each edge of a band runs along the connection axis,
+and these two bow away from the line between their ends. Nor can it use
+`Curve.orthogonal({ bend: "auto" })`, which picks a bend axis for each edge on
+its own.
